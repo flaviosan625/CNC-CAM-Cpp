@@ -7,6 +7,7 @@
 #include <tuple>
 
 #include <QColor>
+#include <QFile>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -145,6 +146,14 @@ QIcon icon_for(const QString& name) {
 
 }  // namespace
 
-QIcon get_icon(const QString& name) { return icon_for(name); }
+QIcon get_icon(const QString& name) {
+    // The Python reference draws the complete tool vocabulary with QPainter.
+    // Those rasterized states are embedded in the C++ executable so both
+    // implementations use the same artwork and do not depend on a working
+    // directory or a system icon theme.
+    const QString resource = QString(":/assets/tool-icons/%1.png").arg(name);
+    if (QFile::exists(resource)) return QIcon(resource);
+    return icon_for(name);
+}
 
 }  // namespace cnc::ui

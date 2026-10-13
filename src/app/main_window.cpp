@@ -16,23 +16,30 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QFormLayout>
+#include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMenu>
 #include <QMenuBar>
+#include <QPixmap>
 #include <QPushButton>
 #include <QListWidget>
 #include <QDoubleSpinBox>
 #include <QSignalBlocker>
+#include <QScrollArea>
 #include <QStatusBar>
-#include <QTabWidget>
+#include <QTabBar>
+#include <QStackedWidget>
 #include <QTextStream>
 #include <QTimer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include "ui/theme.hpp"
+#include "ui/icons.hpp"
 #include "cam/gcode.hpp"
 #include "cam/setup_sheet.hpp"
 #include "io/importers.hpp"
@@ -46,25 +53,43 @@ namespace cnc::app {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(document_, undo_stack_) {
     setWindowTitle("CNC-CAM");
-    setStyleSheet(ui::dark_theme());
-    resize(1400, 820);
+    // The stylesheet is installed on QApplication in main.cpp.  A local
+    // stylesheet here used to leave top-level dialogs and helper widgets on
+    // the native Windows style.
+    setMinimumSize(820, 520);
+    resize(1500, 920);
+    // Same initial stock as MainWindow.novo_documento() in the PySide6 app.
+    // Keep MaterialSetup's core default small for non-GUI tests; the GUI opens
+    // on the shop's PVC sheet, 1220 x 2440 mm.
+    document_.material.width = 1220.0;
+    document_.material.height = 2440.0;
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    view_tabs_ = new QTabWidget(central);
+    auto* view_header = new QWidget(central);
+    auto* view_header_layout = new QHBoxLayout(view_header);
+    view_header_layout->setContentsMargins(0, 0, 4, 0);
+    view_header_layout->setSpacing(4);
+
+    view_tabs_ = new QTabBar(view_header);
     view_tabs_->setObjectName("ViewTabs");
+    view_tabs_->addTab("Vista 2D");
+    view_tabs_->addTab("Vista 3D");
+    view_header_layout->addWidget(view_tabs_, 1);
+    layout->addWidget(view_header);
 
     canvas_widget_ = new vp::Canvas2DWidget(document_.material.width, document_.material.height,
-                                             view_tabs_);
+                                             central);
     canvas_widget_->canvas->set_document(&document_);
-    view_tabs_->addTab(canvas_widget_, "Desenho 2D");
+    view_stack_ = new QStackedWidget(central);
+    view_stack_->addWidget(canvas_widget_);
 
-    viewport_3d_ = new vp::Viewport3D(view_tabs_);
-    view_tabs_->addTab(viewport_3d_, "Vista 3D");
-    layout->addWidget(view_tabs_);
+    viewport_3d_ = new vp::Viewport3D(central);
+    view_stack_->addWidget(viewport_3d_);
+    layout->addWidget(view_stack_, 1);
     setCentralWidget(central);
 
     coordinate_label_ = new QLabel("X: —   Y: —", this);
@@ -81,6 +106,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
 
     create_tool_panel();
     create_toolpath_panel();
+    const auto docks = findChildren<QDockWidget*>();
+    QDockWidget* left_dock = nullptr;
+    QDockWidget* right_dock = nullptr;
+    for (QDockWidget* dock : docks) {
+        if (dock->objectName() == "ToolPanel") left_dock = dock;
+        if (dock->objectName() == "ToolpathPanel") right_dock = dock;
+    }
+    if (left_dock && right_dock)
+        resizeDocks({left_dock, right_dock}, {340, 290}, Qt::Horizontal);
     activate_tool("select");
 
     connect(canvas_widget_, &vp::Canvas2DWidget::mouse_moved, this,
@@ -89,7 +123,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
                                                .arg(x, 0, 'f', 2)
                                                .arg(y, 0, 'f', 2));
             });
-    connect(view_tabs_, &QTabWidget::currentChanged, this, [this](int index) {
+    connect(view_tabs_, &QTabBar::currentChanged, this, [this](int index) {
+        if (view_stack_) view_stack_->setCurrentIndex(index);
         if (index == 1 && viewport_3d_) viewport_3d_->fit_scene();
     });
     connect(canvas_widget_, &vp::Canvas2DWidget::files_dropped, this,
@@ -97,20 +132,174 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
 
     create_actions();
     refresh_document_view();
-    statusBar()->showMessage(QFile::exists(":/assets/check.svg") ? "recursos ok" : "recursos FALTANDO");
+    statusBar()->showMessage(QFile::exists(":/assets/check.svg")
+                                 ? "0 objeto(s) selecionado(s)"
+                                 : "recursos FALTANDO");
 }
 
 void MainWindow::create_toolpath_panel() {
+    auto* dock = new QDockWidget("Selecao", this);
+    dock->setObjectName("ToolpathPanel");
+    dock->setAllowedAreas(Qt::RightDockWidgetArea);
+    dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    dock->setTitleBarWidget(new QWidget(dock));
+    dock->setMinimumWidth(280);
+
+    auto* shell = new QWidget(dock);
+    auto* shell_layout = new QHBoxLayout(shell);
+    shell_layout->setContentsMargins(0, 0, 0, 0);
+    shell_layout->setSpacing(0);
+
+    auto* rail = new QWidget(shell);
+    rail->setObjectName("RightToolRail");
+    rail->setFixedWidth(48);
+    auto* rail_layout = new QVBoxLayout(rail);
+    rail_layout->setContentsMargins(4, 6, 4, 8);
+    rail_layout->setSpacing(4);
+    auto* collapse = new QToolButton(rail);
+    collapse->setObjectName("RightRailToggle");
+    collapse->setFixedSize(40, 30);
+    collapse->setText("‹");
+    collapse->setToolTip("Mostrar ou ocultar o painel direito");
+    rail_layout->addWidget(collapse);
+    auto* rail_sep = new QFrame(rail);
+    rail_sep->setObjectName("RightToolRailSep");
+    rail_sep->setFrameShape(QFrame::NoFrame);
+    rail_sep->setFixedHeight(1);
+    rail_layout->addWidget(rail_sep);
+    auto* selection_button = new QToolButton(rail);
+    selection_button->setObjectName("RightRailButton");
+    selection_button->setCheckable(true);
+    selection_button->setChecked(true);
+    selection_button->setFixedSize(40, 34);
+    selection_button->setIcon(ui::get_icon("select"));
+    selection_button->setIconSize(QSize(22, 22));
+    selection_button->setToolTip("Selecao");
+    rail_layout->addWidget(selection_button);
+    auto* toolpath_button = new QToolButton(rail);
+    toolpath_button->setObjectName("RightRailButton");
+    toolpath_button->setCheckable(true);
+    toolpath_button->setFixedSize(40, 34);
+    toolpath_button->setIcon(ui::get_icon("rotate"));
+    toolpath_button->setIconSize(QSize(22, 22));
+    toolpath_button->setToolTip("Percursos CAM");
+    rail_layout->addWidget(toolpath_button);
+    rail_layout->addStretch();
+    shell_layout->addWidget(rail);
+
+    auto* stack = new QStackedWidget(shell);
+    auto* selection_page = new QWidget(stack);
+    selection_page->setObjectName("PropPanel");
+    auto* selection_layout = new QVBoxLayout(selection_page);
+    selection_layout->setContentsMargins(0, 0, 0, 0);
+    selection_layout->setSpacing(0);
+    auto* selection_title = new QLabel(QString::fromUtf8("Sele\xC3\xA7\xC3\xA3o"), selection_page);
+    selection_title->setObjectName("PropTitle");
+    selection_layout->addWidget(selection_title);
+    auto* selection_hint = new QLabel(
+        "Arraste por um ponto branco para encostar na peca ao lado. Ctrl: solta copia - Alt: trava no eixo - Shift: soma/remove e desloca o ima",
+        selection_page);
+    selection_hint->setObjectName("PropHint");
+    selection_hint->setWordWrap(true);
+    selection_layout->addWidget(selection_hint);
+    auto* preview = new QFrame(selection_page);
+    preview->setFixedSize(150, 90);
+    preview->setStyleSheet("QFrame { background: #ffffff; border: 1px solid #d5d9df; border-radius: 8px; }");
+    auto* preview_layout = new QVBoxLayout(preview);
+    preview_layout->setContentsMargins(40, 28, 40, 28);
+    auto* preview_shape = new QFrame(preview);
+    preview_shape->setStyleSheet("QFrame { background: #ffffff; border: 2px solid #5b5b5b; border-radius: 0; }");
+    preview_layout->addWidget(preview_shape);
+    selection_layout->addWidget(preview, 0, Qt::AlignHCenter);
+    selection_layout->addStretch();
+    stack->addWidget(selection_page);
+
+    auto* toolpath_page = new QWidget(stack);
+    auto* layout = new QVBoxLayout(toolpath_page);
+    layout->setContentsMargins(14, 12, 14, 12);
+    layout->setSpacing(9);
+    auto* title = new QLabel("PERCURSOS", toolpath_page);
+    title->setObjectName("SectionHeader");
+    layout->addWidget(title);
+    auto* material_button = new QPushButton("Definicoes do material...", toolpath_page);
+    layout->addWidget(material_button);
+    connect(material_button, &QPushButton::clicked, this, &MainWindow::edit_material_setup);
+    toolpath_list_ = new QListWidget(toolpath_page);
+    toolpath_list_->setObjectName("ToolpathList");
+    toolpath_list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    layout->addWidget(toolpath_list_, 1);
+    auto* type_label = new QLabel("Novo percurso", toolpath_page);
+    type_label->setObjectName("PropLabel");
+    layout->addWidget(type_label);
+    toolpath_type_combo_ = new QComboBox(toolpath_page);
+    const std::vector<std::pair<QString, cam::ToolpathType>> kinds = {
+        {"Perfil", cam::ToolpathType::Profile}, {"Bolso", cam::ToolpathType::Pocket},
+        {"Furacao", cam::ToolpathType::Drill}, {"V-carve", cam::ToolpathType::VCarve},
+        {"Fluting", cam::ToolpathType::Fluting}, {"Textura", cam::ToolpathType::Texture},
+        {"Keyhole", cam::ToolpathType::Keyhole}, {"Inlay", cam::ToolpathType::Inlay},
+        {"Drag knife", cam::ToolpathType::Dragknife},
+    };
+    for (const auto& [label, kind] : kinds) toolpath_type_combo_->addItem(label, static_cast<int>(kind));
+    layout->addWidget(toolpath_type_combo_);
+    auto* add_button = new QPushButton("Adicionar percurso", toolpath_page);
+    add_button->setProperty("primary", true);
+    layout->addWidget(add_button);
+    connect(add_button, &QPushButton::clicked, this, &MainWindow::add_toolpath_from_panel);
+    auto* recalc_button = new QPushButton("Recalcular todos", toolpath_page);
+    layout->addWidget(recalc_button);
+    connect(recalc_button, &QPushButton::clicked, this, &MainWindow::recalculate_toolpaths);
+    auto* row = new QHBoxLayout();
+    auto* edit_button = new QPushButton("Editar", toolpath_page);
+    auto* toggle_button = new QPushButton("Mostrar/ocultar", toolpath_page);
+    auto* delete_button = new QPushButton("Excluir", toolpath_page);
+    row->addWidget(edit_button);
+    row->addWidget(toggle_button);
+    row->addWidget(delete_button);
+    layout->addLayout(row);
+    connect(edit_button, &QPushButton::clicked, this, &MainWindow::edit_current_toolpath);
+    connect(toggle_button, &QPushButton::clicked, this, &MainWindow::toggle_current_toolpath);
+    connect(delete_button, &QPushButton::clicked, this, &MainWindow::delete_current_toolpath);
+    simulate_button_ = new QPushButton("Simular percursos", toolpath_page);
+    simulate_button_->setObjectName("SimulatePathBtn");
+    layout->addWidget(simulate_button_);
+    connect(simulate_button_, &QPushButton::clicked, this, &MainWindow::toggle_simulation);
+    simulation_timer_ = new QTimer(this);
+    simulation_timer_->setInterval(30);
+    connect(simulation_timer_, &QTimer::timeout, this, &MainWindow::update_simulation);
+    connect(toolpath_list_, &QListWidget::currentRowChanged, this, [this](int row) {
+        if (row >= 0 && row < static_cast<int>(document_.toolpaths.size()))
+            statusBar()->showMessage(QString::fromStdString(document_.toolpaths[static_cast<size_t>(row)]->summary()));
+    });
+    stack->addWidget(toolpath_page);
+    shell_layout->addWidget(stack, 1);
+    dock->setWidget(shell);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+    connect(selection_button, &QToolButton::clicked, this, [stack, selection_button, toolpath_button] {
+        stack->setCurrentIndex(0);
+        selection_button->setChecked(true);
+        toolpath_button->setChecked(false);
+    });
+    connect(toolpath_button, &QToolButton::clicked, this, [stack, selection_button, toolpath_button] {
+        stack->setCurrentIndex(1);
+        selection_button->setChecked(false);
+        toolpath_button->setChecked(true);
+    });
+    connect(collapse, &QToolButton::clicked, dock, [dock] { dock->setVisible(false); });
+    refresh_toolpaths();
+}
+
+void MainWindow::create_legacy_toolpath_panel() {
     auto* dock = new QDockWidget("Percursos CAM", this);
     dock->setObjectName("ToolpathPanel");
     dock->setAllowedAreas(Qt::RightDockWidgetArea);
     dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    dock->setMinimumWidth(265);
+    dock->setTitleBarWidget(new QWidget(dock));
+    dock->setMinimumWidth(240);
 
     auto* panel = new QWidget(dock);
     auto* layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(10, 12, 10, 12);
-    layout->setSpacing(7);
+    layout->setContentsMargins(14, 12, 14, 12);
+    layout->setSpacing(9);
 
     auto* title = new QLabel("PERCURSOS", panel);
     title->setObjectName("SectionHeader");
@@ -588,12 +777,226 @@ void MainWindow::create_tool_panel() {
     dock->setObjectName("ToolPanel");
     dock->setAllowedAreas(Qt::LeftDockWidgetArea);
     dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    dock->setMinimumWidth(170);
+    dock->setTitleBarWidget(new QWidget(dock));
+    dock->setMinimumWidth(340);
+
+    auto* panel = new QWidget(dock);
+    panel->setMinimumWidth(340);
+    auto* root = new QVBoxLayout(panel);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
+
+    auto* header = new QWidget(panel);
+    header->setObjectName("BrandHeader");
+    auto* header_layout = new QHBoxLayout(header);
+    header_layout->setContentsMargins(16, 12, 16, 12);
+    header_layout->setSpacing(11);
+    auto* logo = new QLabel(header);
+    logo->setObjectName("BrandLogo");
+    logo->setFixedSize(128, 37);
+    logo->setScaledContents(true);
+    logo->setPixmap(QPixmap(":/assets/cnc-cam-logo.png"));
+    header_layout->addWidget(logo, 1);
+    auto* mode = new QToolButton(header);
+    mode->setObjectName("ModeBadge");
+    mode->setText("2D / 3D");
+    mode->setCursor(Qt::PointingHandCursor);
+    mode->setToolTip("Alternar entre as vistas 2D e 3D");
+    connect(mode, &QToolButton::clicked, this, [this] {
+        if (view_tabs_) view_tabs_->setCurrentIndex(view_tabs_->currentIndex() == 0 ? 1 : 0);
+    });
+    header_layout->addWidget(mode, 0, Qt::AlignVCenter);
+    root->addWidget(header);
+
+    auto* scroll = new QScrollArea(panel);
+    scroll->setObjectName("ToolPanelScroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* body = new QWidget(scroll);
+    body->setObjectName("ToolPanelBody");
+    auto* layout = new QVBoxLayout(body);
+    layout->setContentsMargins(10, 8, 10, 12);
+    layout->setSpacing(3);
+    scroll->setWidget(body);
+    root->addWidget(scroll, 1);
+
+    auto* group = new QButtonGroup(body);
+    group->setExclusive(true);
+    const auto add_separator = [&] {
+        auto* sep = new QFrame(body);
+        sep->setObjectName("ToolSep");
+        sep->setFrameShape(QFrame::NoFrame);
+        sep->setFixedHeight(1);
+        layout->addWidget(sep);
+    };
+    const auto add_section = [&](const QString& title,
+                                 const std::vector<std::pair<QString, QString>>& entries,
+                                 int columns) {
+        auto* section = new QLabel(title, body);
+        section->setObjectName("SectionHeader");
+        layout->addWidget(section);
+        auto* grid = new QGridLayout();
+        grid->setContentsMargins(0, 2, 0, 4);
+        grid->setHorizontalSpacing(2);
+        grid->setVerticalSpacing(3);
+        for (size_t i = 0; i < entries.size(); ++i) {
+            const auto& [name, label] = entries[i];
+            auto* tile = new QWidget(body);
+            tile->setObjectName("ToolTile");
+            tile->setFixedWidth(38);
+            auto* tile_layout = new QVBoxLayout(tile);
+            tile_layout->setContentsMargins(0, 0, 0, 0);
+            tile_layout->setSpacing(2);
+            auto* button = new QToolButton(tile);
+            button->setObjectName("ToolBtn");
+            button->setFixedSize(34, 34);
+            button->setIcon(ui::get_icon(name));
+            button->setIconSize(QSize(28, 28));
+            button->setToolTip(label);
+            button->setCursor(Qt::PointingHandCursor);
+            button->setCheckable(true);
+            button->setProperty("toolName", name);
+            group->addButton(button);
+            tile_layout->addWidget(button, 0, Qt::AlignHCenter);
+            auto* caption = new QLabel(label, tile);
+            caption->setObjectName("ToolCaption");
+            caption->setStyleSheet("font-size: 9px;");
+            caption->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+            caption->setWordWrap(true);
+            caption->setVisible(!label.isEmpty());
+            tile_layout->addWidget(caption);
+            grid->addWidget(tile, static_cast<int>(i / columns), static_cast<int>(i % columns),
+                            Qt::AlignHCenter | Qt::AlignTop);
+            connect(button, &QToolButton::clicked, this, [this, name] {
+                if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
+                else if (name == "zoom_in") canvas_widget_->canvas->zoom_by(1.25);
+                else if (name == "zoom_out") canvas_widget_->canvas->zoom_by(0.8);
+                else if (name != "pan") activate_tool(name);
+            });
+        }
+        layout->addLayout(grid);
+    };
+
+    add_section("ARQUIVO E VISTA 2D", {
+        {"import", "Importar"}, {"export", "Exportar"}, {"preview_3d", "Previa 3D"},
+        {"measure", "Medir"}, {"grid", "Grade"}, {"workspace_setup", "Area de trabalho"},
+        {"select", "Selecao"}}, 7);
+    add_separator();
+
+    auto* layer_row = new QHBoxLayout();
+    layer_row->setContentsMargins(0, 0, 0, 0);
+    layer_row->setSpacing(10);
+    auto* layer_title = new QLabel("CAMADAS", body);
+    layer_title->setObjectName("SectionHeader");
+    layer_row->addWidget(layer_title);
+    auto* layer_bar = new QFrame(body);
+    layer_bar->setObjectName("LayerBar");
+    auto* layer_layout = new QHBoxLayout(layer_bar);
+    layer_layout->setContentsMargins(8, 0, 6, 0);
+    layer_layout->setSpacing(6);
+    auto* layer_glyph = new QLabel(layer_bar);
+    layer_glyph->setObjectName("LayerGlyph");
+    layer_glyph->setPixmap(ui::get_icon("layers").pixmap(18, 18));
+    layer_layout->addWidget(layer_glyph);
+    layer_combo_ = new QComboBox(layer_bar);
+    layer_combo_->setObjectName("LayerCombo");
+    layer_layout->addWidget(layer_combo_, 1);
+    auto* layer_lock = new QToolButton(layer_bar);
+    layer_lock->setObjectName("LayerToggle");
+    layer_lock->setCheckable(true);
+    layer_lock->setIcon(ui::get_icon("lock_open"));
+    layer_lock->setIconSize(QSize(18, 18));
+    layer_lock->setToolTip("Travar a camada atual");
+    layer_locked_ = layer_lock;
+    layer_layout->addWidget(layer_lock);
+    auto* layer_visible = new QToolButton(layer_bar);
+    layer_visible->setObjectName("LayerToggle");
+    layer_visible->setCheckable(true);
+    layer_visible->setChecked(true);
+    layer_visible->setIcon(ui::get_icon("eye"));
+    layer_visible->setIconSize(QSize(18, 18));
+    layer_visible->setToolTip("Esconder a camada atual");
+    layer_visible_ = layer_visible;
+    layer_layout->addWidget(layer_visible);
+    layer_row->addWidget(layer_bar, 1);
+    layout->addLayout(layer_row);
+    add_separator();
+
+    add_section("CRIAR VETORES", {
+        {"circle", ""}, {"ellipse", ""}, {"rectangle", ""}, {"polygon", ""},
+        {"star", ""}, {"polyline", "Polilinha"}, {"text", "Texto"}, {"line", ""},
+        {"arc", ""}, {"construction_line", ""}, {"freehand", "Mao livre"},
+        {"drill_point", "Furacao"}, {"vector_texture", "Textura"}, {"text_on_curve", ""},
+        {"dimension", "Cotas"}, {"trace_bitmap", "Vetorizar"}}, 8);
+    add_separator();
+    add_section("TRANSFORMAR OBJETOS", {
+        {"move", ""}, {"distort", "Distorcer"}, {"mirror", "Espelhar"}, {"scale", ""},
+        {"array_copy", "Copia array"}, {"circular_copy", ""}, {"rotate", ""}}, 7);
+    add_separator();
+    add_section("EDITAR OBJETOS", {
+        {"node_edit", "Nos"}, {"fillet", "Filete"},
+        {"interactive_trim", "Aparar interativo"}, {"extend", ""}, {"fit_curves", "Ajustar curvas"},
+        {"weld", "Soldar"}, {"subtract", ""}, {"intersect", ""},
+        {"group", "Agrupar"}, {"ungroup", ""}, {"offset", "Offset"}, {"boundary", ""},
+        {"convert_text", "Texto"}}, 7);
+    add_separator();
+    add_section("ALINHAR E POSICIONAR", {
+        {"align_left", ""}, {"align_center_h", ""}, {"align_right", ""},
+        {"align_top", ""}, {"align_center_v", ""}, {"align_bottom", ""},
+        {"layout_optimizer", "Organizar"}}, 7);
+    layout->addStretch();
+
+    dock->setWidget(panel);
+    addDockWidget(Qt::LeftDockWidgetArea, dock);
+
+    connect(layer_combo_, &QComboBox::currentTextChanged, this, [this](const QString& name) {
+        if (name.isEmpty()) return;
+        tool_context_.current_layer = name.toStdString();
+        const cad::Layer* layer = document_.get_layer(tool_context_.current_layer);
+        if (!layer) return;
+        QSignalBlocker visible_blocker(layer_visible_);
+        QSignalBlocker locked_blocker(layer_locked_);
+        layer_visible_->setChecked(layer->visible);
+        layer_locked_->setChecked(layer->locked);
+        canvas_widget_->canvas->refresh_entities();
+    });
+    connect(layer_visible_, &QAbstractButton::toggled, this, [this](bool visible) {
+        if (auto* layer = document_.get_layer(tool_context_.current_layer)) {
+            layer->visible = visible;
+            document_.modified = true;
+            canvas_widget_->canvas->refresh_entities();
+        }
+    });
+    connect(layer_locked_, &QAbstractButton::toggled, this, [this](bool locked) {
+        if (auto* layer = document_.get_layer(tool_context_.current_layer)) {
+            layer->locked = locked;
+            document_.modified = true;
+            canvas_widget_->canvas->refresh_entities();
+        }
+    });
+    connect(canvas_widget_->canvas, &vp::Canvas2D::shortcut_requested, this,
+            [this](const QString& name) {
+                if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
+                else activate_tool(name);
+            });
+    connect(canvas_widget_->canvas, &vp::Canvas2D::cancel_requested, this,
+            [this] { activate_tool("select"); });
+    refresh_layers();
+}
+
+void MainWindow::create_legacy_tool_panel() {
+    auto* dock = new QDockWidget("Ferramentas", this);
+    dock->setObjectName("ToolPanel");
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea);
+    dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    dock->setTitleBarWidget(new QWidget(dock));
+    dock->setMinimumWidth(320);
 
     auto* panel = new QWidget(dock);
     auto* layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(10, 12, 10, 12);
-    layout->setSpacing(6);
+    layout->setContentsMargins(10, 8, 10, 12);
+    layout->setSpacing(3);
 
     auto* title = new QLabel("DESENHO", panel);
     title->setObjectName("SectionHeader");
@@ -801,6 +1204,8 @@ void MainWindow::create_actions() {
     new_action->setShortcut(QKeySequence::New);
     connect(new_action, &QAction::triggered, this, [this] {
         document_ = cad::Document();
+        document_.material.width = 1220.0;
+        document_.material.height = 2440.0;
         refresh_document_view();
         statusBar()->showMessage("Novo projeto");
     });
@@ -963,6 +1368,11 @@ void MainWindow::create_actions() {
     cam_menu->addAction("Criar folha de trabalho", QKeySequence(), this, &MainWindow::export_setup_sheet);
     cam_menu->addAction("Guardar G-Code", QKeySequence("Ctrl+Shift+G"), this,
                         &MainWindow::export_gcode);
+
+    QMenu* help_menu = menuBar()->addMenu("Ajuda");
+    help_menu->addAction("Sobre o CNC-CAM", this, [this] {
+        QMessageBox::about(this, "CNC-CAM", "CNC-CAM - CAD/CAM para CNC");
+    });
 }
 
 void MainWindow::refresh_document_view() {

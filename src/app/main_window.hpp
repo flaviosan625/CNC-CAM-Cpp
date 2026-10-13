@@ -14,7 +14,9 @@
 #include "utils/commands.hpp"
 
 class QLabel;
-class QTabWidget;
+class QTabBar;
+class QStackedWidget;
+class QAbstractButton;
 class QComboBox;
 class QCheckBox;
 class QListWidget;
@@ -38,7 +40,9 @@ public:
 private:
     void create_actions();
     void create_tool_panel();
+    void create_legacy_tool_panel();
     void create_toolpath_panel();
+    void create_legacy_toolpath_panel();
     void activate_tool(const QString& name);
     void activate_dimension(const QString& mode);
     void refresh_document_view();
@@ -66,13 +70,14 @@ private:
     UndoStack undo_stack_;
     tools::ToolContext tool_context_;
     std::unique_ptr<tools::BaseTool> active_tool_;
-    QTabWidget* view_tabs_ = nullptr;
+    QTabBar* view_tabs_ = nullptr;
+    QStackedWidget* view_stack_ = nullptr;
     cnc::vp::Canvas2DWidget* canvas_widget_ = nullptr;
     cnc::vp::Viewport3D* viewport_3d_ = nullptr;
     QLabel* coordinate_label_ = nullptr;
     QComboBox* layer_combo_ = nullptr;
-    QCheckBox* layer_visible_ = nullptr;
-    QCheckBox* layer_locked_ = nullptr;
+    QAbstractButton* layer_visible_ = nullptr;
+    QAbstractButton* layer_locked_ = nullptr;
     QComboBox* toolpath_type_combo_ = nullptr;
     QListWidget* toolpath_list_ = nullptr;
     QPushButton* simulate_button_ = nullptr;
