@@ -1,0 +1,3157 @@
+{
+ "generated_by": {
+  "python": "3.14.7",
+  "shapely": "2.2.0",
+  "pyclipper": "1.4.0",
+  "numpy": "2.5.4",
+  "PySide6": "6.12.0",
+  "ezdxf": "1.4.4",
+  "svgpathtools": "1.8.0",
+  "pymupdf": "1.28.2"
+ },
+ "cases": [
+  {
+   "name": "polilinha_com_cantos",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Polyline",
+      "points": [
+       [
+        0,
+        0
+       ],
+       [
+        40,
+        0
+       ],
+       [
+        40,
+        30
+       ],
+       [
+        80,
+        30
+       ],
+       [
+        80,
+        0
+       ]
+      ],
+      "is_closed": false,
+      "id": "z",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 2.0,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 1
+      },
+      "entity_ids": [
+       "z"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "21 mov. · corte 0.18 m · rápido 0.01 m · ≈ 8 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "21 mov. · corte 0.18 m · rápido 0.01 m · ≈ 8 s",
+        "moves": [
+         [
+          "rapid",
+          -2.0,
+          0.0,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          42.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          42.0,
+          0.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          -2.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          32.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          32.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          38.0,
+          30.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          38.0,
+          30.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          82.0,
+          30.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          82.0,
+          30.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          80.0,
+          32.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          80.0,
+          32.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          80.0,
+          -2.0,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "retangulo_fechado",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 0,
+      "y": 0,
+      "width": 50,
+      "height": 30,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "r",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 2.0,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 1
+      },
+      "entity_ids": [
+       "r"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "21 mov. · corte 0.20 m · rápido 0.01 m · ≈ 9 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "21 mov. · corte 0.20 m · rápido 0.01 m · ≈ 9 s",
+        "moves": [
+         [
+          "rapid",
+          -2.0,
+          0.0,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          50,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          52.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          52.0,
+          0.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          50.0,
+          -2.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          50.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          50,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          50.0,
+          32.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          50.0,
+          32.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          52.0,
+          30.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          52.0,
+          30.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          -2.0,
+          30.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          30.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          32.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          0.0,
+          32.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          0.0,
+          -2.0,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "circulo_suave",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Circle",
+      "cx": 40,
+      "cy": 40,
+      "radius": 25,
+      "id": "c",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 2.0,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 1
+      },
+      "entity_ids": [
+       "c"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "69 mov. · corte 0.17 m · rápido 0.01 m · ≈ 7 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "69 mov. · corte 0.17 m · rápido 0.01 m · ≈ 7 s",
+        "moves": [
+         [
+          "rapid",
+          64.22617106117002,
+          33.14438892966722,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          64.22617106117002,
+          33.14438892966722,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          64.51963201008076,
+          35.12274194959678,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          64.87961816680493,
+          37.549571491760986,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          65.0,
+          40.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          64.87961816680493,
+          42.450428508239014,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          64.51963201008076,
+          44.877258050403206,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          63.92350839330522,
+          47.25711693136156,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          63.09698831278217,
+          49.56708580912724,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          62.048031608708875,
+          51.784918420649944,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          60.78674030756363,
+          53.889255825490054,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          59.32526133406843,
+          55.85983210409114,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          57.67766952966369,
+          57.67766952966369,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          55.85983210409114,
+          59.32526133406842,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          53.889255825490054,
+          60.78674030756363,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          51.784918420649944,
+          62.048031608708875,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          49.56708580912725,
+          63.09698831278217,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          47.25711693136156,
+          63.92350839330523,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          44.877258050403206,
+          64.51963201008076,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          42.45042850823902,
+          64.87961816680492,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          65.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          37.549571491760986,
+          64.87961816680493,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          35.122741949596794,
+          64.51963201008076,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          32.74288306863845,
+          63.92350839330523,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          30.432914190872758,
+          63.09698831278217,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          28.215081579350056,
+          62.048031608708875,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          26.110744174509954,
+          60.78674030756363,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          24.140167895908867,
+          59.32526133406843,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          22.322330470336315,
+          57.67766952966369,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          20.674738665931574,
+          55.85983210409114,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          19.213259692436367,
+          53.889255825490054,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          17.951968391291125,
+          51.784918420649944,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          16.90301168721783,
+          49.56708580912725,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          16.07649160669478,
+          47.25711693136156,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          15.480367989919237,
+          44.87725805040321,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          15.12038183319508,
+          42.45042850823902,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          15.0,
+          40.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          15.120381833195076,
+          37.549571491760986,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          15.480367989919237,
+          35.122741949596794,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          16.076491606694777,
+          32.74288306863845,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          16.90301168721783,
+          30.432914190872758,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          17.951968391291125,
+          28.21508157935006,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          19.213259692436363,
+          26.110744174509954,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          20.67473866593157,
+          24.140167895908867,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          22.322330470336308,
+          22.322330470336315,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          24.140167895908853,
+          20.674738665931585,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          26.110744174509946,
+          19.21325969243637,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          28.215081579350056,
+          17.951968391291125,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          30.432914190872744,
+          16.903011687217838,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          32.74288306863844,
+          16.07649160669478,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          35.12274194959679,
+          15.480367989919241,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          37.549571491760986,
+          15.120381833195076,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          39.99999999999999,
+          15.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          42.450428508239,
+          15.120381833195076,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          44.877258050403206,
+          15.480367989919237,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          47.25711693136155,
+          16.076491606694777,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          49.56708580912725,
+          16.903011687217834,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          51.78491842064994,
+          17.951968391291125,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          53.88925582549005,
+          19.213259692436363,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          55.85983210409114,
+          20.674738665931578,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          57.67766952966369,
+          22.322330470336308,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          59.325261334068415,
+          24.140167895908853,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          60.78674030756363,
+          26.110744174509946,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          62.04803160870887,
+          28.215081579350052,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          63.09698831278216,
+          30.43291419087274,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          63.92350839330522,
+          32.742883068638434,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          64.51963201008076,
+          35.12274194959678,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          65.00559236988728,
+          37.06280445598587,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          65.00559236988728,
+          37.06280445598587,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "estrela_cantos_agudos",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Polyline",
+      "points": [
+       [
+        50.0,
+        80.0
+       ],
+       [
+        42.94657697249032,
+        59.70820393249937
+       ],
+       [
+        21.468304511145394,
+        59.270509831248425
+       ],
+       [
+        38.587321804458156,
+        46.291796067500634
+       ],
+       [
+        32.366442431225806,
+        25.72949016875158
+       ],
+       [
+        50.0,
+        38.0
+       ],
+       [
+        67.6335575687742,
+        25.729490168751575
+       ],
+       [
+        61.412678195541844,
+        46.29179606750063
+       ],
+       [
+        78.53169548885461,
+        59.27050983124842
+       ],
+       [
+        57.05342302750968,
+        59.708203932499366
+       ]
+      ],
+      "is_closed": true,
+      "id": "s",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 1.5,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 1
+      },
+      "entity_ids": [
+       "s"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "51 mov. · corte 0.29 m · rápido 0.01 m · ≈ 14 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "51 mov. · corte 0.29 m · rápido 0.01 m · ≈ 14 s",
+        "moves": [
+         [
+          "rapid",
+          57.54591786743152,
+          58.291359257649525,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          57.54591786743152,
+          58.291359257649525,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          57.05342302750968,
+          59.708203932499366,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          50.0,
+          80.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          49.50750516007816,
+          81.41684467484984,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          49.50750516007816,
+          81.41684467484984,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          50.49249483992184,
+          81.41684467484984,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          50.49249483992184,
+          81.41684467484984,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          42.94657697249032,
+          59.70820393249937,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          42.45408213256848,
+          58.29135925764953,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          42.45408213256848,
+          58.29135925764953,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          44.44626560826217,
+          59.73876527633053,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          44.44626560826217,
+          59.73876527633053,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          21.468304511145394,
+          59.270509831248425,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          19.968615875373544,
+          59.239948487417266,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          19.968615875373544,
+          59.239948487417266,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          20.27299442572918,
+          60.176729340916076,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          20.27299442572918,
+          60.176729340916076,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          38.587321804458156,
+          46.291796067500634,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          39.782631889874374,
+          45.385576557832984,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          39.782631889874374,
+          45.385576557832984,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          39.02168551398528,
+          47.727528691580005,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          39.02168551398528,
+          47.727528691580005,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          32.366442431225806,
+          25.72949016875158,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          31.93207872169868,
+          24.293757544672207,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          31.93207872169868,
+          24.293757544672207,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          31.135205331421204,
+          24.872719952144607,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          31.135205331421204,
+          24.872719952144607,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          50.0,
+          38.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          51.2312370998046,
+          38.85677021660697,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          51.2312370998046,
+          38.85677021660697,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          48.7687629001954,
+          38.85677021660697,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          48.7687629001954,
+          38.85677021660697,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          67.6335575687742,
+          25.729490168751575,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          68.8647946685788,
+          24.872719952144603,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          68.8647946685788,
+          24.872719952144603,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          68.06792127830131,
+          24.293757544672204,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          68.06792127830131,
+          24.293757544672204,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          61.412678195541844,
+          46.29179606750063,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          60.97831448601472,
+          47.72752869158,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          60.97831448601472,
+          47.72752869158,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          60.217368110125626,
+          45.38557655783298,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          60.217368110125626,
+          45.38557655783298,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          78.53169548885461,
+          59.27050983124842,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          79.72700557427082,
+          60.17672934091607,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          79.72700557427082,
+          60.17672934091607,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          80.03138412462646,
+          59.23994848741726,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          80.03138412462646,
+          59.23994848741726,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          57.05342302750968,
+          59.708203932499366,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          55.55373439173783,
+          59.738765276330525,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          55.55373439173783,
+          59.738765276330525,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "duas_passadas",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 0,
+      "y": 0,
+      "width": 40,
+      "height": 20,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "r",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 2.0,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 2
+      },
+      "entity_ids": [
+       "r"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "42 mov. · corte 0.32 m · rápido 0.02 m · ≈ 15 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "42 mov. · corte 0.32 m · rápido 0.02 m · ≈ 15 s",
+        "moves": [
+         [
+          "rapid",
+          -2.0,
+          0.0,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          42.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          42.0,
+          0.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          -2.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          20,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          22.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          22.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          42.0,
+          20.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          42.0,
+          20.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          20,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          -2.0,
+          20.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          20.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          22.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          0.0,
+          22.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          0.0,
+          -2.0,
+          5.0,
+          0.0
+         ],
+         [
+          "rapid",
+          -2.0,
+          0.0,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          42.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          42.0,
+          0.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          -2.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          20,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          22.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          22.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          42.0,
+          20.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          42.0,
+          20.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          20,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          -2.0,
+          20.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          20.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          22.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          0.0,
+          22.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          0.0,
+          -2.0,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "angulo_de_tolerancia_alto",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Polyline",
+      "points": [
+       [
+        0,
+        0
+       ],
+       [
+        40,
+        0
+       ],
+       [
+        40,
+        30
+       ],
+       [
+        80,
+        30
+       ],
+       [
+        80,
+        0
+       ]
+      ],
+      "is_closed": false,
+      "id": "z",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 2.0,
+       "tolerance_angle": 100.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 1
+      },
+      "entity_ids": [
+       "z"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "9 mov. · corte 0.15 m · rápido 0.01 m · ≈ 7 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "9 mov. · corte 0.15 m · rápido 0.01 m · ≈ 7 s",
+        "moves": [
+         [
+          "rapid",
+          -2.0,
+          0.0,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80.0,
+          -2.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          80.0,
+          -2.0,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "giro_mais_fundo",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 0,
+      "y": 0,
+      "width": 40,
+      "height": 20,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "r",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 2.0,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 1.2,
+       "cut_depth": 2.5,
+       "passes": 1
+      },
+      "entity_ids": [
+       "r"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "21 mov. · corte 0.16 m · rápido 0.01 m · ≈ 7 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "21 mov. · corte 0.16 m · rápido 0.01 m · ≈ 7 s",
+        "moves": [
+         [
+          "rapid",
+          -2.0,
+          0.0,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          0.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          0,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          42.0,
+          0.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "plunge",
+          42.0,
+          0.0,
+          -1.2,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          -2.0,
+          -1.2,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          -2.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          20,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          22.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          22.0,
+          -1.2,
+          0.0
+         ],
+         [
+          "cut",
+          42.0,
+          20.0,
+          -1.2,
+          0.0
+         ],
+         [
+          "plunge",
+          42.0,
+          20.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          20,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          -2.0,
+          20.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "plunge",
+          -2.0,
+          20.0,
+          -1.2,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          22.0,
+          -1.2,
+          0.0
+         ],
+         [
+          "plunge",
+          0.0,
+          22.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.5,
+          0.0
+         ],
+         [
+          "cut",
+          0.0,
+          -2.0,
+          -2.5,
+          0.0
+         ],
+         [
+          "rapid",
+          0.0,
+          -2.0,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "offset_da_lamina_grande",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Polyline",
+      "points": [
+       [
+        0,
+        0
+       ],
+       [
+        40,
+        0
+       ],
+       [
+        40,
+        30
+       ],
+       [
+        80,
+        30
+       ],
+       [
+        80,
+        0
+       ]
+      ],
+      "is_closed": false,
+      "id": "z",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 4.0,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 1
+      },
+      "entity_ids": [
+       "z"
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "errors": [],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "",
+      "summary": "21 mov. · corte 0.20 m · rápido 0.01 m · ≈ 9 s",
+      "notes": [],
+      "toolpaths": [
+       {
+        "name": "Faca de arraste 1",
+        "kind": "dragknife",
+        "tool_name": "Faca",
+        "tool_number": 9,
+        "spindle_speed": 0,
+        "feed_rate": 1500,
+        "plunge_rate": 600,
+        "notes": [],
+        "summary": "21 mov. · corte 0.20 m · rápido 0.01 m · ≈ 9 s",
+        "moves": [
+         [
+          "rapid",
+          -4.0,
+          0.0,
+          5.0,
+          0.0
+         ],
+         [
+          "plunge",
+          -4.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          0,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          44.0,
+          0.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          44.0,
+          0.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          -4.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          -4.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          40.0,
+          34.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          40.0,
+          34.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          36.0,
+          30.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          36.0,
+          30.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80,
+          30,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          84.0,
+          30.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "plunge",
+          84.0,
+          30.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "cut",
+          80.0,
+          34.0,
+          -0.5,
+          0.0
+         ],
+         [
+          "plunge",
+          80.0,
+          34.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80,
+          0,
+          -2.0,
+          0.0
+         ],
+         [
+          "cut",
+          80.0,
+          -4.0,
+          -2.0,
+          0.0
+         ],
+         [
+          "rapid",
+          80.0,
+          -4.0,
+          5.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "sem_nada",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 400.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [],
+    "toolpaths": [
+     {
+      "id": "job1",
+      "name": "Faca de arraste 1",
+      "kind": "dragknife",
+      "visible": true,
+      "tool": {
+       "name": "Faca",
+       "tool_type": "end_mill",
+       "diameter": 1.0,
+       "num_flutes": 2,
+       "v_angle": 90.0,
+       "tip_diameter": 0.0,
+       "corner_radius": 0.0,
+       "pass_depth": 2.0,
+       "stepover": 2.4,
+       "clearance_stepover": 0.0,
+       "final_stepover": 0.0,
+       "spindle_speed": 0,
+       "feed_rate": 1500,
+       "plunge_rate": 600,
+       "tool_number": 9,
+       "notes": ""
+      },
+      "settings": {
+       "name": "Faca de arraste 1",
+       "blade_offset": 2.0,
+       "tolerance_angle": 30.0,
+       "swivel_depth": 0.5,
+       "cut_depth": 2.0,
+       "passes": 1
+      },
+      "entity_ids": []
+     }
+    ]
+   },
+   "expected": {
+    "errors": [
+     "Faca de arraste 1: Os vetores deste percurso não estão mais no desenho."
+    ],
+    "jobs": [
+     {
+      "name": "Faca de arraste 1",
+      "error": "Os vetores deste percurso não estão mais no desenho.",
+      "summary": "Os vetores deste percurso não estão mais no desenho.",
+      "notes": [],
+      "toolpaths": []
+     }
+    ]
+   }
+  }
+ ]
+}

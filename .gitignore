@@ -1,0 +1,33 @@
+# Builds e arquivos gerados
+build/
+out/
+cmake-build-*/
+.vs/
+.idea/
+*.user
+*.suo
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.exe
+*.dll
+
+# CMake/Ninja gerados na raiz
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+build.ninja
+.ninja_deps
+.ninja_log
+
+# Temporarios e cobertura
+Testing/
+*.tmp
+*.log
+coverage/
+
+# Python auxiliares usados apenas para gerar os golden tests
+__pycache__/
+*.pyc

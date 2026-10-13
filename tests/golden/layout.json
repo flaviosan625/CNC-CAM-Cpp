@@ -1,0 +1,6145 @@
+{
+ "generated_by": {
+  "python": "3.14.7",
+  "shapely": "2.2.0",
+  "pyclipper": "1.4.0",
+  "numpy": "2.5.4",
+  "PySide6": "6.12.0",
+  "ezdxf": "1.4.4",
+  "svgpathtools": "1.8.0",
+  "pymupdf": "1.28.2"
+ },
+ "cases": [
+  {
+   "name": "dez_pecas_padrao",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1024,
+      "y": 1960,
+      "width": 86.0,
+      "height": 62.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p8",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1027,
+      "y": 1955,
+      "width": 103.0,
+      "height": 91.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p9",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p9"
+      ],
+      "anchor_x": 1078.5,
+      "anchor_y": 2000.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -1017.0,
+      "dy": -1945.0
+     },
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -885.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -795.0,
+      "dy": -1960.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -668.0,
+      "dy": -1972.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -564.0,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -443.5,
+      "dy": -1976.5
+     },
+     {
+      "ids": [
+       "p8"
+      ],
+      "anchor_x": 1067.0,
+      "anchor_y": 1991.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -370.0,
+      "dy": -1950.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -257.0,
+      "dy": -1985.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -186.0,
+      "dy": -1965.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -75.0,
+      "dy": -1990.0
+     }
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p9",
+      -848.0,
+      -1955.0
+     ],
+     [
+      "p4",
+      -722.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -647.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -517.0,
+      -1995.0
+     ],
+     [
+      "p8",
+      -453.0,
+      -1960.0
+     ],
+     [
+      "p3",
+      -344.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -231.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -118.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "sem_rotacao",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1024,
+      "y": 1960,
+      "width": 86.0,
+      "height": 62.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p8",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1027,
+      "y": 1955,
+      "width": 103.0,
+      "height": 91.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p9",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": false,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p9"
+      ],
+      "anchor_x": 1078.5,
+      "anchor_y": 2000.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -1017.0,
+      "dy": -1945.0
+     },
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -887.0,
+      "dy": -1980.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -799.0,
+      "dy": -1960.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -689.0,
+      "dy": -1955.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -602.0,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -488.0,
+      "dy": -1970.0
+     },
+     {
+      "ids": [
+       "p8"
+      ],
+      "anchor_x": 1067.0,
+      "anchor_y": 1991.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -421.0,
+      "dy": -1950.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -308.0,
+      "dy": -1985.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -237.0,
+      "dy": -1965.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -126.0,
+      "dy": -1990.0
+     }
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p9",
+      -848.0,
+      -1955.0
+     ],
+     [
+      "p4",
+      -722.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -647.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -517.0,
+      -1995.0
+     ],
+     [
+      "p8",
+      -453.0,
+      -1960.0
+     ],
+     [
+      "p3",
+      -344.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -231.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -118.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "passo_de_90_graus",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1024,
+      "y": 1960,
+      "width": 86.0,
+      "height": 62.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p8",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1027,
+      "y": 1955,
+      "width": 103.0,
+      "height": 91.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p9",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 90.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -999.0,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -891.0,
+      "dy": -1960.0
+     },
+     {
+      "ids": [
+       "p9"
+      ],
+      "anchor_x": 1078.5,
+      "anchor_y": 2000.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -1017.0,
+      "dy": -1882.0
+     },
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -764.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -896.0,
+      "dy": -1885.0
+     },
+     {
+      "ids": [
+       "p8"
+      ],
+      "anchor_x": 1067.0,
+      "anchor_y": 1991.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -680.0,
+      "dy": -1950.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -567.0,
+      "dy": -1985.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -661.5,
+      "dy": -1908.5
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -789.0,
+      "dy": -1872.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -881.0,
+      "dy": -1859.0
+     }
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 6,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p9",
+      -848.0,
+      -1955.0
+     ],
+     [
+      "p4",
+      -722.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -647.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -517.0,
+      -1995.0
+     ],
+     [
+      "p8",
+      -453.0,
+      -1960.0
+     ],
+     [
+      "p3",
+      -344.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -231.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -118.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "passo_de_15_graus",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 15.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -994.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -895.0,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -774.5,
+      "dy": -1976.5
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -680.0,
+      "dy": -1985.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -609.0,
+      "dy": -1965.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -498.0,
+      "dy": -1990.0
+     }
+    ],
+    "resultado": {
+     "movidos": 6,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p2",
+      -1006.0,
+      -1990.0
+     ],
+     [
+      "p4",
+      -910.0,
+      -1980.0
+     ],
+     [
+      "p1",
+      -820.0,
+      -1995.0
+     ],
+     [
+      "p3",
+      -741.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -628.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -515.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 6,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "com_espelho",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 90.0,
+    "mirror": true,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -994.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -904.0,
+      "dy": -1960.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -777.0,
+      "dy": -1972.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -673.0,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -552.5,
+      "dy": -1976.5
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -667.0,
+      "dy": -1922.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -788.0,
+      "dy": -1890.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -886.0,
+      "dy": -1910.0
+     }
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 4,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p4",
+      -833.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -758.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -628.0,
+      -1995.0
+     ],
+     [
+      "p3",
+      -549.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -436.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -323.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "origem_canto_superior_direito",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "top-right",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": 108.0,
+      "dy": 344.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -19.0,
+      "dy": 386.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -114.0,
+      "dy": 379.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -236.0,
+      "dy": 388.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -324.5,
+      "dy": 370.5
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -405.0,
+      "dy": 366.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -513.0,
+      "dy": 410.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -564.0,
+      "dy": 390.0
+     }
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p4",
+      -833.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -758.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -628.0,
+      -1995.0
+     ],
+     [
+      "p3",
+      -549.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -436.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -323.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "origem_inferior_direito_direcao_y",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-right",
+    "direction": "y",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": 110.0,
+      "dy": -1980.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": 101.5,
+      "dy": -1839.5
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": 120.0,
+      "dy": -1738.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": 117.0,
+      "dy": -1622.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": 125.0,
+      "dy": -1527.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": 134.0,
+      "dy": -1446.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": 127.5,
+      "dy": -1324.5
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": 160.0,
+      "dy": -1266.0
+     }
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p4",
+      -833.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -758.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -628.0,
+      -1995.0
+     ],
+     [
+      "p3",
+      -549.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -436.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -323.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "origem_superior_esquerdo",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": false,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "top-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -996.0,
+      "dy": 342.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -908.0,
+      "dy": 386.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -798.0,
+      "dy": 362.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -711.0,
+      "dy": 388.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -597.0,
+      "dy": 364.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -509.0,
+      "dy": 366.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -438.0,
+      "dy": 410.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -327.0,
+      "dy": 390.0
+     }
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p4",
+      -833.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -758.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -628.0,
+      -1995.0
+     ],
+     [
+      "p3",
+      -549.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -436.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -323.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "margem_e_folga_maiores",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1024,
+      "y": 1960,
+      "width": 86.0,
+      "height": 62.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p8",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1027,
+      "y": 1955,
+      "width": 103.0,
+      "height": 91.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p9",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1030,
+      "y": 1950,
+      "width": 65.0,
+      "height": 50.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p10",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1033,
+      "y": 1945,
+      "width": 82.0,
+      "height": 79.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p11",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 14.0,
+    "margin": 25.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p9"
+      ],
+      "anchor_x": 1078.5,
+      "anchor_y": 2000.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -1002.0,
+      "dy": -1930.0
+     },
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -862.0,
+      "dy": -1967.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -764.0,
+      "dy": -1945.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -629.0,
+      "dy": -1957.0
+     },
+     {
+      "ids": [
+       "p11"
+      ],
+      "anchor_x": 1074.0,
+      "anchor_y": 1984.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -541.0,
+      "dy": -1920.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -421.0,
+      "dy": -1960.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -292.5,
+      "dy": -1961.5
+     },
+     {
+      "ids": [
+       "p8"
+      ],
+      "anchor_x": 1067.0,
+      "anchor_y": 1991.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -211.0,
+      "dy": -1935.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -90.0,
+      "dy": -1970.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -11.0,
+      "dy": -1950.0
+     },
+     {
+      "ids": [
+       "p10"
+      ],
+      "anchor_x": 1062.5,
+      "anchor_y": 1975.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": 78.0,
+      "dy": -1925.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": 4.0,
+      "dy": -1916.0
+     }
+    ],
+    "resultado": {
+     "movidos": 12,
+     "nao_couberam": 0,
+     "faixas": 2,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p9",
+      -848.0,
+      -1955.0
+     ],
+     [
+      "p4",
+      -722.0,
+      -1980.0
+     ],
+     [
+      "p11",
+      -662.0,
+      -1945.0
+     ],
+     [
+      "p6",
+      -557.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -427.0,
+      -1995.0
+     ],
+     [
+      "p8",
+      -363.0,
+      -1960.0
+     ],
+     [
+      "p3",
+      -254.0,
+      -1985.0
+     ],
+     [
+      "p10",
+      -156.0,
+      -1950.0
+     ],
+     [
+      "p5",
+      -68.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      45.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 12,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "fresa_maior_que_a_folga",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 12.0,
+    "clearance": 4.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -994.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -898.0,
+      "dy": -1960.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -765.0,
+      "dy": -1972.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -655.0,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -528.5,
+      "dy": -1976.5
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -428.0,
+      "dy": -1985.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -351.0,
+      "dy": -1965.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -234.0,
+      "dy": -1990.0
+     }
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p4",
+      -833.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -758.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -628.0,
+      -1995.0
+     ],
+     [
+      "p3",
+      -549.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -436.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -323.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 8,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "area_definida",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1024,
+      "y": 1960,
+      "width": 86.0,
+      "height": 62.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p8",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1027,
+      "y": 1955,
+      "width": 103.0,
+      "height": 91.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p9",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": [
+     100.0,
+     100.0,
+     700.0,
+     900.0
+    ]
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -904.0,
+      "dy": -1882.0
+     },
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -795.0,
+      "dy": -1892.0
+     },
+     {
+      "ids": [
+       "p9"
+      ],
+      "anchor_x": 1078.5,
+      "anchor_y": 2000.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -714.0,
+      "dy": -1855.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -583.5,
+      "dy": -1886.5
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -504.0,
+      "dy": -1870.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -380.0,
+      "dy": -1891.0
+     },
+     {
+      "ids": [
+       "p8"
+      ],
+      "anchor_x": 1067.0,
+      "anchor_y": 1991.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -924.0,
+      "dy": -1785.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -587.0,
+      "dy": -1805.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -476.0,
+      "dy": -1792.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -365.0,
+      "dy": -1817.0
+     }
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 4,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1021.0,
+      -1965.0
+     ],
+     [
+      "p2",
+      -929.0,
+      -1990.0
+     ],
+     [
+      "p9",
+      -848.0,
+      -1955.0
+     ],
+     [
+      "p4",
+      -722.0,
+      -1980.0
+     ],
+     [
+      "p6",
+      -647.0,
+      -1970.0
+     ],
+     [
+      "p1",
+      -517.0,
+      -1995.0
+     ],
+     [
+      "p8",
+      -453.0,
+      -1960.0
+     ],
+     [
+      "p3",
+      -344.0,
+      -1985.0
+     ],
+     [
+      "p5",
+      -231.0,
+      -1975.0
+     ],
+     [
+      "p0",
+      -118.0,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "nao_cabem_todas",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 600.0,
+     "height": 500.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 150.0,
+      "height": 200.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 167.0,
+      "height": 229.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 184.0,
+      "height": 258.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 201.0,
+      "height": 217.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 163.0,
+      "height": 246.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 180.0,
+      "height": 205.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 197.0,
+      "height": 234.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 159.0,
+      "height": 263.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1024,
+      "y": 1960,
+      "width": 176.0,
+      "height": 222.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p8",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1027,
+      "y": 1955,
+      "width": 193.0,
+      "height": 251.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p9",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1030,
+      "y": 1950,
+      "width": 155.0,
+      "height": 210.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p10",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1033,
+      "y": 1945,
+      "width": 172.0,
+      "height": 239.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p11",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1036,
+      "y": 1940,
+      "width": 189.0,
+      "height": 268.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p12",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1039,
+      "y": 1935,
+      "width": 151.0,
+      "height": 227.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p13",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1042,
+      "y": 1930,
+      "width": 168.0,
+      "height": 256.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p14",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1045,
+      "y": 1925,
+      "width": 185.0,
+      "height": 215.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p15",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1048,
+      "y": 1920,
+      "width": 202.0,
+      "height": 244.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p16",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1051,
+      "y": 1915,
+      "width": 164.0,
+      "height": 203.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p17",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1054,
+      "y": 1910,
+      "width": 181.0,
+      "height": 232.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p18",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1057,
+      "y": 1905,
+      "width": 198.0,
+      "height": 261.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p19",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1060,
+      "y": 1900,
+      "width": 160.0,
+      "height": 220.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p20",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1063,
+      "y": 1895,
+      "width": 177.0,
+      "height": 249.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p21",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1066,
+      "y": 1890,
+      "width": 194.0,
+      "height": 208.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p22",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1069,
+      "y": 1885,
+      "width": 156.0,
+      "height": 237.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p23",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1072,
+      "y": 1880,
+      "width": 173.0,
+      "height": 266.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p24",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p16"
+      ],
+      "anchor_x": 1149.0,
+      "anchor_y": 2042.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -1017.0,
+      "dy": -1931.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1109.5,
+      "anchor_y": 2093.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -741.0,
+      "dy": -1983.0
+     },
+     {
+      "ids": [
+       "p19"
+      ],
+      "anchor_x": 1156.0,
+      "anchor_y": 2035.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -765.5,
+      "dy": -1719.5
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1116.5,
+      "anchor_y": 2087.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -989.5,
+      "dy": -1770.5
+     }
+    ],
+    "resultado": {
+     "movidos": 4,
+     "nao_couberam": 21,
+     "faixas": 3,
+     "ids": [
+      "p22",
+      "p9",
+      "p12",
+      "p15",
+      "p2",
+      "p18",
+      "p5",
+      "p21",
+      "p8",
+      "p24",
+      "p11",
+      "p14",
+      "p1",
+      "p17",
+      "p4",
+      "p20",
+      "p7",
+      "p23",
+      "p10",
+      "p13",
+      "p0"
+     ]
+    }
+   },
+   "unfit_outside": {
+    "p0": [
+     -392.0,
+     -2000.0
+    ],
+    "p1": [
+     -395.0,
+     -1787.0
+    ],
+    "p2": [
+     -223.0,
+     -1990.0
+    ],
+    "p4": [
+     -37.0,
+     -1980.0
+    ],
+    "p5": [
+     -40.0,
+     -1721.0
+    ],
+    "p7": [
+     142.0,
+     -1965.0
+    ],
+    "p8": [
+     139.0,
+     -1689.0
+    ],
+    "p9": [
+     320.0,
+     -1955.0
+    ],
+    "p10": [
+     317.0,
+     -1691.0
+    ],
+    "p11": [
+     515.0,
+     -1945.0
+    ],
+    "p12": [
+     692.0,
+     -1940.0
+    ],
+    "p13": [
+     886.0,
+     -1935.0
+    ],
+    "p14": [
+     883.0,
+     -1695.0
+    ],
+    "p15": [
+     1056.0,
+     -1925.0
+    ],
+    "p17": [
+     1050.0,
+     -1692.0
+    ],
+    "p18": [
+     1240.0,
+     -1910.0
+    ],
+    "p20": [
+     1234.0,
+     -1660.0
+    ],
+    "p21": [
+     1420.0,
+     -1895.0
+    ],
+    "p22": [
+     1417.0,
+     -1633.0
+    ],
+    "p23": [
+     1616.0,
+     -1885.0
+    ],
+    "p24": [
+     1777.0,
+     -1880.0
+    ]
+   },
+   "simple": {
+    "movimentos": [
+     [
+      "p12",
+      -1036.0,
+      -1940.0
+     ],
+     [
+      "p24",
+      -875.0,
+      -1880.0
+     ],
+     [
+      "p7",
+      -643.0,
+      -1965.0
+     ],
+     [
+      "p8",
+      -1024.0,
+      -1684.0
+     ],
+     [
+      "p20",
+      -876.0,
+      -1624.0
+     ],
+     [
+      "p3",
+      -657.0,
+      -1709.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 6,
+     "nao_couberam": 19,
+     "faixas": 3
+    }
+   }
+  },
+  {
+   "name": "margem_da_chapa",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 20.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1015,
+      "y": 1975,
+      "width": 90.0,
+      "height": 45.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p5",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1018,
+      "y": 1970,
+      "width": 107.0,
+      "height": 74.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p6",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1021,
+      "y": 1965,
+      "width": 69.0,
+      "height": 103.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p7",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1024,
+      "y": 1960,
+      "width": 86.0,
+      "height": 62.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p8",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1027,
+      "y": 1955,
+      "width": 103.0,
+      "height": 91.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p9",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p9"
+      ],
+      "anchor_x": 1078.5,
+      "anchor_y": 2000.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -1017.0,
+      "dy": -1945.0
+     },
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -885.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "p6"
+      ],
+      "anchor_x": 1071.5,
+      "anchor_y": 2007.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -795.0,
+      "dy": -1960.0
+     },
+     {
+      "ids": [
+       "p7"
+      ],
+      "anchor_x": 1055.5,
+      "anchor_y": 2016.5,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -668.0,
+      "dy": -1972.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -564.0,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p4"
+      ],
+      "anchor_x": 1048.5,
+      "anchor_y": 2023.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -443.5,
+      "dy": -1976.5
+     },
+     {
+      "ids": [
+       "p8"
+      ],
+      "anchor_x": 1067.0,
+      "anchor_y": 1991.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -370.0,
+      "dy": -1950.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -257.0,
+      "dy": -1985.0
+     },
+     {
+      "ids": [
+       "p5"
+      ],
+      "anchor_x": 1060.0,
+      "anchor_y": 1997.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -186.0,
+      "dy": -1965.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -75.0,
+      "dy": -1990.0
+     }
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p7",
+      -1001.0,
+      -1945.0
+     ],
+     [
+      "p2",
+      -909.0,
+      -1970.0
+     ],
+     [
+      "p9",
+      -828.0,
+      -1935.0
+     ],
+     [
+      "p4",
+      -702.0,
+      -1960.0
+     ],
+     [
+      "p6",
+      -627.0,
+      -1950.0
+     ],
+     [
+      "p1",
+      -497.0,
+      -1975.0
+     ],
+     [
+      "p8",
+      -433.0,
+      -1940.0
+     ],
+     [
+      "p3",
+      -324.0,
+      -1965.0
+     ],
+     [
+      "p5",
+      -211.0,
+      -1955.0
+     ],
+     [
+      "p0",
+      -98.0,
+      -1980.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 10,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "formas_mistas",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Circle",
+      "cx": 3000,
+      "cy": 3000,
+      "radius": 45,
+      "id": "c1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Circle",
+      "cx": 3100,
+      "cy": 3200,
+      "radius": 30,
+      "id": "c2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Polyline",
+      "points": [
+       [
+        3300.0,
+        3050.0
+       ],
+       [
+        3288.2442949541505,
+        3016.180339887499
+       ],
+       [
+        3252.447174185242,
+        3015.4508497187476
+       ],
+       [
+        3280.978869674097,
+        2993.819660112501
+       ],
+       [
+        3270.6107373853765,
+        2959.5491502812524
+       ],
+       [
+        3300.0,
+        2980.0
+       ],
+       [
+        3329.3892626146235,
+        2959.5491502812524
+       ],
+       [
+        3319.021130325903,
+        2993.819660112501
+       ],
+       [
+        3347.552825814758,
+        3015.4508497187476
+       ],
+       [
+        3311.7557050458495,
+        3016.180339887499
+       ]
+      ],
+      "is_closed": true,
+      "id": "s1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -994.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "s1"
+      ],
+      "anchor_x": 3300.0,
+      "anchor_y": 3004.7745751406264,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -3138.447174185242,
+      "dy": -2949.5491502812524
+     },
+     {
+      "ids": [
+       "c1"
+      ],
+      "anchor_x": 3000.0,
+      "anchor_y": 3000.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -2739.8943483704843,
+      "dy": -2945.0
+     },
+     {
+      "ids": [
+       "p3"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2013.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -697.8943483704843,
+      "dy": -1975.0
+     },
+     {
+      "ids": [
+       "p1"
+      ],
+      "anchor_x": 1041.5,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -574.8943483704843,
+      "dy": -1985.0
+     },
+     {
+      "ids": [
+       "c2"
+      ],
+      "anchor_x": 3100.0,
+      "anchor_y": 3200.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -2558.8943483704843,
+      "dy": -3160.0
+     },
+     {
+      "ids": [
+       "p0"
+      ],
+      "anchor_x": 1030.0,
+      "anchor_y": 2020.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -422.8943483704843,
+      "dy": -1990.0
+     }
+    ],
+    "resultado": {
+     "movidos": 7,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p2",
+      -1006.0,
+      -1990.0
+     ],
+     [
+      "s1",
+      -3150.447174185242,
+      -2959.5491502812524
+     ],
+     [
+      "c1",
+      -2749.8943483704843,
+      -2955.0
+     ],
+     [
+      "p1",
+      -699.8943483704843,
+      -1995.0
+     ],
+     [
+      "c2",
+      -2681.8943483704843,
+      -3170.0
+     ],
+     [
+      "p3",
+      -552.8943483704843,
+      -1985.0
+     ],
+     [
+      "p0",
+      -424.8943483704843,
+      -2000.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 7,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "pecas_agrupadas",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [
+     {
+      "type": "Rectangle",
+      "x": 1000,
+      "y": 2000,
+      "width": 60.0,
+      "height": 40.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p0",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": "g1"
+     },
+     {
+      "type": "Rectangle",
+      "x": 1003,
+      "y": 1995,
+      "width": 77.0,
+      "height": 69.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p1",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": "g1"
+     },
+     {
+      "type": "Rectangle",
+      "x": 1006,
+      "y": 1990,
+      "width": 94.0,
+      "height": 98.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p2",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": null
+     },
+     {
+      "type": "Rectangle",
+      "x": 1009,
+      "y": 1985,
+      "width": 111.0,
+      "height": 57.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p3",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": "g2"
+     },
+     {
+      "type": "Rectangle",
+      "x": 1012,
+      "y": 1980,
+      "width": 73.0,
+      "height": 86.0,
+      "rotation": 0.0,
+      "corner_radius": 0.0,
+      "id": "p4",
+      "layer": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "group": "g2"
+     }
+    ],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [
+     {
+      "ids": [
+       "p3",
+       "p4"
+      ],
+      "anchor_x": 1064.5,
+      "anchor_y": 2023.0,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -999.0,
+      "dy": -1970.0
+     },
+     {
+      "ids": [
+       "p2"
+      ],
+      "anchor_x": 1053.0,
+      "anchor_y": 2039.0,
+      "angle": 90.0,
+      "mirrored": false,
+      "dx": -877.0,
+      "dy": -1982.0
+     },
+     {
+      "ids": [
+       "p0",
+       "p1"
+      ],
+      "anchor_x": 1040.0,
+      "anchor_y": 2029.5,
+      "angle": 0.0,
+      "mirrored": false,
+      "dx": -769.0,
+      "dy": -1985.0
+     }
+    ],
+    "resultado": {
+     "movidos": 5,
+     "nao_couberam": 0,
+     "faixas": 1,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [
+     [
+      "p2",
+      -1006.0,
+      -1990.0
+     ],
+     [
+      "p3",
+      -907.0,
+      -1980.0
+     ],
+     [
+      "p4",
+      -907.0,
+      -1980.0
+     ],
+     [
+      "p0",
+      -779.0,
+      -1995.0
+     ],
+     [
+      "p1",
+      -779.0,
+      -1995.0
+     ]
+    ],
+    "resultado": {
+     "movidos": 5,
+     "nao_couberam": 0,
+     "faixas": 1
+    }
+   }
+  },
+  {
+   "name": "sem_pecas",
+   "document": {
+    "version": 2,
+    "units": "mm",
+    "material": {
+     "width": 1220.0,
+     "height": 2440.0,
+     "thickness": 18.0,
+     "material_profile": "mdf",
+     "zero_x": "left",
+     "zero_y": "bottom",
+     "zero_z": "top",
+     "units": "mm",
+     "use_origin_offset": false,
+     "origin_offset_x": 0.0,
+     "origin_offset_y": 0.0,
+     "scale_design": false,
+     "model_resolution": "normal",
+     "appearance": "canadian-maple",
+     "solid_color": "#d9c29a",
+     "margin": 0.0,
+     "clearance_z": 5.0,
+     "plunge_gap": 2.0,
+     "home_x": 0.0,
+     "home_y": 0.0
+    },
+    "dimension_style": {
+     "line_color": null,
+     "extension_color": null,
+     "text_color": null,
+     "text_height": 2.5,
+     "arrow_size": 2.5,
+     "line_width": 0.18,
+     "extension_gap": 1.0,
+     "extension_overshoot": 1.5,
+     "text_gap": 1.0,
+     "arrow_style": "closed",
+     "arrow_fit": "auto",
+     "precision": 2,
+     "show_unit": true,
+     "alternate_units": false,
+     "alternate_precision": 2,
+     "tolerance_mode": "none",
+     "tolerance_upper": 0.0,
+     "tolerance_lower": 0.0
+    },
+    "notes": "",
+    "variables": {},
+    "layers": [
+     {
+      "name": "Camada 1",
+      "color": [
+       0.1,
+       0.1,
+       0.1
+      ],
+      "visible": true,
+      "locked": false
+     }
+    ],
+    "entities": [],
+    "toolpaths": []
+   },
+   "options": {
+    "tool_diameter": 6.0,
+    "clearance": 6.0,
+    "margin": 10.0,
+    "rotate": true,
+    "rotation_step": 45.0,
+    "mirror": false,
+    "origin": "bottom-left",
+    "direction": "x",
+    "area": null
+   },
+   "advanced": {
+    "placements": [],
+    "resultado": {
+     "movidos": 0,
+     "nao_couberam": 0,
+     "faixas": 0,
+     "ids": []
+    }
+   },
+   "unfit_outside": {},
+   "simple": {
+    "movimentos": [],
+    "resultado": {
+     "movidos": 0,
+     "nao_couberam": 0,
+     "faixas": 0
+    }
+   }
+  }
+ ]
+}
