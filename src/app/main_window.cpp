@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
+#include <tuple>
 
 #include <QAction>
 #include <QAbstractItemView>
@@ -17,6 +19,7 @@
 #include <QFile>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGroupBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -24,12 +27,15 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QMenuBar>
+#include <QPainter>
 #include <QPixmap>
+#include <QPolygonF>
 #include <QPushButton>
 #include <QListWidget>
 #include <QDoubleSpinBox>
 #include <QSignalBlocker>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QStackedWidget>
@@ -40,6 +46,7 @@
 
 #include "ui/theme.hpp"
 #include "ui/icons.hpp"
+#include "cad/layout.hpp"
 #include "cam/gcode.hpp"
 #include "cam/setup_sheet.hpp"
 #include "io/importers.hpp"
@@ -50,6 +57,37 @@
 #include "viewport/gl_widget.hpp"
 
 namespace cnc::app {
+
+namespace {
+
+QPixmap material_thumbnail() {
+    QPixmap pixmap(148, 112);
+    pixmap.setDevicePixelRatio(2.0);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QColor base("#d9b47d");
+    const int x = 6;
+    const int y = 14;
+    const int w = 44;
+    const int h = 26;
+    const int d = 12;
+    painter.setPen(QPen(base.darker(170), 1));
+    painter.setBrush(base.lighter(112));
+    painter.drawPolygon(QPolygonF{{QPointF(x, y), QPointF(x + w, y),
+                                   QPointF(x + w + d, y - d), QPointF(x + d, y - d)}});
+    painter.setBrush(base);
+    painter.drawRect(x, y, w, h);
+    painter.setBrush(base.darker(125));
+    painter.drawPolygon(QPolygonF{{QPointF(x + w, y), QPointF(x + w + d, y - d),
+                                   QPointF(x + w + d, y - d + h), QPointF(x + w, y + h)}});
+    painter.setPen(QPen(QColor("#ff9f43"), 2));
+    painter.drawLine(x - 4, y, x + 6, y);
+    painter.end();
+    return pixmap;
+}
+
+}  // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(document_, undo_stack_) {
     setWindowTitle("CNC-CAM");
@@ -114,7 +152,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
         if (dock->objectName() == "ToolpathPanel") right_dock = dock;
     }
     if (left_dock && right_dock)
-        resizeDocks({left_dock, right_dock}, {340, 290}, Qt::Horizontal);
+        resizeDocks({left_dock, right_dock}, {340, 362}, Qt::Horizontal);
     activate_tool("select");
 
     connect(canvas_widget_, &vp::Canvas2DWidget::mouse_moved, this,
@@ -138,12 +176,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
 }
 
 void MainWindow::create_toolpath_panel() {
-    auto* dock = new QDockWidget("Selecao", this);
+    auto* dock = new QDockWidget("Percursos", this);
     dock->setObjectName("ToolpathPanel");
     dock->setAllowedAreas(Qt::RightDockWidgetArea);
     dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     dock->setTitleBarWidget(new QWidget(dock));
-    dock->setMinimumWidth(280);
+    dock->setMinimumWidth(360);
 
     auto* shell = new QWidget(dock);
     auto* shell_layout = new QHBoxLayout(shell);
@@ -152,7 +190,7 @@ void MainWindow::create_toolpath_panel() {
 
     auto* rail = new QWidget(shell);
     rail->setObjectName("RightToolRail");
-    rail->setFixedWidth(48);
+    rail->setFixedWidth(50);
     auto* rail_layout = new QVBoxLayout(rail);
     rail_layout->setContentsMargins(4, 6, 4, 8);
     rail_layout->setSpacing(4);
@@ -180,7 +218,7 @@ void MainWindow::create_toolpath_panel() {
     toolpath_button->setObjectName("RightRailButton");
     toolpath_button->setCheckable(true);
     toolpath_button->setFixedSize(40, 34);
-    toolpath_button->setIcon(ui::get_icon("rotate"));
+    toolpath_button->setIcon(ui::get_icon("tp_recalc"));
     toolpath_button->setIconSize(QSize(22, 22));
     toolpath_button->setToolTip("Percursos CAM");
     rail_layout->addWidget(toolpath_button);
@@ -218,50 +256,176 @@ void MainWindow::create_toolpath_panel() {
     auto* layout = new QVBoxLayout(toolpath_page);
     layout->setContentsMargins(14, 12, 14, 12);
     layout->setSpacing(9);
-    auto* title = new QLabel("PERCURSOS", toolpath_page);
-    title->setObjectName("SectionHeader");
-    layout->addWidget(title);
-    auto* material_button = new QPushButton("Definicoes do material...", toolpath_page);
-    layout->addWidget(material_button);
+
+    auto* material_head = new QHBoxLayout();
+    material_head->setSpacing(10);
+    auto* material_info = new QVBoxLayout();
+    material_info->setSpacing(5);
+    auto* material_button = new QPushButton("Definir...", toolpath_page);
+    material_button->setObjectName("MaterialBtn");
+    material_button->setIcon(ui::get_icon("workspace_setup"));
+    material_button->setIconSize(QSize(20, 20));
+    material_button->setToolTip("Definições do Trabalho (Ctrl+J)");
+    material_info->addWidget(material_button, 0, Qt::AlignLeft);
+    toolpath_size_label_ = new QLabel(toolpath_page);
+    toolpath_size_label_->setObjectName("MutedText");
+    toolpath_origin_label_ = new QLabel(toolpath_page);
+    toolpath_origin_label_->setObjectName("MutedText");
+    for (auto* label : {toolpath_size_label_, toolpath_origin_label_}) {
+        label->setStyleSheet("color: #96a9c1; font-size: 11px;");
+        material_info->addWidget(label);
+    }
+    material_head->addLayout(material_info, 1);
+    auto* material_thumb = new QLabel(toolpath_page);
+    material_thumb->setFixedSize(74, 56);
+    material_thumb->setPixmap(material_thumbnail());
+    material_head->addWidget(material_thumb, 0, Qt::AlignTop);
+    layout->addLayout(material_head);
     connect(material_button, &QPushButton::clicked, this, &MainWindow::edit_material_setup);
-    toolpath_list_ = new QListWidget(toolpath_page);
-    toolpath_list_->setObjectName("ToolpathList");
-    toolpath_list_->setSelectionMode(QAbstractItemView::SingleSelection);
-    layout->addWidget(toolpath_list_, 1);
-    auto* type_label = new QLabel("Novo percurso", toolpath_page);
-    type_label->setObjectName("PropLabel");
-    layout->addWidget(type_label);
+
+    auto* material_sep = new QFrame(toolpath_page);
+    material_sep->setObjectName("ToolSep");
+    material_sep->setFixedHeight(1);
+    material_sep->setFrameShape(QFrame::NoFrame);
+    layout->addWidget(material_sep);
+
+    auto* operations_title = new QLabel("PERCURSOS DE USINAGEM", toolpath_page);
+    operations_title->setObjectName("SectionHeader");
+    layout->addWidget(operations_title);
+
     toolpath_type_combo_ = new QComboBox(toolpath_page);
     const std::vector<std::pair<QString, cam::ToolpathType>> kinds = {
         {"Perfil", cam::ToolpathType::Profile}, {"Bolso", cam::ToolpathType::Pocket},
-        {"Furacao", cam::ToolpathType::Drill}, {"V-carve", cam::ToolpathType::VCarve},
+        {QString::fromUtf8("Fura\xC3\xA7\xC3\xA3o"), cam::ToolpathType::Drill},
+        {"Entalhe V", cam::ToolpathType::VCarve},
         {"Fluting", cam::ToolpathType::Fluting}, {"Textura", cam::ToolpathType::Texture},
         {"Keyhole", cam::ToolpathType::Keyhole}, {"Inlay", cam::ToolpathType::Inlay},
-        {"Drag knife", cam::ToolpathType::Dragknife},
+        {"Faca", cam::ToolpathType::Dragknife},
     };
     for (const auto& [label, kind] : kinds) toolpath_type_combo_->addItem(label, static_cast<int>(kind));
-    layout->addWidget(toolpath_type_combo_);
-    auto* add_button = new QPushButton("Adicionar percurso", toolpath_page);
-    add_button->setProperty("primary", true);
-    layout->addWidget(add_button);
-    connect(add_button, &QPushButton::clicked, this, &MainWindow::add_toolpath_from_panel);
-    auto* recalc_button = new QPushButton("Recalcular todos", toolpath_page);
-    layout->addWidget(recalc_button);
-    connect(recalc_button, &QPushButton::clicked, this, &MainWindow::recalculate_toolpaths);
-    auto* row = new QHBoxLayout();
-    auto* edit_button = new QPushButton("Editar", toolpath_page);
-    auto* toggle_button = new QPushButton("Mostrar/ocultar", toolpath_page);
-    auto* delete_button = new QPushButton("Excluir", toolpath_page);
-    row->addWidget(edit_button);
-    row->addWidget(toggle_button);
-    row->addWidget(delete_button);
-    layout->addLayout(row);
-    connect(edit_button, &QPushButton::clicked, this, &MainWindow::edit_current_toolpath);
-    connect(toggle_button, &QPushButton::clicked, this, &MainWindow::toggle_current_toolpath);
-    connect(delete_button, &QPushButton::clicked, this, &MainWindow::delete_current_toolpath);
-    simulate_button_ = new QPushButton("Simular percursos", toolpath_page);
-    simulate_button_->setObjectName("SimulatePathBtn");
-    layout->addWidget(simulate_button_);
+
+    auto* operations_grid = new QGridLayout();
+    operations_grid->setSpacing(6);
+    for (int column = 0; column < 3; ++column) operations_grid->setColumnStretch(column, 1);
+    const std::vector<std::pair<QString, QString>> operations = {
+        {"tp_profile", "Perfil"}, {"tp_pocket", "Bolso"}, {"tp_drill", QString::fromUtf8("Fura\xC3\xA7\xC3\xA3o")},
+        {"tp_vcarve", "Entalhe V"}, {"tp_fluting", "Canais"}, {"tp_texture", "Textura"},
+        {"tp_keyhole", "Keyhole"}, {"tp_inlay", "Inlay"}, {"tp_dragknife", "Faca"},
+    };
+    for (int index = 0; index < static_cast<int>(operations.size()); ++index) {
+        const auto& [icon_name, label] = operations[static_cast<size_t>(index)];
+        auto* button = new QToolButton(toolpath_page);
+        button->setObjectName("ToolBtn");
+        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        button->setIcon(ui::get_icon(icon_name));
+        button->setIconSize(QSize(34, 34));
+        button->setText(label);
+        button->setMinimumSize(78, 58);
+        button->setToolTip(QString("Criar percurso de %1").arg(label));
+        const int data_index = index;
+        connect(button, &QToolButton::clicked, this, [this, data_index] {
+            if (toolpath_type_combo_) toolpath_type_combo_->setCurrentIndex(data_index);
+            add_toolpath_from_panel();
+        });
+        operations_grid->addWidget(button, index / 3, index % 3,
+                                   Qt::AlignHCenter | Qt::AlignTop);
+    }
+    layout->addLayout(operations_grid);
+
+    auto* list_sep = new QFrame(toolpath_page);
+    list_sep->setObjectName("ToolSep");
+    list_sep->setFixedHeight(1);
+    list_sep->setFrameShape(QFrame::NoFrame);
+    layout->addWidget(list_sep);
+
+    auto* list_title = new QLabel("PERCURSOS NO PROJETO", toolpath_page);
+    list_title->setObjectName("SectionHeader");
+    layout->addWidget(list_title);
+
+    auto* list_stack = new QStackedWidget(toolpath_page);
+    toolpath_list_stack_ = list_stack;
+    toolpath_list_ = new QListWidget(list_stack);
+    toolpath_list_->setObjectName("ToolpathList");
+    toolpath_list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    list_stack->addWidget(toolpath_list_);
+    toolpath_empty_label_ = new QLabel(
+        QString::fromUtf8("Nenhum percurso no projeto\n\nSelecione vetores e escolha uma opera\xC3\xA7\xC3\xA3o acima."),
+        list_stack);
+    toolpath_empty_label_->setObjectName("ToolpathEmpty");
+    toolpath_empty_label_->setAlignment(Qt::AlignCenter);
+    toolpath_empty_label_->setWordWrap(true);
+    list_stack->addWidget(toolpath_empty_label_);
+    layout->addWidget(list_stack, 1);
+
+    auto add_icon_button = [this, toolpath_page](const QString& icon_name, const QString& tip,
+                                                  const std::function<void()>& action) {
+        auto* button = new QToolButton(toolpath_page);
+        button->setObjectName("ToolBtn");
+        button->setIcon(ui::get_icon(icon_name));
+        button->setIconSize(QSize(26, 26));
+        button->setFixedSize(36, 36);
+        button->setToolTip(tip);
+        connect(button, &QToolButton::clicked, this, [action] { action(); });
+        return button;
+    };
+    auto* manage_grid = new QGridLayout();
+    manage_grid->setSpacing(6);
+    const std::vector<std::tuple<QString, QString, std::function<void()>>> manage_actions = {
+        {"tp_tools", "Base de dados de ferramentas", [this] { statusBar()->showMessage("Base de ferramentas em preparação"); }},
+        {"tp_edit", "Editar o percurso selecionado", [this] { edit_current_toolpath(); }},
+        {"tp_duplicate", "Duplicar o percurso selecionado", [this] { duplicate_current_toolpath(); }},
+        {"tp_delete", "Apagar o percurso selecionado", [this] { delete_current_toolpath(); }},
+        {"tp_recalc", "Recalcular todos os percursos", [this] { recalculate_toolpaths(); }},
+    };
+    for (int index = 0; index < static_cast<int>(manage_actions.size()); ++index) {
+        const auto& [icon, tip, action] = manage_actions[static_cast<size_t>(index)];
+        manage_grid->addWidget(add_icon_button(icon, tip, action), 0, index,
+                               Qt::AlignHCenter);
+    }
+    layout->addLayout(manage_grid);
+
+    auto* output_grid = new QGridLayout();
+    output_grid->setSpacing(6);
+    const std::vector<std::tuple<QString, QString, std::function<void()>>> output_actions = {
+        {"tp_template", "Modelos de percurso", [this] { statusBar()->showMessage("Modelos de percurso em preparação"); }},
+        {"tp_preview", "Mostrar/ocultar percursos", [this] { toggle_current_toolpath(); }},
+        {"tp_time", "Estimativa de tempo de usinagem", [this] {
+            if (!toolpath_list_ || toolpath_list_->currentRow() < 0) return;
+            const int row = toolpath_list_->currentRow();
+            if (row >= static_cast<int>(document_.toolpaths.size())) return;
+            const auto& job = document_.toolpaths[static_cast<size_t>(row)];
+            double seconds = 0.0;
+            for (const auto& path : job->results) seconds += path.estimated_seconds();
+            QMessageBox::information(this, "Tempo de usinagem",
+                                     seconds > 0.0
+                                         ? QString("%1: aproximadamente %2 min")
+                                               .arg(QString::fromStdString(job->name))
+                                               .arg(seconds / 60.0, 0, 'f', 1)
+                                         : "Recalcule o percurso para estimar o tempo.");
+        }},
+        {"tp_gcode", "Guardar G-Code", [this] { export_gcode(); }},
+        {"tp_sheet", "Folha de trabalho", [this] { export_setup_sheet(); }},
+    };
+    for (int index = 0; index < static_cast<int>(output_actions.size()); ++index) {
+        const auto& [icon, tip, action] = output_actions[static_cast<size_t>(index)];
+        output_grid->addWidget(add_icon_button(icon, tip, action), 0, index,
+                               Qt::AlignHCenter);
+    }
+    layout->addLayout(output_grid);
+
+    auto* order = new QHBoxLayout();
+    order->setSpacing(6);
+    order->addWidget(add_icon_button("tp_up", "Subir na ordem de corte", [this] {
+        move_current_toolpath(-1);
+    }));
+    order->addWidget(add_icon_button("tp_down", "Descer na ordem de corte", [this] {
+        move_current_toolpath(1);
+    }));
+    order->addStretch();
+    layout->addLayout(order);
+
+    simulate_button_ = new QPushButton(toolpath_page);
+    simulate_button_->setVisible(false);
     connect(simulate_button_, &QPushButton::clicked, this, &MainWindow::toggle_simulation);
     simulation_timer_ = new QTimer(this);
     simulation_timer_->setInterval(30);
@@ -383,6 +547,25 @@ void MainWindow::refresh_toolpaths() {
     }
     if (!document_.toolpaths.empty())
         toolpath_list_->setCurrentRow(std::clamp(old_row, 0, static_cast<int>(document_.toolpaths.size()) - 1));
+    if (toolpath_list_stack_)
+        toolpath_list_stack_->setCurrentIndex(document_.toolpaths.empty() ? 1 : 0);
+    if (toolpath_size_label_) {
+        toolpath_size_label_->setText(
+            QString::fromUtf8("%1 \xC3\x97 %2 \xC3\x97 %3 mm")
+                .arg(document_.material.width, 0, 'g', 10)
+                .arg(document_.material.height, 0, 'g', 10)
+                .arg(document_.material.thickness, 0, 'g', 10));
+    }
+    if (toolpath_origin_label_) {
+        const auto origin = document_.material.origin_xy();
+        const QString zero = document_.material.zero_z == "top" ? "topo" : "base";
+        toolpath_origin_label_->setText(
+            QString::fromUtf8("Origem X %1 \xC2\xB7 Y %2 \xC2\xB7 Z no %3\nSeguran\xC3\xA7" "a Z %4 mm")
+                .arg(origin.x, 0, 'g', 10)
+                .arg(origin.y, 0, 'g', 10)
+                .arg(zero)
+                .arg(document_.material.clearance_z, 0, 'g', 10));
+    }
 
     const auto visible = cam::calculated_toolpaths(document_.toolpaths);
     canvas_widget_->canvas->refresh_toolpaths(visible);
@@ -478,16 +661,355 @@ void MainWindow::edit_material_setup() {
     statusBar()->showMessage("Definições do material atualizadas; recalcule os percursos");
 }
 
+bool MainWindow::configure_toolpath(cam::ToolpathJob& job) {
+    QDialog dialog(this);
+    dialog.setWindowTitle(
+        QString("Percurso de %1").arg(QString::fromUtf8(cam::toolpath_label(job.kind))));
+    dialog.setMinimumSize(470, 620);
+    dialog.resize(560, 760);
+
+    auto* root = new QVBoxLayout(&dialog);
+    root->setContentsMargins(0, 0, 0, 0);
+    auto* selection = new QLabel(
+        QString("%1 vetor(es) selecionado(s)").arg(job.entity_ids.size()), &dialog);
+    selection->setStyleSheet("color: #96a9c1; padding: 12px 16px 10px;");
+    root->addWidget(selection);
+
+    auto* scroll = new QScrollArea(&dialog);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* body = new QWidget(scroll);
+    auto* body_layout = new QVBoxLayout(body);
+    body_layout->setContentsMargins(16, 0, 16, 12);
+    body_layout->setSpacing(10);
+    scroll->setWidget(body);
+    root->addWidget(scroll, 1);
+
+    std::vector<std::function<void()>> apply;
+    auto add_double = [&](QFormLayout* form, const QString& label, double value,
+                          double minimum, double maximum, const QString& suffix,
+                          const std::function<void(double)>& setter) {
+        auto* field = new QDoubleSpinBox(body);
+        field->setRange(minimum, maximum);
+        field->setDecimals(3);
+        field->setSuffix(suffix);
+        field->setValue(value);
+        form->addRow(label, field);
+        apply.push_back([field, setter] { setter(field->value()); });
+    };
+    auto add_int = [&](QFormLayout* form, const QString& label, int value,
+                       int minimum, int maximum, const std::function<void(int)>& setter) {
+        auto* field = new QSpinBox(body);
+        field->setRange(minimum, maximum);
+        field->setValue(value);
+        form->addRow(label, field);
+        apply.push_back([field, setter] { setter(field->value()); });
+    };
+    auto add_bool = [&](QFormLayout* form, const QString& label, bool value,
+                        const std::function<void(bool)>& setter) {
+        auto* field = new QCheckBox(label, body);
+        field->setChecked(value);
+        form->addRow(QString(), field);
+        apply.push_back([field, setter] { setter(field->isChecked()); });
+    };
+    auto add_enum = [&](QFormLayout* form, const QString& label, int current,
+                        const std::vector<std::pair<QString, int>>& options,
+                        const std::function<void(int)>& setter) {
+        auto* field = new QComboBox(body);
+        for (const auto& [text, value] : options)
+            field->addItem(text, value);
+        field->setCurrentIndex(std::max(0, field->findData(current)));
+        form->addRow(label, field);
+        apply.push_back([field, setter] { setter(field->currentData().toInt()); });
+    };
+    auto add_group = [&](const QString& title) {
+        auto* box = new QGroupBox(title, body);
+        auto* form = new QFormLayout(box);
+        form->setContentsMargins(12, 10, 12, 10);
+        form->setSpacing(7);
+        form->setLabelAlignment(Qt::AlignRight);
+        body_layout->addWidget(box);
+        return form;
+    };
+
+    auto* identity = add_group("Percurso");
+    auto* name = new QLineEdit(QString::fromStdString(job.name), body);
+    identity->addRow("Nome", name);
+    apply.push_back([&job, name] { job.name = name->text().toStdString(); });
+
+    auto* tool_form = add_group("Ferramenta");
+    add_enum(tool_form, "Tipo", static_cast<int>(job.tool.tool_type),
+             {{"Fresa de topo", static_cast<int>(cam::ToolType::EndMill)},
+              {"Fresa esférica", static_cast<int>(cam::ToolType::BallNose)},
+              {"Fresa V", static_cast<int>(cam::ToolType::VBit)},
+              {"Gravação", static_cast<int>(cam::ToolType::Engraving)},
+              {"Fresa raio", static_cast<int>(cam::ToolType::Radiused)},
+              {"Fresa cônica", static_cast<int>(cam::ToolType::TaperedBall)},
+              {"Broca", static_cast<int>(cam::ToolType::Drill)}},
+             [&job](int value) { job.tool.tool_type = static_cast<cam::ToolType>(value); });
+    add_double(tool_form, "Diâmetro", job.tool.diameter, 0.01, 1000.0, " mm",
+               [&job](double value) { job.tool.diameter = value; });
+    add_double(tool_form, "Passo Z", job.tool.pass_depth, 0.001, 1000.0, " mm",
+               [&job](double value) { job.tool.pass_depth = value; });
+    add_double(tool_form, "Passo lateral", job.tool.stepover, 0.001, 1000.0, " mm",
+               [&job](double value) { job.tool.stepover = value; });
+    add_double(tool_form, "Avanço XY", job.tool.feed_rate, 0.01, 100000.0, " mm/min",
+               [&job](double value) { job.tool.feed_rate = value; });
+    add_double(tool_form, "Mergulho Z", job.tool.plunge_rate, 0.01, 100000.0, " mm/min",
+               [&job](double value) { job.tool.plunge_rate = value; });
+    add_int(tool_form, "RPM", job.tool.spindle_speed, 0, 100000,
+            [&job](int value) { job.tool.spindle_speed = value; });
+    add_int(tool_form, "Número da ferramenta", job.tool.tool_number, 0, 999,
+            [&job](int value) { job.tool.tool_number = value; });
+
+    const std::vector<std::pair<QString, int>> directions = {
+        {"Convencional", static_cast<int>(cam::CutDirection::Conventional)},
+        {"Concordante", static_cast<int>(cam::CutDirection::Climb)},
+    };
+    const std::vector<std::pair<QString, int>> orders = {
+        {"Mais curto", static_cast<int>(cam::MachineOrder::Shortest)},
+        {"Ordem da seleção", static_cast<int>(cam::MachineOrder::Selection)},
+        {"Esquerda para direita", static_cast<int>(cam::MachineOrder::LeftRight)},
+        {"Baixo para cima", static_cast<int>(cam::MachineOrder::BottomTop)},
+        {"Grade", static_cast<int>(cam::MachineOrder::Grid)},
+    };
+    const std::vector<std::pair<QString, int>> ramps = {
+        {"Nenhuma", static_cast<int>(cam::RampType::None)},
+        {"Suave", static_cast<int>(cam::RampType::Smooth)},
+        {"Zigue-zague", static_cast<int>(cam::RampType::Zigzag)},
+        {"Espiral", static_cast<int>(cam::RampType::Spiral)},
+    };
+
+    std::visit([&](auto& settings) {
+        using S = std::decay_t<decltype(settings)>;
+        if constexpr (std::is_same_v<S, cam::ProfileSettings>) {
+            auto* form = add_group("Perfil");
+            add_double(form, "Profundidade inicial", settings.start_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.start_depth = v; });
+            add_double(form, "Profundidade de corte", settings.cut_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.cut_depth = v; });
+            add_enum(form, "Posição da fresa", static_cast<int>(settings.side),
+                     {{"Fora", static_cast<int>(cam::ProfileSide::Outside)},
+                      {"Dentro", static_cast<int>(cam::ProfileSide::Inside)},
+                      {"Sobre a linha", static_cast<int>(cam::ProfileSide::On)}},
+                     [&settings](int v) { settings.side = static_cast<cam::ProfileSide>(v); });
+            add_enum(form, "Vetor aberto", static_cast<int>(settings.open_side),
+                     {{"Sobre a linha", static_cast<int>(cam::OpenSide::On)},
+                      {"Esquerda", static_cast<int>(cam::OpenSide::Left)},
+                      {"Direita", static_cast<int>(cam::OpenSide::Right)}},
+                     [&settings](int v) { settings.open_side = static_cast<cam::OpenSide>(v); });
+            add_enum(form, "Direção", static_cast<int>(settings.direction), directions,
+                     [&settings](int v) { settings.direction = static_cast<cam::CutDirection>(v); });
+            add_double(form, "Sobremetal", settings.allowance, -1000, 1000, " mm",
+                       [&settings](double v) { settings.allowance = v; });
+            add_bool(form, "Manter passo Z exato", settings.maintain_exact_step,
+                     [&settings](bool v) { settings.maintain_exact_step = v; });
+            add_bool(form, "Separar passada final", settings.separate_last_pass,
+                     [&settings](bool v) { settings.separate_last_pass = v; });
+            add_double(form, "Sobremetal da passada final", settings.last_pass_allowance, 0, 1000, " mm",
+                       [&settings](double v) { settings.last_pass_allowance = v; });
+            add_enum(form, "Rampa", static_cast<int>(settings.ramp), ramps,
+                     [&settings](int v) { settings.ramp = static_cast<cam::RampType>(v); });
+            add_double(form, "Distância da rampa", settings.ramp_distance, 0, 10000, " mm",
+                       [&settings](double v) { settings.ramp_distance = v; });
+            add_bool(form, "Pontes de fixação", settings.tabs,
+                     [&settings](bool v) { settings.tabs = v; });
+            add_double(form, "Comprimento da ponte", settings.tab_length, 0, 1000, " mm",
+                       [&settings](double v) { settings.tab_length = v; });
+            add_double(form, "Espessura da ponte", settings.tab_thickness, 0, 1000, " mm",
+                       [&settings](double v) { settings.tab_thickness = v; });
+            add_int(form, "Quantidade de pontes", settings.tab_count, 0, 1000,
+                    [&settings](int v) { settings.tab_count = v; });
+            add_enum(form, "Ordenar por", static_cast<int>(settings.order), orders,
+                     [&settings](int v) { settings.order = static_cast<cam::MachineOrder>(v); });
+            add_bool(form, "Separar interiores", settings.separate_interior,
+                     [&settings](bool v) { settings.separate_interior = v; });
+        } else if constexpr (std::is_same_v<S, cam::PocketSettings>) {
+            auto* form = add_group("Bolso");
+            add_double(form, "Profundidade inicial", settings.start_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.start_depth = v; });
+            add_double(form, "Profundidade de corte", settings.cut_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.cut_depth = v; });
+            add_enum(form, "Preenchimento", static_cast<int>(settings.fill),
+                     {{"Offset", static_cast<int>(cam::FillType::Offset)},
+                      {"Raster", static_cast<int>(cam::FillType::Raster)}},
+                     [&settings](int v) { settings.fill = static_cast<cam::FillType>(v); });
+            add_double(form, "Ângulo do raster", settings.raster_angle, -360, 360, " °",
+                       [&settings](double v) { settings.raster_angle = v; });
+            add_enum(form, "Direção", static_cast<int>(settings.direction), directions,
+                     [&settings](int v) { settings.direction = static_cast<cam::CutDirection>(v); });
+            add_double(form, "Passo lateral", settings.stepover, 0, 1000, " mm",
+                       [&settings](double v) { settings.stepover = v; });
+            add_enum(form, "Passada de perfil", static_cast<int>(settings.profile_pass),
+                     {{"Primeira", static_cast<int>(cam::ProfilePass::First)},
+                      {"Última", static_cast<int>(cam::ProfilePass::Last)},
+                      {"Nenhuma", static_cast<int>(cam::ProfilePass::None)}},
+                     [&settings](int v) { settings.profile_pass = static_cast<cam::ProfilePass>(v); });
+            add_double(form, "Sobremetal", settings.allowance, -1000, 1000, " mm",
+                       [&settings](double v) { settings.allowance = v; });
+            add_enum(form, "Rampa", static_cast<int>(settings.ramp), ramps,
+                     [&settings](int v) { settings.ramp = static_cast<cam::RampType>(v); });
+            add_double(form, "Distância da rampa", settings.ramp_distance, 0, 10000, " mm",
+                       [&settings](double v) { settings.ramp_distance = v; });
+            add_bool(form, "Manter passo Z exato", settings.maintain_exact_step,
+                     [&settings](bool v) { settings.maintain_exact_step = v; });
+            add_enum(form, "Ordenar por", static_cast<int>(settings.order), orders,
+                     [&settings](int v) { settings.order = static_cast<cam::MachineOrder>(v); });
+        } else if constexpr (std::is_same_v<S, cam::DrillSettings>) {
+            auto* form = add_group("Furação");
+            add_double(form, "Profundidade inicial", settings.start_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.start_depth = v; });
+            add_double(form, "Profundidade de corte", settings.cut_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.cut_depth = v; });
+            add_bool(form, "Furação peck", settings.peck,
+                     [&settings](bool v) { settings.peck = v; });
+            add_double(form, "Recuo entre passadas", settings.retract_gap, 0, 1000, " mm",
+                       [&settings](double v) { settings.retract_gap = v; });
+            add_enum(form, "Modo de recuo", static_cast<int>(settings.retract_mode),
+                     {{"Acima do início", static_cast<int>(cam::RetractMode::AboveStart)},
+                      {"Acima da passada anterior", static_cast<int>(cam::RetractMode::AbovePrevious)}},
+                     [&settings](int v) { settings.retract_mode = static_cast<cam::RetractMode>(v); });
+            add_bool(form, "Pausa no fundo", settings.dwell,
+                     [&settings](bool v) { settings.dwell = v; });
+            add_double(form, "Tempo da pausa", settings.dwell_time, 0, 1000, " s",
+                       [&settings](double v) { settings.dwell_time = v; });
+            add_bool(form, "Helicoidal para furos maiores", settings.helical,
+                     [&settings](bool v) { settings.helical = v; });
+            add_enum(form, "Direção helicoidal", static_cast<int>(settings.helical_direction), directions,
+                     [&settings](int v) { settings.helical_direction = static_cast<cam::CutDirection>(v); });
+            add_enum(form, "Ordenar por", static_cast<int>(settings.order), orders,
+                     [&settings](int v) { settings.order = static_cast<cam::MachineOrder>(v); });
+        } else if constexpr (std::is_same_v<S, cam::VCarveSettings>) {
+            auto* form = add_group("Entalhe V");
+            add_enum(form, "Modo", static_cast<int>(settings.mode),
+                     {{"Automático", static_cast<int>(cam::VCarveMode::Automatic)},
+                      {"Manual", static_cast<int>(cam::VCarveMode::Manual)}},
+                     [&settings](int v) { settings.mode = static_cast<cam::VCarveMode>(v); });
+            add_enum(form, "Material", static_cast<int>(settings.material_profile),
+                     {{"MDF", static_cast<int>(cam::VCarveMaterial::Mdf)},
+                      {"MDP", static_cast<int>(cam::VCarveMaterial::Mdp)},
+                      {"Compensado", static_cast<int>(cam::VCarveMaterial::Plywood)},
+                      {"PVC expandido", static_cast<int>(cam::VCarveMaterial::ExpandedPvc)},
+                      {"Acrílico", static_cast<int>(cam::VCarveMaterial::Acrylic)},
+                      {"Outro", static_cast<int>(cam::VCarveMaterial::Other)}},
+                     [&settings](int v) { settings.material_profile = static_cast<cam::VCarveMaterial>(v); });
+            add_double(form, "Profundidade inicial", settings.start_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.start_depth = v; });
+            add_double(form, "Profundidade plana", settings.flat_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.flat_depth = v; });
+            add_double(form, "Profundidade máxima", settings.max_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.max_depth = v; });
+            add_enum(form, "Preenchimento", static_cast<int>(settings.clearance_fill),
+                     {{"Offset", static_cast<int>(cam::FillType::Offset)},
+                      {"Raster", static_cast<int>(cam::FillType::Raster)}},
+                     [&settings](int v) { settings.clearance_fill = static_cast<cam::FillType>(v); });
+            add_double(form, "Passo de desbaste", settings.clearance_stepover, 0, 1000, " mm",
+                       [&settings](double v) { settings.clearance_stepover = v; });
+            add_double(form, "Passo de acabamento", settings.finish_stepover, 0, 1000, " mm",
+                       [&settings](double v) { settings.finish_stepover = v; });
+            add_double(form, "Sobremetal de desbaste", settings.clearance_allowance, -1000, 1000, " mm",
+                       [&settings](double v) { settings.clearance_allowance = v; });
+            add_bool(form, "Ignorar regiões planas", settings.skip_flat_regions,
+                     [&settings](bool v) { settings.skip_flat_regions = v; });
+            add_enum(form, "Direção", static_cast<int>(settings.direction), directions,
+                     [&settings](int v) { settings.direction = static_cast<cam::CutDirection>(v); });
+            add_enum(form, "Rampa", static_cast<int>(settings.ramp), ramps,
+                     [&settings](int v) { settings.ramp = static_cast<cam::RampType>(v); });
+            add_double(form, "Distância da rampa", settings.ramp_distance, 0, 10000, " mm",
+                       [&settings](double v) { settings.ramp_distance = v; });
+            add_enum(form, "Ordenar por", static_cast<int>(settings.order), orders,
+                     [&settings](int v) { settings.order = static_cast<cam::MachineOrder>(v); });
+        } else if constexpr (std::is_same_v<S, cam::FlutingSettings>) {
+            auto* form = add_group("Canais");
+            add_double(form, "Profundidade inicial", settings.start_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.start_depth = v; });
+            add_double(form, "Profundidade do canal", settings.cut_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.cut_depth = v; });
+            add_double(form, "Profundidade final", settings.end_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.end_depth = v; });
+            add_double(form, "Rampa de entrada", settings.ramp_in, 0, 10000, " mm",
+                       [&settings](double v) { settings.ramp_in = v; });
+            add_double(form, "Rampa de saída", settings.ramp_out, 0, 10000, " mm",
+                       [&settings](double v) { settings.ramp_out = v; });
+        } else if constexpr (std::is_same_v<S, cam::TextureSettings>) {
+            auto* form = add_group("Textura");
+            add_double(form, "Raio da ferramenta", settings.tool_radius, 0.01, 1000, " mm",
+                       [&settings](double v) { settings.tool_radius = v; });
+            add_double(form, "Comprimento", settings.length, 0.01, 10000, " mm",
+                       [&settings](double v) { settings.length = v; });
+            add_double(form, "Variação do comprimento", settings.length_var, 0, 100, " %",
+                       [&settings](double v) { settings.length_var = v; });
+            add_double(form, "Profundidade", settings.depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.depth = v; });
+            add_double(form, "Variação da profundidade", settings.depth_var, 0, 100, " %",
+                       [&settings](double v) { settings.depth_var = v; });
+            add_double(form, "Espaçamento", settings.stepover, 0.01, 10000, " mm",
+                       [&settings](double v) { settings.stepover = v; });
+            add_double(form, "Variação do espaçamento", settings.stepover_var, 0, 100, " %",
+                       [&settings](double v) { settings.stepover_var = v; });
+            add_double(form, "Sobreposição", settings.overlap, 0, 100, " %",
+                       [&settings](double v) { settings.overlap = v; });
+            add_double(form, "Variação da sobreposição", settings.overlap_var, 0, 100, " %",
+                       [&settings](double v) { settings.overlap_var = v; });
+            add_double(form, "Ângulo", settings.angle, -360, 360, " °",
+                       [&settings](double v) { settings.angle = v; });
+            add_double(form, "Variação do ângulo", settings.angle_var, 0, 360, " °",
+                       [&settings](double v) { settings.angle_var = v; });
+            add_int(form, "Semente aleatória", static_cast<int>(settings.seed), 0, 2147483647,
+                    [&settings](int v) { settings.seed = v; });
+        } else if constexpr (std::is_same_v<S, cam::KeyholeSettings>) {
+            auto* form = add_group("Keyhole");
+            add_double(form, "Profundidade de entrada", settings.plunge_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.plunge_depth = v; });
+            add_double(form, "Profundidade do rasgo", settings.slot_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.slot_depth = v; });
+        } else if constexpr (std::is_same_v<S, cam::InlaySettings>) {
+            auto* form = add_group("Inlay");
+            add_double(form, "Profundidade do bolso", settings.pocket_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.pocket_depth = v; });
+            add_double(form, "Profundidade do plug", settings.plug_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.plug_depth = v; });
+            add_double(form, "Sobra para cola", settings.glue_allowance, -1000, 1000, " mm",
+                       [&settings](double v) { settings.glue_allowance = v; });
+            add_double(form, "Profundidade inicial", settings.start_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.start_depth = v; });
+        } else if constexpr (std::is_same_v<S, cam::DragknifeSettings>) {
+            auto* form = add_group("Faca de arraste");
+            add_double(form, "Offset da lâmina", settings.blade_offset, 0, 1000, " mm",
+                       [&settings](double v) { settings.blade_offset = v; });
+            add_double(form, "Ângulo de tolerância", settings.tolerance_angle, 0, 180, " °",
+                       [&settings](double v) { settings.tolerance_angle = v; });
+            add_double(form, "Profundidade de giro", settings.swivel_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.swivel_depth = v; });
+            add_double(form, "Profundidade de corte", settings.cut_depth, 0, 1000, " mm",
+                       [&settings](double v) { settings.cut_depth = v; });
+            add_int(form, "Passadas", settings.passes, 1, 100,
+                    [&settings](int v) { settings.passes = v; });
+        }
+    }, job.settings);
+    body_layout->addStretch();
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Save)->setText("Salvar percurso");
+    buttons->button(QDialogButtonBox::Save)->setEnabled(!job.entity_ids.empty());
+    root->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted) return false;
+
+    for (const auto& change : apply) change();
+    cam::set_settings_name(job.settings, job.name);
+    job.results.clear();
+    job.error.clear();
+    return true;
+}
+
 void MainWindow::add_toolpath_from_panel() {
     if (!toolpath_type_combo_) return;
     const auto selected = document_.selected_entities();
     std::vector<std::string> ids;
-    const auto& source = selected.empty() ? document_.entities : selected;
-    for (const auto& entity : source) ids.push_back(entity->id);
-    if (ids.empty()) {
-        statusBar()->showMessage("Desenhe ou selecione vetores antes de criar o percurso");
-        return;
-    }
+    for (const auto& entity : selected) ids.push_back(entity->id);
 
     const auto kind = static_cast<cam::ToolpathType>(toolpath_type_combo_->currentData().toInt());
     auto job = std::make_shared<cam::ToolpathJob>();
@@ -507,6 +1029,7 @@ void MainWindow::add_toolpath_from_panel() {
             }
         }
     }
+    if (!configure_toolpath(*job)) return;
     document_.add_toolpath(job);
     const auto errors = document_.recalculate_toolpaths(job);
     refresh_toolpaths();
@@ -519,6 +1042,15 @@ void MainWindow::edit_current_toolpath() {
     const int row = toolpath_list_->currentRow();
     if (row < 0 || row >= static_cast<int>(document_.toolpaths.size())) return;
     auto& job = document_.toolpaths[static_cast<size_t>(row)];
+    cam::ToolpathJob draft = *job;
+    if (!configure_toolpath(draft)) return;
+    *job = std::move(draft);
+    document_.modified = true;
+    const auto draft_errors = document_.recalculate_toolpaths(job);
+    refresh_toolpaths();
+    if (draft_errors.empty()) statusBar()->showMessage("Percurso atualizado");
+    else statusBar()->showMessage(QString::fromStdString(draft_errors.front()));
+    return;
 
     QDialog dialog(this);
     dialog.setWindowTitle(QString("Editar percurso — %1").arg(QString::fromStdString(job->name)));
@@ -583,6 +1115,24 @@ void MainWindow::edit_current_toolpath() {
     else statusBar()->showMessage(QString::fromStdString(errors.front()));
 }
 
+void MainWindow::duplicate_current_toolpath() {
+    if (!toolpath_list_) return;
+    const int row = toolpath_list_->currentRow();
+    if (row < 0 || row >= static_cast<int>(document_.toolpaths.size())) return;
+    const auto& source = document_.toolpaths[static_cast<size_t>(row)];
+    auto clone = std::make_shared<cam::ToolpathJob>(*source);
+    clone->id = new_id();
+    clone->name = document_.unique_toolpath_name(source->name);
+    clone->results.clear();
+    clone->error.clear();
+    document_.add_toolpath(clone);
+    const auto errors = document_.recalculate_toolpaths(clone);
+    refresh_toolpaths();
+    toolpath_list_->setCurrentRow(toolpath_list_->count() - 1);
+    if (errors.empty()) statusBar()->showMessage("Percurso duplicado");
+    else statusBar()->showMessage(QString::fromStdString(errors.front()));
+}
+
 void MainWindow::delete_current_toolpath() {
     if (!toolpath_list_) return;
     const int row = toolpath_list_->currentRow();
@@ -599,6 +1149,16 @@ void MainWindow::toggle_current_toolpath() {
     auto& job = document_.toolpaths[static_cast<size_t>(row)];
     job->set_visible(!job->visible);
     refresh_toolpaths();
+}
+
+void MainWindow::move_current_toolpath(int delta) {
+    if (!toolpath_list_) return;
+    const int row = toolpath_list_->currentRow();
+    if (row < 0 || row >= static_cast<int>(document_.toolpaths.size())) return;
+    const auto job = document_.toolpaths[static_cast<size_t>(row)];
+    document_.move_toolpath(job, delta);
+    refresh_toolpaths();
+    toolpath_list_->setCurrentRow(std::clamp(row + delta, 0, toolpath_list_->count() - 1));
 }
 
 void MainWindow::recalculate_toolpaths() {
@@ -869,9 +1429,22 @@ void MainWindow::create_tool_panel() {
             grid->addWidget(tile, static_cast<int>(i / columns), static_cast<int>(i % columns),
                             Qt::AlignHCenter | Qt::AlignTop);
             connect(button, &QToolButton::clicked, this, [this, name] {
-                if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
+                if (name == "import") {
+                    const QStringList paths = QFileDialog::getOpenFileNames(
+                        this, "Importar vetores", {}, QString::fromUtf8(io::kImportFilter));
+                    if (!paths.isEmpty()) import_files(paths);
+                }
+                else if (name == "export") export_svg();
+                else if (name == "preview_3d") view_tabs_->setCurrentIndex(1);
+                else if (name == "grid") canvas_widget_->canvas->set_grid_visible(!canvas_widget_->canvas->show_grid);
+                else if (name == "workspace_setup") edit_material_setup();
+                else if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
                 else if (name == "zoom_in") canvas_widget_->canvas->zoom_by(1.25);
                 else if (name == "zoom_out") canvas_widget_->canvas->zoom_by(0.8);
+                else if (name == "pan") {
+                    canvas_widget_->canvas->setCursor(Qt::OpenHandCursor);
+                    statusBar()->showMessage("Arraste com o botão do meio do mouse para mover a vista");
+                }
                 else if (name != "pan") activate_tool(name);
             });
         }
@@ -919,6 +1492,20 @@ void MainWindow::create_tool_panel() {
     layer_visible->setToolTip("Esconder a camada atual");
     layer_visible_ = layer_visible;
     layer_layout->addWidget(layer_visible);
+    auto* new_layer = new QToolButton(layer_bar);
+    new_layer->setObjectName("LayerToggle");
+    new_layer->setText("+");
+    new_layer->setToolTip("Criar nova camada");
+    new_layer->setCursor(Qt::PointingHandCursor);
+    new_layer->setFixedSize(24, 24);
+    layer_layout->addWidget(new_layer);
+    auto* remove_layer = new QToolButton(layer_bar);
+    remove_layer->setObjectName("LayerToggle");
+    remove_layer->setText("−");
+    remove_layer->setToolTip("Excluir camada atual");
+    remove_layer->setCursor(Qt::PointingHandCursor);
+    remove_layer->setFixedSize(24, 24);
+    layer_layout->addWidget(remove_layer);
     layer_row->addWidget(layer_bar, 1);
     layout->addLayout(layer_row);
     add_separator();
@@ -938,7 +1525,7 @@ void MainWindow::create_tool_panel() {
         {"node_edit", "Nos"}, {"fillet", "Filete"},
         {"interactive_trim", "Aparar interativo"}, {"extend", ""}, {"fit_curves", "Ajustar curvas"},
         {"weld", "Soldar"}, {"subtract", ""}, {"intersect", ""},
-        {"group", "Agrupar"}, {"ungroup", ""}, {"offset", "Offset"}, {"boundary", ""},
+        {"join", "Unir"}, {"group", "Agrupar"}, {"ungroup", ""}, {"offset", "Offset"}, {"boundary", ""},
         {"convert_text", "Texto"}}, 7);
     add_separator();
     add_section("ALINHAR E POSICIONAR", {
@@ -975,6 +1562,8 @@ void MainWindow::create_tool_panel() {
             canvas_widget_->canvas->refresh_entities();
         }
     });
+    connect(new_layer, &QToolButton::clicked, this, &MainWindow::add_layer_from_panel);
+    connect(remove_layer, &QToolButton::clicked, this, &MainWindow::remove_current_layer);
     connect(canvas_widget_->canvas, &vp::Canvas2D::shortcut_requested, this,
             [this](const QString& name) {
                 if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
@@ -1131,6 +1720,7 @@ void MainWindow::add_layer_from_panel() {
     document_.add_layer(name);
     tool_context_.current_layer = name;
     refresh_layers();
+    canvas_widget_->canvas->refresh_entities();
     statusBar()->showMessage(QString("Camada criada: %1").arg(QString::fromStdString(name)));
 }
 
@@ -1155,8 +1745,16 @@ void MainWindow::activate_tool(const QString& name) {
     else if (name == "rectangle") active_tool_ = std::make_unique<tools::RectangleTool>(tool_context_);
     else if (name == "circle") active_tool_ = std::make_unique<tools::CircleTool>(tool_context_);
     else if (name == "ellipse") active_tool_ = std::make_unique<tools::EllipseTool>(tool_context_);
+    else if (name == "polygon") active_tool_ = std::make_unique<tools::PolygonTool>(tool_context_);
+    else if (name == "star") active_tool_ = std::make_unique<tools::StarTool>(tool_context_);
+    else if (name == "construction_line") active_tool_ = std::make_unique<tools::ConstructionLineTool>(tool_context_);
     else if (name == "arc") active_tool_ = std::make_unique<tools::ArcTool>(tool_context_);
+    else if (name == "freehand") active_tool_ = std::make_unique<tools::FreehandTool>(tool_context_);
     else if (name == "drill_point") active_tool_ = std::make_unique<tools::DrillPointTool>(tool_context_);
+    else if (name == "text") active_tool_ = std::make_unique<tools::TextTool>(tool_context_);
+    else if (name == "text_on_curve") active_tool_ = std::make_unique<tools::TextOnCurveTool>(tool_context_);
+    else if (name == "vector_texture") active_tool_ = std::make_unique<tools::VectorTextureTool>(tool_context_);
+    else if (name == "trace_bitmap") active_tool_ = std::make_unique<tools::TraceBitmapTool>(tool_context_);
     else if (name == "node_edit") active_tool_ = std::make_unique<tools::NodeEditTool>(tool_context_);
     else if (name == "measure") active_tool_ = std::make_unique<tools::MeasureTool>(tool_context_);
     else if (name == "dimension") active_tool_ = std::make_unique<tools::DimensionTool>(tool_context_);
@@ -1167,11 +1765,85 @@ void MainWindow::activate_tool(const QString& name) {
     else if (name == "weld") active_tool_ = std::make_unique<tools::WeldTool>(tool_context_);
     else if (name == "subtract") active_tool_ = std::make_unique<tools::SubtractTool>(tool_context_);
     else if (name == "intersect") active_tool_ = std::make_unique<tools::IntersectTool>(tool_context_);
+    else if (name == "join") active_tool_ = std::make_unique<tools::JoinTool>(tool_context_);
+    else if (name == "fillet") active_tool_ = std::make_unique<tools::FilletTool>(tool_context_);
+    else if (name == "interactive_trim") active_tool_ = std::make_unique<tools::InteractiveTrimTool>(tool_context_);
+    else if (name == "extend") active_tool_ = std::make_unique<tools::ExtendTool>(tool_context_);
+    else if (name == "offset") active_tool_ = std::make_unique<tools::OffsetTool>(tool_context_);
+    else if (name == "boundary") active_tool_ = std::make_unique<tools::BoundaryTool>(tool_context_);
+    else if (name == "fit_curves") active_tool_ = std::make_unique<tools::FitCurvesTool>(tool_context_);
     else if (name == "move") active_tool_ = std::make_unique<tools::MoveTool>(tool_context_);
     else if (name == "rotate") active_tool_ = std::make_unique<tools::RotateTool>(tool_context_);
     else if (name == "scale") active_tool_ = std::make_unique<tools::ScaleTool>(tool_context_);
     else if (name == "mirror") active_tool_ = std::make_unique<tools::MirrorTool>(tool_context_);
+    else if (name == "distort") active_tool_ = std::make_unique<tools::DistortTool>(tool_context_);
+    else if (name == "array_copy") active_tool_ = std::make_unique<tools::ArrayCopyTool>(tool_context_);
+    else if (name == "circular_copy") active_tool_ = std::make_unique<tools::CircularCopyTool>(tool_context_);
+    else if (name.startsWith("align_"))
+        active_tool_ = std::make_unique<tools::AlignTool>(tool_context_, name.mid(6).toStdString());
     else active_tool_ = std::make_unique<tools::SelectTool>(tool_context_);
+
+    // Operações sem interação de canvas usam os valores padrão enquanto o painel de propriedades
+    // específico ainda não existe no C++. Assim o botão executa a ferramenta, em vez de apenas
+    // mostrar uma dica sem produzir efeito.
+    if (name == "vector_texture") {
+        static_cast<tools::VectorTextureTool*>(active_tool_.get())->run();
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
+    if (name == "offset") {
+        static_cast<tools::OffsetTool*>(active_tool_.get())->apply_form();
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
+    if (name == "boundary") {
+        static_cast<tools::BoundaryTool*>(active_tool_.get())->run();
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
+    if (name == "fit_curves") {
+        static_cast<tools::FitCurvesTool*>(active_tool_.get())->run();
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
+    if (name == "array_copy") {
+        static_cast<tools::ArrayCopyTool*>(active_tool_.get())->apply_form();
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
+    if (name == "circular_copy") {
+        static_cast<tools::CircularCopyTool*>(active_tool_.get())->apply_form();
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
+    if (name == "layout_optimizer") {
+        const auto selected = tool_context_.selection();
+        if (selected.empty()) {
+            statusBar()->showMessage("Selecione os objetos para organizar");
+        } else {
+            const auto [moves, result] = cad::plan_layout(selected, document_.material);
+            std::map<std::string, std::pair<double, double>> shifts;
+            for (const auto& [entity, dx, dy] : moves) shifts[entity->id] = {dx, dy};
+            if (!shifts.empty()) {
+                tool_context_.transform(selected, [shifts](cad::Entity& entity) {
+                    const auto it = shifts.find(entity.id);
+                    if (it != shifts.end()) entity.translate(it->second.first, it->second.second);
+                }, "Organizar objetos");
+            }
+            statusBar()->showMessage(QString("Organização concluída: %1 movido(s), %2 fora da chapa")
+                                         .arg(result.movidos)
+                                         .arg(result.nao_couberam));
+        }
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
 
     if (active_tool_->instant()) {
         active_tool_->run();

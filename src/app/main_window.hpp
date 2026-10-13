@@ -52,9 +52,12 @@ private:
     void remove_current_layer();
     void refresh_toolpaths();
     void add_toolpath_from_panel();
+    bool configure_toolpath(cam::ToolpathJob& job);
     void edit_current_toolpath();
+    void duplicate_current_toolpath();
     void delete_current_toolpath();
     void toggle_current_toolpath();
+    void move_current_toolpath(int delta);
     void recalculate_toolpaths();
     void toggle_simulation();
     void update_simulation();
@@ -80,6 +83,10 @@ private:
     QAbstractButton* layer_locked_ = nullptr;
     QComboBox* toolpath_type_combo_ = nullptr;
     QListWidget* toolpath_list_ = nullptr;
+    QStackedWidget* toolpath_list_stack_ = nullptr;
+    QLabel* toolpath_size_label_ = nullptr;
+    QLabel* toolpath_origin_label_ = nullptr;
+    QLabel* toolpath_empty_label_ = nullptr;
     QPushButton* simulate_button_ = nullptr;
     QTimer* simulation_timer_ = nullptr;
     std::unique_ptr<sim::ToolpathSimulation> simulation_;

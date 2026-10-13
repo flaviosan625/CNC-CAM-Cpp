@@ -22,6 +22,10 @@ NAMES = [
     "align_center_h", "align_right", "align_top", "align_center_v", "align_bottom",
     "layout_optimizer", "zoom_fit", "zoom_in", "zoom_out", "pan", "layers", "lock",
     "lock_open", "eye", "eye_closed",
+    "tp_profile", "tp_pocket", "tp_drill", "tp_vcarve", "tp_fluting",
+    "tp_texture", "tp_keyhole", "tp_inlay", "tp_dragknife", "tp_tools",
+    "tp_edit", "tp_duplicate", "tp_delete", "tp_recalc", "tp_template",
+    "tp_preview", "tp_time", "tp_gcode", "tp_sheet", "tp_up", "tp_down",
 ]
 
 

@@ -35,4 +35,23 @@ if(CNC_BUILD_APP)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CNC_MUPDF_DLL}" "$<TARGET_FILE_DIR:cnccam>")
     endif()
+    if(WIN32)
+        # Make the generated executable launchable by double-clicking it in
+        # Explorer, just like the Python distribution.  The build environment
+        # puts Qt on PATH for scripts/run.bat, but Explorer does not inherit
+        # that setup, so deploy Qt DLLs and plugins beside CNC-CAM.exe.
+        find_program(CNC_WINDEPLOYQT
+            NAMES windeployqt.exe windeployqt6.exe
+            HINTS "${CMAKE_PREFIX_PATH}" "${Qt6_DIR}/../../../bin"
+            PATH_SUFFIXES bin)
+        if(CNC_WINDEPLOYQT)
+            add_custom_command(TARGET cnccam POST_BUILD
+                COMMAND "${CNC_WINDEPLOYQT}"
+                    --release --no-translations --no-system-d3d-compiler
+                    "$<TARGET_FILE:cnccam>"
+                COMMENT "Deploying Qt runtime beside CNC-CAM.exe")
+        else()
+            message(WARNING "windeployqt nao encontrado; CNC-CAM.exe exigira Qt no PATH")
+        endif()
+    endif()
 endif()
