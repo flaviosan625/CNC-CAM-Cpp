@@ -140,9 +140,12 @@ void Canvas2D::refresh_selection_handles() {
     });
     if (!bbox || tool_name != "select" || all_drill) {
         handles.clear();
+        emit selection_changed();
         return;
     }
     handles.show(*bbox);
+    // Also notify previews after edits, undo and programmatic selection changes.
+    emit selection_changed();
 }
 
 // Rotulo com o angulo atual, flutuando perto do cursor. Em pixels locais, com

@@ -10,6 +10,19 @@
 
 #include "viewport/camera.hpp"
 
+#if defined(CNC_HAVE_VTK)
+#include <vtkSmartPointer.h>
+#endif
+
+#if defined(CNC_HAVE_VTK)
+class vtkActor;
+class vtkCallbackCommand;
+class vtkGenericOpenGLRenderWindow;
+class vtkPolyData;
+class vtkPolyDataNormals;
+class vtkRenderer;
+#endif
+
 namespace cnc::vp {
 
 class Viewport3D : public QOpenGLWidget {
@@ -54,6 +67,11 @@ private:
     void upload_buffer(unsigned int vbo, const std::vector<float>& data, unsigned int usage);
     void set_dynamic_lines(const std::vector<float>& vertices, LineBuffer& buffer);
 
+#if defined(CNC_HAVE_VTK)
+    void sync_vtk_camera();
+    void update_vtk_axes();
+#endif
+
     unsigned int shader_program_ = 0;
     int mvp_location_ = -1;
     int alpha_location_ = -1;
@@ -73,6 +91,22 @@ private:
     QPoint last_mouse_pos_;
     Qt::MouseButton mouse_button_ = Qt::NoButton;
     QOpenGLExtraFunctions* gl_ = nullptr;
+
+#if defined(CNC_HAVE_VTK)
+    vtkSmartPointer<vtkCallbackCommand> vtk_render_callback_;
+    vtkSmartPointer<vtkGenericOpenGLRenderWindow> vtk_render_window_;
+    vtkSmartPointer<vtkRenderer> vtk_renderer_;
+    vtkSmartPointer<vtkActor> vtk_axes_actor_;
+    vtkSmartPointer<vtkActor> vtk_origin_actor_;
+    vtkSmartPointer<vtkActor> vtk_simulation_mesh_actor_;
+    vtkSmartPointer<vtkPolyData> vtk_simulation_mesh_data_;
+    vtkSmartPointer<vtkPolyDataNormals> vtk_simulation_normals_;
+    vtkSmartPointer<vtkActor> vtk_simulation_path_actor_;
+    std::vector<vtkSmartPointer<vtkActor>> vtk_simulation_tool_actors_;
+    double vtk_simulation_tool_diameter_ = 0.0;
+    std::vector<vtkSmartPointer<vtkActor>> vtk_entity_actors_;
+    QVector3D vtk_origin_;
+#endif
 };
 
 }  // namespace cnc::vp

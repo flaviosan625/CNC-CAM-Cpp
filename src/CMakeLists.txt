@@ -4,7 +4,7 @@ file(GLOB_RECURSE CNC_CORE_SOURCES CONFIGURE_DEPENDS
 add_library(cnc_core STATIC ${CNC_CORE_SOURCES})
 target_include_directories(cnc_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(cnc_core PUBLIC GEOS_USE_ONLY_R_API)
-target_link_libraries(cnc_core PUBLIC Qt6::Core Qt6::Gui cnc_json cnc_clipper GEOS::geos_c)
+target_link_libraries(cnc_core PUBLIC Qt6::Core Qt6::Gui Qt6::PrintSupport cnc_json cnc_clipper GEOS::geos_c)
 if(CNC_HAVE_MUPDF)
     target_compile_definitions(cnc_core PUBLIC CNC_HAVE_MUPDF=1)
     target_include_directories(cnc_core PRIVATE "${CNC_MUPDF_ROOT}/include")
@@ -19,6 +19,11 @@ list(FILTER CNC_GUI_SOURCES EXCLUDE REGEX "app/main\.cpp$")
 add_library(cnc_gui STATIC ${CNC_GUI_SOURCES})
 target_link_libraries(cnc_gui PUBLIC cnc_core Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets
                       Qt6::PrintSupport Qt6::Svg)
+if(CNC_HAVE_VTK)
+    target_compile_definitions(cnc_gui PUBLIC CNC_HAVE_VTK=1)
+    target_link_libraries(cnc_gui PUBLIC ${VTK_LIBRARIES})
+    vtk_module_autoinit(TARGETS cnc_gui MODULES ${VTK_LIBRARIES})
+endif()
 
 # Os icones, figuras e o logo (copiados do app em Python) vao DENTRO do executavel: ":/assets/...".
 file(GLOB_RECURSE CNC_ASSET_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/assets/*")
@@ -52,6 +57,13 @@ if(CNC_BUILD_APP)
                 COMMENT "Deploying Qt runtime beside CNC-CAM.exe")
         else()
             message(WARNING "windeployqt nao encontrado; CNC-CAM.exe exigira Qt no PATH")
+        endif()
+        if(CNC_HAVE_VTK)
+            add_custom_command(TARGET cnccam POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy -t "$<TARGET_FILE_DIR:cnccam>"
+                    $<TARGET_RUNTIME_DLLS:cnccam>
+                COMMAND_EXPAND_LISTS
+                COMMENT "Deploying VTK runtime beside CNC-CAM.exe")
         endif()
     endif()
 endif()

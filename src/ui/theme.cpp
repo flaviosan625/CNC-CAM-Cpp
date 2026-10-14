@@ -181,6 +181,14 @@ QMenu::item:disabled { color: #62758f; }
 }
 #SimulatePathBtn:hover { background-color: #2d6651; border-color: #64ba94; }
 #SimulatePathBtn:pressed { background-color: #22503f; }
+#SimulationProgress {
+    min-height: 18px; max-height: 18px;
+    background-color: #141e2b; border: 1px solid #344760; border-radius: 5px;
+    text-align: center; color: #dfffee;
+}
+#SimulationProgress::chunk {
+    background-color: #2d8b68; border-radius: 4px;
+}
 #AnchorDot::indicator { width: 14px; height: 14px; }
 
 QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {

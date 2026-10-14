@@ -123,6 +123,7 @@ void ToolpathSimulation::finish_segment(const Segment& segment) {
 
 std::vector<float> ToolpathSimulation::path_vertices() const {
     std::vector<float> vertices(draw_segment_indices_.size() * 4 * 6, 0.0f);
+    constexpr double path_lift = 0.06;  // evita cintilacao quando o percurso coincide com a face da madeira
     constexpr std::array<float, 3> done{0.20f, 0.88f, 0.52f};
     constexpr std::array<float, 3> active{1.0f, 0.58f, 0.16f};
     constexpr std::array<float, 3> future{0.31f, 0.76f, 0.97f};
@@ -131,13 +132,13 @@ std::vector<float> ToolpathSimulation::path_vertices() const {
         const size_t base = (line * 4 + static_cast<size_t>(vertex)) * 6;
         vertices[base] = static_cast<float>(move.x);
         vertices[base + 1] = static_cast<float>(move.y);
-        vertices[base + 2] = static_cast<float>(move.z);
+        vertices[base + 2] = static_cast<float>(move.z + path_lift);
     };
     const auto set_point = [&vertices](size_t line, int vertex, const std::array<double, 3>& point) {
         const size_t base = (line * 4 + static_cast<size_t>(vertex)) * 6;
         vertices[base] = static_cast<float>(point[0]);
         vertices[base + 1] = static_cast<float>(point[1]);
-        vertices[base + 2] = static_cast<float>(point[2]);
+        vertices[base + 2] = static_cast<float>(point[2] + path_lift);
     };
     const auto set_color = [&vertices](size_t line, int first_vertex, int count, const std::array<float, 3>& color) {
         for (int vertex = first_vertex; vertex < first_vertex + count; ++vertex) {

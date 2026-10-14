@@ -1,16 +1,37 @@
 // CNC-CAM - software CAD/CAM para CNC estilo Aspire (porte de main.py).
 //
 //   CNC-CAM.exe [arquivo.cnc]
-//   CNC-CAM.exe --grab saida.png [--size 1400x820]   (tira uma foto da janela e sai; serve para
+//   CNC-CAM.exe --grab saida.png [--3d] [--size 1400x820] (tira uma foto da janela e sai; serve para
 //                                                     conferir a interface sem ninguem na frente)
 #include <QApplication>
+#include <QAbstractSpinBox>
 #include <QCommandLineParser>
+#include <QEvent>
 #include <QFont>
 #include <QGuiApplication>
 #include <QTimer>
 
 #include "app/main_window.hpp"
 #include "ui/theme.hpp"
+#include "ui/machining_guide.hpp"
+
+namespace {
+
+class NoWheelSpinBoxFilter final : public QObject {
+public:
+    using QObject::QObject;
+
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::Wheel) {
+            for (QObject* object = watched; object; object = object->parent()) {
+                if (qobject_cast<QAbstractSpinBox*>(object)) return true;
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+
+}  // namespace
 
 int main(int argc, char** argv) {
     // cnc_gui is a static library; explicitly register its compiled-in qrc so
@@ -19,6 +40,8 @@ int main(int argc, char** argv) {
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QApplication app(argc, argv);
+    NoWheelSpinBoxFilter no_wheel_spinbox_filter;
+    app.installEventFilter(&no_wheel_spinbox_filter);
     app.setApplicationName("CNC-CAM");
     app.setOrganizationName("UNY");
     app.setFont(QFont("Segoe UI"));
@@ -27,9 +50,13 @@ int main(int argc, char** argv) {
     QCommandLineParser cli;
     cli.addPositionalArgument("arquivo", "Projeto .cnc para abrir", "[arquivo]");
     QCommandLineOption grab("grab", "Salva uma imagem da janela e encerra.", "png");
-    QCommandLineOption size("size", "Tamanho da janela (LxA).", "LxA", "1500x920");
+    QCommandLineOption view_3d("3d", "Abre a vista 3D antes da captura.");
+    QCommandLineOption size("size", "Tamanho da janela (LxA).", "LxA");
+    QCommandLineOption guides("guides", "Abre o estúdio dos desenhos interativos.");
     cli.addOption(grab);
+    cli.addOption(view_3d);
     cli.addOption(size);
+    cli.addOption(guides);
     cli.process(app);
 
     cnc::app::MainWindow window;
@@ -37,11 +64,14 @@ int main(int argc, char** argv) {
     if (dims.size() == 2) window.resize(dims[0].toInt(), dims[1].toInt());
     if (!cli.positionalArguments().isEmpty()) window.open_file(cli.positionalArguments().first());
     window.show();
+    if (cli.isSet(view_3d)) window.show_3d_view();
+    if (cli.isSet(guides)) QTimer::singleShot(0, &window, [&window] { cnc::ui::showGuideGallery(&window); });
 
     if (cli.isSet(grab)) {
         const QString path = cli.value(grab);
         QTimer::singleShot(800, [&window, path, &app] {
-            window.grab().save(path);
+            auto* modal = QApplication::activeModalWidget();
+            (modal ? modal : static_cast<QWidget*>(&window))->grab().save(path);
             app.quit();
         });
     }

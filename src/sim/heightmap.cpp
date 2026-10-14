@@ -146,31 +146,82 @@ void remove_tool_segment(Heightmap& heightmap, const std::array<double, 3>& star
 MeshData heightmap_mesh(const Heightmap& heightmap, const HeightmapConfig& config,
                         const std::array<float, 3>& color) {
     MeshData out;
-    out.vertices.resize(static_cast<size_t>(heightmap.rows) * heightmap.columns * 6);
+    const size_t top_vertex_count = static_cast<size_t>(heightmap.rows) * heightmap.columns;
+    out.vertices.resize(top_vertex_count * 6);
     for (int row = 0; row < heightmap.rows; ++row) {
         for (int column = 0; column < heightmap.columns; ++column) {
             const size_t base = (static_cast<size_t>(row) * heightmap.columns + column) * 6;
-            out.vertices[base] = static_cast<float>(std::min(config.origin_x + column * config.resolution,
-                                                             config.origin_x + config.width));
-            out.vertices[base + 1] = static_cast<float>(std::min(config.origin_y + row * config.resolution,
-                                                                 config.origin_y + config.height));
+            const double x = std::min(config.origin_x + column * config.resolution,
+                                      config.origin_x + config.width);
+            const double y = std::min(config.origin_y + row * config.resolution,
+                                      config.origin_y + config.height);
+            out.vertices[base] = static_cast<float>(x);
+            out.vertices[base + 1] = static_cast<float>(y);
             out.vertices[base + 2] = heightmap.at(row, column);
-            out.vertices[base + 3] = color[0];
-            out.vertices[base + 4] = color[1];
-            out.vertices[base + 5] = color[2];
+            // Gentle directional variation gives the stock a readable wood grain
+            // without making the simulated cut harder to see.
+            const float grain = static_cast<float>(0.97 + 0.025 * std::sin(y * 0.42) +
+                                                   0.012 * std::sin(y * 1.73 + x * 0.018));
+            out.vertices[base + 3] = std::clamp(color[0] * grain, 0.0f, 1.0f);
+            out.vertices[base + 4] = std::clamp(color[1] * grain, 0.0f, 1.0f);
+            out.vertices[base + 5] = std::clamp(color[2] * grain, 0.0f, 1.0f);
         }
     }
     const int cells = (heightmap.rows - 1) * (heightmap.columns - 1);
-    out.indices.reserve(static_cast<size_t>(cells) * 6);
+    const size_t perimeter_segments = static_cast<size_t>(2 * (heightmap.rows - 1) +
+                                                          2 * (heightmap.columns - 1));
+    out.indices.reserve(static_cast<size_t>(cells) * 6 + perimeter_segments * 6 + 6);
     for (int row = 0; row < heightmap.rows - 1; ++row) {
         for (int column = 0; column < heightmap.columns - 1; ++column) {
             const auto tl = static_cast<std::uint32_t>(row * heightmap.columns + column);
             const auto tr = tl + 1;
             const auto bl = tl + static_cast<std::uint32_t>(heightmap.columns);
             const auto br = bl + 1;
-            out.indices.insert(out.indices.end(), {tl, bl, tr, tr, bl, br});
+            out.indices.insert(out.indices.end(), {tl, tr, bl, tr, br, bl});
         }
     }
+
+    const float bottom_z = static_cast<float>(config.surface_z.value_or(config.thickness) - config.thickness);
+    const float side_shade = 0.78f;
+    const auto append_vertex = [&out, &color, side_shade](double x, double y, double z, bool side) {
+        const float shade = side ? side_shade : 0.72f;
+        const auto index = static_cast<std::uint32_t>(out.vertices.size() / 6);
+        out.vertices.insert(out.vertices.end(), {static_cast<float>(x), static_cast<float>(y),
+            static_cast<float>(z), std::clamp(color[0] * shade, 0.0f, 1.0f),
+            std::clamp(color[1] * shade, 0.0f, 1.0f), std::clamp(color[2] * shade, 0.0f, 1.0f)});
+        return index;
+    };
+    // Close the stock perimeter down to its bottom face so the workpiece reads
+    // as a solid board, including while its top is being machined.
+    const int last_row = heightmap.rows - 1;
+    const int last_column = heightmap.columns - 1;
+    const auto add_wall_quad = [&out, &append_vertex, &heightmap, bottom_z](int row0, int column0,
+                                                                          int row1, int column1) {
+        const size_t top0 = static_cast<size_t>(row0) * heightmap.columns + column0;
+        const size_t top1 = static_cast<size_t>(row1) * heightmap.columns + column1;
+        const size_t base0 = top0 * 6;
+        const size_t base1 = top1 * 6;
+        const auto a = append_vertex(out.vertices[base0], out.vertices[base0 + 1],
+                                     heightmap.at(row0, column0), true);
+        const auto b = append_vertex(out.vertices[base1], out.vertices[base1 + 1],
+                                     heightmap.at(row1, column1), true);
+        const auto c = append_vertex(out.vertices[base1], out.vertices[base1 + 1], bottom_z, true);
+        const auto d = append_vertex(out.vertices[base0], out.vertices[base0 + 1], bottom_z, true);
+        out.indices.insert(out.indices.end(), {a, b, d, b, c, d});
+    };
+    for (int column = 0; column < last_column; ++column) {
+        add_wall_quad(0, column + 1, 0, column);
+        add_wall_quad(last_row, column, last_row, column + 1);
+    }
+    for (int row = 0; row < last_row; ++row) {
+        add_wall_quad(row, 0, row + 1, 0);
+        add_wall_quad(row + 1, last_column, row, last_column);
+    }
+    const auto b0 = append_vertex(config.origin_x, config.origin_y, bottom_z, false);
+    const auto b1 = append_vertex(config.origin_x + config.width, config.origin_y, bottom_z, false);
+    const auto b2 = append_vertex(config.origin_x + config.width, config.origin_y + config.height, bottom_z, false);
+    const auto b3 = append_vertex(config.origin_x, config.origin_y + config.height, bottom_z, false);
+    out.indices.insert(out.indices.end(), {b0, b2, b1, b0, b3, b2});
     return out;
 }
 

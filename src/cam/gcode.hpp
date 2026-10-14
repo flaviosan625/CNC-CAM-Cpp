@@ -38,7 +38,7 @@ struct GCodeSettings {
     std::string coolant_on;   // M8 se a maquina tiver refrigeracao
     std::string coolant_off;  // M9
     std::string program_end;  // vazio = padrao da controladora
-    bool tool_change = true;  // emitir T__ M6 ao trocar de ferramenta
+    bool tool_change = false; // default seguro para GRBL; habilitar M6 conforme controladora
     bool comments = true;
     bool home_at_end = true;
 
