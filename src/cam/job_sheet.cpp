@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QPageLayout>
 #include <QPageSize>
+#include <QPainter>
 #include <QPdfWriter>
 #include <QTextDocument>
 #include <QUrl>
@@ -33,6 +34,8 @@ std::string zero_label(const std::string& value, const char* left, const char* c
     return left;
 }
 
+}  // namespace
+
 std::string bridge_summary(const ToolpathJob* job) {
     if (!job) return "—";
     const auto* profile = std::get_if<ProfileSettings>(&job->settings);
@@ -46,34 +49,37 @@ std::string bridge_summary(const ToolpathJob* job) {
                        profile->tabs_3d ? "3D" : "2D");
 }
 
+namespace {
+
 const char* kPage = R"HTML(<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <title>Ordem de serviço - @@TITLE@@</title>
 <style>
-body { font-family: "Segoe UI", Arial, sans-serif; color: #172334; font-size: 8.5pt; }
-.header { display: flex; align-items: center; border-bottom: 3px solid #1682d4; padding-bottom: 8px; }
-.logo { max-width: 155px; max-height: 52px; object-fit: contain; margin-right: 18px; }
-h1 { font-size: 18pt; margin: 0; color: #123b5a; }
-h2 { font-size: 10.5pt; color: #123b5a; margin: 10px 0 4px; border-bottom: 1px solid #b9c7d5; padding-bottom: 3px; }
-.muted { color: #536579; font-size: 7.5pt; }
-.grid { width: 100%; border-collapse: collapse; }
-.grid td { padding: 3px 5px; border: 1px solid #d3dce5; vertical-align: top; }
-.label { color: #52667a; font-size: 6.5pt; text-transform: uppercase; }
-.value { font-weight: 600; min-height: 10px; }
+body { font-family: "Segoe UI", Arial, sans-serif; color: #172334; font-size: 7.2pt; margin: 0; padding: 0; }
+.header { border-bottom: 2px solid #1682d4; padding-bottom: 3px; margin-bottom: 4px; }
+.logo { max-width: 110px; max-height: 32px; object-fit: contain; }
+h1 { font-size: 13.5pt; margin: 0; color: #123b5a; line-height: 1.1; font-weight: bold; }
+h2 { font-size: 7.8pt; color: #123b5a; margin: 4px 0 2px; border-bottom: 1px solid #b9c7d5; padding-bottom: 1px; font-weight: bold; }
+.muted { color: #536579; font-size: 6pt; }
+.grid { width: 100%; border-collapse: collapse; margin-bottom: 2px; }
+.grid td { padding: 2px 4px; border: 1px solid #cbd5df; vertical-align: top; }
+.label { color: #52667a; font-size: 5.2pt; text-transform: uppercase; font-weight: bold; }
+.value { font-weight: 600; font-size: 6.8pt; min-height: 8px; }
 .material { background: #f2f6fa; }
-.layout { width: 100%; height: 210px; object-fit: contain; border: 1px solid #d3dce5; }
-.ops { width: 100%; border-collapse: collapse; font-size: 6.8pt; }
-.ops th { color: #fff; background: #174d73; padding: 4px 3px; text-align: left; }
-.ops td { border-bottom: 1px solid #cbd5df; padding: 4px 3px; }
-.total { font-size: 10pt; text-align: right; font-weight: 700; color: #123b5a; padding: 6px; }
-.notes { min-height: 30px; white-space: pre-wrap; border: 1px solid #d3dce5; padding: 5px; }
-.sign { margin-top: 20px; width: 100%; }
-.sign td { width: 50%; padding-top: 15px; text-align: center; }
-.sign span { display: inline-block; border-top: 1px solid #52667a; min-width: 80%; padding-top: 4px; }
+.ops { width: 100%; border-collapse: collapse; font-size: 6.5pt; margin-bottom: 2px; }
+.ops th { color: #fff; background: #174d73; padding: 2.5px 3px; text-align: left; font-size: 6.2pt; }
+.ops td { border-bottom: 1px solid #cbd5df; padding: 2.5px 3px; }
+.total { font-size: 7.8pt; text-align: right; font-weight: 700; color: #123b5a; padding: 2px 0; }
+.notes { min-height: 18px; max-height: 28px; white-space: pre-wrap; border: 1px solid #cbd5df; padding: 2px 4px; font-size: 6.5pt; background: #fafbfc; }
+.sign { margin-top: 6px; width: 100%; }
+.sign td { width: 50%; padding-top: 8px; text-align: center; font-size: 6.5pt; }
+.sign span { display: inline-block; border-top: 1px solid #52667a; min-width: 75%; padding-top: 2px; font-weight: 600; }
 thead { display: table-header-group; }
 </style></head><body>
-<div class="header">@@LOGO@@<div><div class="muted">UNY CV | PRODUÇÃO CNC</div>
-<h1>ORDEM DE SERVIÇO</h1><div class="muted">Projeto: @@TITLE@@ · Emitida em @@NOW@@</div></div></div>
+<table width="100%" cellpadding="0" cellspacing="0" class="header">
+<tr><td width="120" valign="middle">@@LOGO@@</td>
+<td valign="middle"><div class="muted">UNY CV | PRODUÇÃO CNC</div>
+<h1>ORDEM DE SERVIÇO</h1><div class="muted">Projeto: @@TITLE@@ · Emitida em @@NOW@@</div></td></tr></table>
 <h2>Cliente e identificação</h2>
 <table class="grid"><tr><td><div class="label">Cliente</div><div class="value">@@CUSTOMER@@</div></td>
 <td><div class="label">Contato</div><div class="value">@@CONTACT@@</div></td>
@@ -82,10 +88,10 @@ thead { display: table-header-group; }
 <td><div class="label">Revisão</div><div class="value">@@REVISION@@</div></td>
 <td><div class="label">Operador</div><div class="value">@@OPERATOR@@</div></td></tr></table>
 <h2>Material e preparação da máquina</h2>
-<table class="grid material"><tr><td><div class="label">Material / perfil</div><div class="value">@@MATERIAL@@</div></td>
+<table class="grid material"><tr><td><div class="label">Material informado</div><div class="value">@@MATERIAL@@</div></td>
 <td><div class="label">Chapa X × Y × Z</div><div class="value">@@W@@ × @@H@@ × @@T@@ mm</div></td>
-<td><div class="label">Origem XY</div><div class="value">@@ZX@@ · @@ZY@@</div></td>
-<td><div class="label">Zero Z</div><div class="value">@@ZZ@@</div></td></tr>
+<td><div class="label">Área da chapa</div><div class="value">@@AREA_M2@@ m²</div></td>
+<td><div class="label">Origem / Zero Z</div><div class="value">@@ZX@@ · @@ZY@@ / @@ZZ@@</div></td></tr>
 <tr><td><div class="label">Altura segura Z</div><div class="value">@@CLEARANCE@@ mm</div></td>
 <td><div class="label">Folga de mergulho</div><div class="value">@@PLUNGE_GAP@@ mm</div></td>
 <td><div class="label">Origem adicional X / Y</div><div class="value">@@OFFSET_X@@ / @@OFFSET_Y@@ mm</div></td>
@@ -94,7 +100,11 @@ thead { display: table-header-group; }
 <td><div class="label">Envelope usinado X × Y</div><div class="value">@@CUT_W@@ × @@CUT_H@@ mm</div></td>
 <td colspan="2"><div class="label">Limites do percurso</div><div class="value">X @@X0@@–@@X1@@ · Y @@Y0@@–@@Y1@@ mm</div></td></tr></table>
 <h2>Desenho do percurso e cotas</h2>
-<img class="layout" src="job-layout.png" />
+<table width="100%" cellpadding="0" cellspacing="0" style="margin: 2px 0;">
+<tr><td align="center" style="text-align: center; border: 1px solid #cbd5df; background: #ffffff; padding: 2px;">
+<img src="job-layout.png" width="490" height="150" />
+</td></tr>
+</table>
 <div class="muted">Envelope e cotas calculados sobre os movimentos de corte. Confirme medidas, origem e fixação na máquina antes de usinar.</div>
 <h2>Operações, ferramentas e parâmetros de corte</h2>
 <table class="ops"><thead><tr><th># / operação</th><th>Fresa</th><th>RPM</th><th>Avanço / mergulho</th>
@@ -195,7 +205,10 @@ std::string job_setup_sheet_html(const std::vector<SetupSheetOperation>& operati
     replace_all(page, "@@PART@@", html_escape(info.part_name));
     replace_all(page, "@@REVISION@@", html_escape(info.revision));
     replace_all(page, "@@OPERATOR@@", html_escape(info.operator_name));
-    replace_all(page, "@@MATERIAL@@", html_escape(material.material_profile));
+    const double area_m2_val = (material.width * material.height) / 1000000.0;
+    const std::string area_m2_str = !info.area_m2.empty() ? info.area_m2 : std::format("{:.3f}", area_m2_val);
+    replace_all(page, "@@AREA_M2@@", area_m2_str);
+    replace_all(page, "@@MATERIAL@@", html_escape(!info.material_type.empty() ? info.material_type : material.material_profile));
     replace_all(page, "@@W@@", std::format("{:g}", material.width));
     replace_all(page, "@@H@@", std::format("{:g}", material.height));
     replace_all(page, "@@T@@", std::format("{:g}", material.thickness));
@@ -242,13 +255,52 @@ bool write_job_setup_sheet_pdf(const QString& path,
         QPdfWriter pdf(path);
         pdf.setPageSize(QPageSize(QPageSize::A4));
         pdf.setResolution(144);
-        pdf.setPageMargins(QMarginsF(13, 13, 13, 13), QPageLayout::Millimeter);
+        pdf.setPageMargins(QMarginsF(8, 8, 8, 8), QPageLayout::Millimeter);
         pdf.setTitle(QString("Ordem de serviço - %1").arg(QString::fromStdString(info.part_name)));
         pdf.setCreator("CNC-CAM C++ / UNY CV");
-        document.setDocumentMargin(4);
+        document.setDocumentMargin(0);
         document.setPageSize(pdf.pageLayout().paintRect(QPageLayout::Point).size());
         document.print(&pdf);
     }
+
+    if (!QFileInfo::exists(path) || QFileInfo(path).size() < 5) {
+        if (error) *error = "Não foi possível gravar um PDF válido no caminho selecionado.";
+        return false;
+    }
+    if (error) error->clear();
+    return true;
+}
+
+bool write_multi_job_setup_sheet_pdf(const QString& path,
+                                     const std::vector<MultiJobSheetEntry>& entries,
+                                     const QImage& logo,
+                                     QString* error) {
+    if (entries.empty()) {
+        if (error) *error = "Nenhuma ordem de serviço acumulada para exportar.";
+        return false;
+    }
+
+    QPdfWriter pdf(path);
+    pdf.setPageSize(QPageSize(QPageSize::A4));
+    pdf.setResolution(144);
+    pdf.setPageMargins(QMarginsF(8, 8, 8, 8), QPageLayout::Millimeter);
+    pdf.setTitle("Ordens de Serviço CNC - UNY CV");
+    pdf.setCreator("CNC-CAM C++ / UNY CV");
+
+    QPainter painter(&pdf);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        if (i > 0) pdf.newPage();
+        const auto& entry = entries[i];
+        QTextDocument document;
+        document.addResource(QTextDocument::ImageResource, QUrl("job-layout.png"), entry.layout_preview);
+        if (!logo.isNull()) document.addResource(QTextDocument::ImageResource, QUrl("job-logo"), logo);
+        const std::string html = job_setup_sheet_html(entry.operations, entry.material, entry.job_name, entry.info);
+        document.setHtml(QString::fromUtf8(html.data(), static_cast<qsizetype>(html.size())));
+        document.setDocumentMargin(0);
+        document.setPageSize(pdf.pageLayout().paintRect(QPageLayout::Point).size());
+        document.drawContents(&painter);
+    }
+    painter.end();
 
     if (!QFileInfo::exists(path) || QFileInfo(path).size() < 5) {
         if (error) *error = "Não foi possível gravar um PDF válido no caminho selecionado.";

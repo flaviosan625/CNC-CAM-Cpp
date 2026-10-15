@@ -63,22 +63,41 @@ void arrow(QPainterPath& p, Pt tip, Pt tail, double mh, double size, const std::
 }  // namespace
 
 bool hit_test(const cad::Entity& e, double x, double y, double tolerance) {
+    const BBox b = e.bounding_box();
+    if (x < b.x0 - tolerance || x > b.x1 + tolerance ||
+        y < b.y0 - tolerance || y > b.y1 + tolerance) {
+        return false;
+    }
     QPainterPathStroker stroker;
     stroker.setWidth(2 * tolerance);
     return stroker.createStroke(build_path(e, 0)).contains(QPointF(x, -y));
 }
 
 bool in_selection_window(const cad::Entity& e, double x0, double y0, double x1, double y1, bool crossing) {
+    const double min_x = std::min(x0, x1);
+    const double max_x = std::max(x0, x1);
+    const double min_y = std::min(y0, y1);
+    const double max_y = std::max(y0, y1);
+    const BBox b = e.bounding_box();
+
+    if (b.x1 < min_x || b.x0 > max_x || b.y1 < min_y || b.y0 > max_y) {
+        return false;
+    }
+
+    if (!crossing) {
+        return b.x0 >= min_x && b.x1 <= max_x && b.y0 >= min_y && b.y1 <= max_y;
+    }
+
+    if (b.x0 >= min_x && b.x1 <= max_x && b.y0 >= min_y && b.y1 <= max_y) {
+        return true;
+    }
+
     const QPainterPath path = build_path(e, 0.0);
     if (path.isEmpty()) return false;
-    QRectF window(x0, -y1, x1 - x0, y1 - y0);
+    QRectF window(min_x, -max_y, max_x - min_x, max_y - min_y);
     const double eps = 1e-7;
     window = window.adjusted(-eps, -eps, eps, eps);
-    if (!crossing) {
-        const QRectF bounds = path.boundingRect();
-        return window.left() <= bounds.left() && window.right() >= bounds.right() &&
-               window.top() <= bounds.top() && window.bottom() >= bounds.bottom();
-    }
+
     // O preenchimento de um vetor fechado nao conta como contato com o vetor.
     QPainterPathStroker stroker;
     stroker.setWidth(eps);
@@ -169,29 +188,33 @@ EntityItem::EntityItem(cad::EntityPtr entity, double mh, double unit_factor, std
 }
 
 void EntityItem::refresh() {
-    if (auto* dim = cad::as<cad::Dimension>(entity_)) {
-        const auto [main_path, extension_path] = build_dimension_paths(*dim, mh_);
-        setPath(main_path);
-        if (extension_item_) extension_item_->setPath(extension_path);
-    } else {
-        setPath(build_path(*entity_, mh_));
-    }
-    if (dimension_label_) {
-        const auto* e = cad::as<cad::Dimension>(entity_);
-        QFont font("Segoe UI");
-        font.setPixelSize(std::max(1, static_cast<int>(std::ceil(e->style.text_height))));
-        dimension_label_->setFont(font);
-        dimension_label_->setText(QString::fromStdString(e->format_label(units_, unit_factor_)));
-        const Pt lp = e->label_position();
-        dimension_label_->setPos(lp.x, mh_ - lp.y);
-        const QRectF bounds = dimension_label_->boundingRect();
-        if (e->kind_name == "radius" || e->kind_name == "diameter") {
-            const double gap = e->style.text_gap;
-            const double left = e->x3 < e->x1 ? -bounds.width() - gap : gap;
-            dimension_label_->setTransform(QTransform::fromTranslate(left, -bounds.height() / 2));
+    if (cached_version_ != entity_->version || std::fabs(cached_mh_ - mh_) > 1e-6) {
+        cached_version_ = entity_->version;
+        cached_mh_ = mh_;
+        if (auto* dim = cad::as<cad::Dimension>(entity_)) {
+            const auto [main_path, extension_path] = build_dimension_paths(*dim, mh_);
+            setPath(main_path);
+            if (extension_item_) extension_item_->setPath(extension_path);
         } else {
-            dimension_label_->setTransform(
-                QTransform::fromTranslate(-bounds.width() / 2, -bounds.height() - e->style.text_gap));
+            setPath(build_path(*entity_, mh_));
+        }
+        if (dimension_label_) {
+            const auto* e = cad::as<cad::Dimension>(entity_);
+            QFont font("Segoe UI");
+            font.setPixelSize(std::max(1, static_cast<int>(std::ceil(e->style.text_height))));
+            dimension_label_->setFont(font);
+            dimension_label_->setText(QString::fromStdString(e->format_label(units_, unit_factor_)));
+            const Pt lp = e->label_position();
+            dimension_label_->setPos(lp.x, mh_ - lp.y);
+            const QRectF bounds = dimension_label_->boundingRect();
+            if (e->kind_name == "radius" || e->kind_name == "diameter") {
+                const double gap = e->style.text_gap;
+                const double left = e->x3 < e->x1 ? -bounds.width() - gap : gap;
+                dimension_label_->setTransform(QTransform::fromTranslate(left, -bounds.height() / 2));
+            } else {
+                dimension_label_->setTransform(
+                    QTransform::fromTranslate(-bounds.width() / 2, -bounds.height() - e->style.text_gap));
+            }
         }
     }
     apply_style();

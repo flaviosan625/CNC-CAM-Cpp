@@ -46,7 +46,7 @@ if(MSVC)
     if(EXISTS "${_cnc_msvc_bin}/1046/clui.dll" AND NOT EXISTS "${_cnc_msvc_bin}/1033/clui.dll")
         set(CMAKE_CL_SHOWINCLUDES_PREFIX "Observação: incluindo arquivo: ")
     endif()
-    add_compile_options(/utf-8 /W4 /permissive- /Zc:__cplusplus /EHsc /external:W0)
+    add_compile_options(/utf-8 /W4 /permissive- /Zc:__cplusplus /EHsc /external:W0 /Ob2 /arch:AVX2)
     add_compile_definitions(NOMINMAX _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
 endif()
 

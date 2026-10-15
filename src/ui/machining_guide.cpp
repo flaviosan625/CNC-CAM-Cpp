@@ -26,6 +26,27 @@
 #include "ui/responsive.hpp"
 
 namespace cnc::ui {
+
+// Deterministic, cached maple grain; no external bitmap and no random repaint noise.
+const QImage& woodTexture() {
+    static const QImage texture = [] {
+        QImage image(640, 480, QImage::Format_RGB32);
+        quint32 seed = 217;
+        for (int y = 0; y < image.height(); ++y) {
+            auto* row = reinterpret_cast<QRgb*>(image.scanLine(y));
+            for (int x = 0; x < image.width(); ++x) {
+                seed = 1664525u * seed + 1013904223u;
+                const double warp = y + 3 * std::sin(x * .007) + 2 * std::sin(x * .015 + y * .009);
+                const double grain = 2.5 * std::sin(warp * .43) + 1.8 * std::sin(warp * 2.7)
+                    + 2 * std::sin(warp * .072) + (int(seed >> 28) - 7) * .7;
+                row[x] = qRgb(int(208 + grain), int(174 + grain), int(132 + grain));
+            }
+        }
+        return image;
+    }();
+    return texture;
+}
+
 namespace {
 constexpr double pi = std::numbers::pi;
 const QColor cyan("#29d9ef"), orange("#ffae55"), ink("#e6edf5"), muted("#9bacbc");
@@ -102,25 +123,6 @@ void dimension(QPainter& p, QPointF a, QPointF b, const QString& label, QPointF 
     text(p, r, label, 13, ink, vertical ? Qt::AlignLeft | Qt::AlignVCenter : Qt::AlignCenter);
 }
 
-// Deterministic, cached maple grain; no external bitmap and no random repaint noise.
-const QImage& woodTexture() {
-    static const QImage texture = [] {
-        QImage image(640, 480, QImage::Format_RGB32);
-        quint32 seed = 217;
-        for (int y = 0; y < image.height(); ++y) {
-            auto* row = reinterpret_cast<QRgb*>(image.scanLine(y));
-            for (int x = 0; x < image.width(); ++x) {
-                seed = 1664525u * seed + 1013904223u;
-                const double warp = y + 3 * std::sin(x * .007) + 2 * std::sin(x * .015 + y * .009);
-                const double grain = 2.5 * std::sin(warp * .43) + 1.8 * std::sin(warp * 2.7)
-                    + 2 * std::sin(warp * .072) + (int(seed >> 28) - 7) * .7;
-                row[x] = qRgb(int(208 + grain), int(174 + grain), int(132 + grain));
-            }
-        }
-        return image;
-    }();
-    return texture;
-}
 void timberTop(QPainter& p, const QPainterPath& top, bool dark = false) {
     p.save();
     p.setClipPath(top, Qt::IntersectClip);

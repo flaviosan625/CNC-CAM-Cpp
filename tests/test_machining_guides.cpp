@@ -222,3 +222,51 @@ TEST_CASE("responsive: dialogs and icon flows fit short narrow screens") {
     for (int i = 0; i < flow->count(); ++i) CHECK(flow->itemAt(i)->geometry().right() < 140);
     CHECK(flow->heightForWidth(140) > flow->heightForWidth(280));
 }
+
+TEST_CASE("os_drawing: high-end technical drawing matches card 08 and real vectors") {
+    cnc::cad::MaterialSetup material;
+    material.width = 600.0;
+    material.height = 400.0;
+    material.thickness = 18.0;
+    material.clearance_z = 10.0;
+    material.zero_x = "left";
+    material.zero_y = "bottom";
+    material.zero_z = "top";
+
+    cnc::cam::Tool tool;
+    tool.diameter = 6.0;
+
+    cnc::cam::ToolpathJob job;
+    job.tool = tool;
+
+    cnc::cam::Toolpath path;
+    path.moves = {
+        {cnc::cam::MoveKind::Rapid, 50.0, 50.0, 5.0, 0.0},
+        {cnc::cam::MoveKind::Plunge, 50.0, 50.0, -18.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 450.0, 50.0, -18.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 450.0, 300.0, -18.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 50.0, 300.0, -18.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 50.0, 50.0, -18.0, 0.0},
+        {cnc::cam::MoveKind::Rapid, 50.0, 50.0, 5.0, 0.0},
+        {cnc::cam::MoveKind::Rapid, 150.0, 120.0, 5.0, 0.0},
+        {cnc::cam::MoveKind::Plunge, 150.0, 120.0, -10.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 350.0, 120.0, -10.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 350.0, 230.0, -10.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 150.0, 230.0, -10.0, 0.0},
+        {cnc::cam::MoveKind::Cut, 150.0, 120.0, -10.0, 0.0},
+        {cnc::cam::MoveKind::Rapid, 150.0, 120.0, 5.0, 0.0}
+    };
+
+    cnc::cam::SetupSheetOperation op;
+    op.path = &path;
+    op.job = &job;
+    std::vector<cnc::cam::SetupSheetOperation> ops = {op};
+
+    QImage img = cnc::app::make_job_layout_preview(ops, &material);
+    CHECK_FALSE(img.isNull());
+    CHECK(img.width() == 980);
+    CHECK(img.height() == 300);
+
+    const QString artifact_dir = "C:/Users/flavi/.gemini/antigravity/brain/f7b2d311-6692-4dee-acfa-d51ba77741b0";
+    img.save(artifact_dir + "/ordem_de_servico_desenho_novo.png");
+}

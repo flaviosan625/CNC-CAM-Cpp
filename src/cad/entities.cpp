@@ -86,6 +86,7 @@ void Line::translate(double dx, double dy) {
     y1 += dy;
     x2 += dx;
     y2 += dy;
+    touch();
 }
 
 void Line::rotate(double deg, double cx, double cy) {
@@ -96,6 +97,7 @@ void Line::rotate(double deg, double cx, double cy) {
     y1 = p1.y;
     x2 = p2.x;
     y2 = p2.y;
+    touch();
 }
 
 void Line::scale(double sx, double sy, double cx, double cy) {
@@ -103,6 +105,7 @@ void Line::scale(double sx, double sy, double cx, double cy) {
     y1 = cy + (y1 - cy) * sy;
     x2 = cx + (x2 - cx) * sx;
     y2 = cy + (y2 - cy) * sy;
+    touch();
 }
 
 double Line::length() const { return hypot(x2 - x1, y2 - y1); }
@@ -117,17 +120,20 @@ Points DrillPoint::to_points(int) const { return {{x, y}}; }
 void DrillPoint::translate(double dx, double dy) {
     x += dx;
     y += dy;
+    touch();
 }
 
 void DrillPoint::rotate(double deg, double cx, double cy) {
     const Pt p = rot_pt(x, y, cx, cy, radians(deg));
     x = p.x;
     y = p.y;
+    touch();
 }
 
 void DrillPoint::scale(double sx, double sy, double cx, double cy) {
     x = cx + (x - cx) * sx;
     y = cy + (y - cy) * sy;
+    touch();
 }
 
 // ======================================================================
@@ -152,18 +158,21 @@ BBox Circle::bounding_box() const {
 void Circle::translate(double dx, double dy) {
     cx += dx;
     cy += dy;
+    touch();
 }
 
 void Circle::rotate(double deg, double ox, double oy) {
     const Pt p = rot_pt(cx, cy, ox, oy, radians(deg));
     cx = p.x;
     cy = p.y;
+    touch();
 }
 
 void Circle::scale(double sx, double sy, double ox, double oy) {
     cx = ox + (cx - ox) * sx;
     cy = oy + (cy - oy) * sy;
     radius *= std::sqrt(std::fabs(sx * sy));
+    touch();
 }
 
 // ======================================================================
@@ -183,9 +192,21 @@ Points Ellipse::to_points(int seg) const {
     return pts;
 }
 
+BBox Ellipse::bounding_box() const {
+    if (std::fabs(rotation) < 1e-9) {
+        return {cx - rx, cy - ry, cx + rx, cy + ry};
+    }
+    const double a = radians(rotation);
+    const double ca = std::cos(a), sa = std::sin(a);
+    const double ext_x = std::sqrt((rx * ca) * (rx * ca) + (ry * sa) * (ry * sa));
+    const double ext_y = std::sqrt((rx * sa) * (rx * sa) + (ry * ca) * (ry * ca));
+    return {cx - ext_x, cy - ext_y, cx + ext_x, cy + ext_y};
+}
+
 void Ellipse::translate(double dx, double dy) {
     cx += dx;
     cy += dy;
+    touch();
 }
 
 void Ellipse::rotate(double deg, double ox, double oy) {
@@ -193,6 +214,7 @@ void Ellipse::rotate(double deg, double ox, double oy) {
     cx = p.x;
     cy = p.y;
     rotation += deg;
+    touch();
 }
 
 void Ellipse::scale(double sx, double sy, double ox, double oy) {
@@ -206,6 +228,7 @@ void Ellipse::scale(double sx, double sy, double ox, double oy) {
         rx *= f;
         ry *= f;
     }
+    touch();
 }
 
 // ======================================================================
@@ -226,9 +249,40 @@ Points Arc::to_points(int seg) const {
     return pts;
 }
 
+BBox Arc::bounding_box() const {
+    const double a0 = radians(start_angle);
+    double a1 = radians(end_angle);
+    if (a1 <= a0) a1 += 2 * kPi;
+
+    const double p0x = cx + radius * std::cos(a0);
+    const double p0y = cy + radius * std::sin(a0);
+    const double p1x = cx + radius * std::cos(a1);
+    const double p1y = cy + radius * std::sin(a1);
+
+    double min_x = std::min(p0x, p1x);
+    double max_x = std::max(p0x, p1x);
+    double min_y = std::min(p0y, p1y);
+    double max_y = std::max(p0y, p1y);
+
+    const double span = a1 - a0;
+    auto contains_angle = [&](double theta) {
+        double d = std::fmod(theta - a0, 2 * kPi);
+        if (d < 0.0) d += 2 * kPi;
+        return d <= span;
+    };
+
+    if (contains_angle(0.0))          max_x = cx + radius;
+    if (contains_angle(kPi * 0.5))    max_y = cy + radius;
+    if (contains_angle(kPi))          min_x = cx - radius;
+    if (contains_angle(kPi * 1.5))    min_y = cy - radius;
+
+    return {min_x, min_y, max_x, max_y};
+}
+
 void Arc::translate(double dx, double dy) {
     cx += dx;
     cy += dy;
+    touch();
 }
 
 void Arc::rotate(double deg, double ox, double oy) {
@@ -237,6 +291,7 @@ void Arc::rotate(double deg, double ox, double oy) {
     cy = p.y;
     start_angle += deg;
     end_angle += deg;
+    touch();
 }
 
 void Arc::scale(double sx, double sy, double ox, double oy) {
@@ -253,6 +308,7 @@ void Arc::scale(double sx, double sy, double ox, double oy) {
         start_angle = -e;
         end_angle = -s;
     }
+    touch();
 }
 
 // ======================================================================
@@ -294,9 +350,26 @@ Points Rectangle::to_points(int seg) const {
     return pts;
 }
 
+BBox Rectangle::bounding_box() const {
+    if (std::fabs(rotation) < 1e-9) {
+        const double x1 = x, x2 = x + width;
+        const double y1 = y, y2 = y + height;
+        return {std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2)};
+    }
+    const double cx = x + width / 2.0;
+    const double cy = y + height / 2.0;
+    const double a = radians(rotation);
+    const double c = std::cos(a), s = std::sin(a);
+    const double hw = width / 2.0, hh = height / 2.0;
+    const double ext_x = std::fabs(hw * c) + std::fabs(hh * s);
+    const double ext_y = std::fabs(hw * s) + std::fabs(hh * c);
+    return {cx - ext_x, cy - ext_y, cx + ext_x, cy + ext_y};
+}
+
 void Rectangle::translate(double dx, double dy) {
     x += dx;
     y += dy;
+    touch();
 }
 
 void Rectangle::rotate(double deg, double cx, double cy) {
@@ -305,6 +378,7 @@ void Rectangle::rotate(double deg, double cx, double cy) {
     x += n.x - mx;
     y += n.y - my;
     rotation += deg;
+    touch();
 }
 
 void Rectangle::scale(double sx, double sy, double cx, double cy) {
@@ -323,28 +397,45 @@ void Rectangle::scale(double sx, double sy, double cx, double cy) {
         height = -height;
     }
     corner_radius *= std::sqrt(std::fabs(sx * sy));
+    touch();
 }
 
 // ======================================================================
 // Polilinha
 // ======================================================================
 
+BBox Polyline::bounding_box() const {
+    if (points.empty()) return {0.0, 0.0, 0.0, 0.0};
+    BBox b{points[0].x, points[0].y, points[0].x, points[0].y};
+    for (size_t i = 1; i < points.size(); ++i) {
+        const Pt& p = points[i];
+        b.x0 = std::min(b.x0, p.x);
+        b.y0 = std::min(b.y0, p.y);
+        b.x1 = std::max(b.x1, p.x);
+        b.y1 = std::max(b.y1, p.y);
+    }
+    return b;
+}
+
 void Polyline::translate(double dx, double dy) {
     for (Pt& p : points) {
         p.x += dx;
         p.y += dy;
     }
+    touch();
 }
 
 void Polyline::rotate(double deg, double cx, double cy) {
     const double a = radians(deg);
     for (Pt& p : points) p = rot_pt(p.x, p.y, cx, cy, a);
+    touch();
 }
 
 void Polyline::scale(double sx, double sy, double cx, double cy) {
     for (Pt& p : points) {
         p = {cx + (p.x - cx) * sx, cy + (p.y - cy) * sy};
     }
+    touch();
 }
 
 // ======================================================================
@@ -403,6 +494,25 @@ Points Text::to_points(int) const {
     Points out;
     for (const Points& poly : outline_polygons()) out.insert(out.end(), poly.begin(), poly.end());
     return out;
+}
+
+BBox Text::bounding_box() const {
+    const auto& polys = outline_polygons();
+    if (polys.empty()) return {x, y, x, y};
+    double x0 = std::numeric_limits<double>::infinity();
+    double y0 = std::numeric_limits<double>::infinity();
+    double x1 = -std::numeric_limits<double>::infinity();
+    double y1 = -std::numeric_limits<double>::infinity();
+    for (const auto& poly : polys) {
+        for (const auto& p : poly) {
+            x0 = std::min(x0, p.x);
+            y0 = std::min(y0, p.y);
+            x1 = std::max(x1, p.x);
+            y1 = std::max(y1, p.y);
+        }
+    }
+    if (std::isinf(x0)) return {x, y, x, y};
+    return {x0, y0, x1, y1};
 }
 
 void Text::translate(double dx, double dy) {
@@ -675,6 +785,7 @@ void Dimension::translate(double dx, double dy) {
     y2 += dy;
     x3 += dx;
     y3 += dy;
+    touch();
 }
 
 void Dimension::rotate(double deg, double cx, double cy) {
@@ -688,6 +799,7 @@ void Dimension::rotate(double deg, double cx, double cy) {
     p = rot_pt(x3, y3, cx, cy, a);
     x3 = p.x;
     y3 = p.y;
+    touch();
 }
 
 void Dimension::scale(double sx, double sy, double cx, double cy) {
@@ -698,6 +810,7 @@ void Dimension::scale(double sx, double sy, double cx, double cy) {
     x3 = cx + (x3 - cx) * sx;
     y3 = cy + (y3 - cy) * sy;
     offset *= std::sqrt(std::fabs(sx * sy));
+    touch();
 }
 
 // ======================================================================

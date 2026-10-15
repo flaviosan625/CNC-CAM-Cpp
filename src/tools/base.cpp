@@ -137,7 +137,11 @@ void TransformCommand::restore(const std::vector<cad::EntityPtr>& states) {
 void ToolContext::add(const std::vector<cad::EntityPtr>& entities, const std::string& label, bool preserve_layers) {
     if (entities.empty()) return;
     for (const cad::EntityPtr& e : entities) {
-        if (!preserve_layers) e->layer = current_layer;
+        if (!preserve_layers || e->layer.empty()) {
+            e->layer = current_layer;
+        } else if (document && !document->get_layer(e->layer)) {
+            document->add_layer(e->layer);
+        }
     }
     std::map<std::string, std::string> groups;
     for (const cad::EntityPtr& e : entities) {

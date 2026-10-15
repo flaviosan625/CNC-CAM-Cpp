@@ -104,8 +104,8 @@ TEST_CASE("simulacao: caminho muda de cor conforme a fresa avanca") {
 TEST_CASE("simulacao: malha tem indices validos") {
     auto fixture = make_simulation();
     const auto mesh = fixture.simulation.stock_mesh({0.8f, 0.7f, 0.5f});
-    CHECK(mesh.vertices.size() == 121 * 6);
-    CHECK(mesh.indices.size() == 600);
+    CHECK(mesh.vertices.size() == 285 * 6);
+    CHECK(mesh.indices.size() == 846);
     CHECK(*std::max_element(mesh.indices.begin(), mesh.indices.end()) < mesh.vertices.size() / 6);
 }
 

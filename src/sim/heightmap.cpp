@@ -96,13 +96,17 @@ void apply_flat_endmill(Heightmap& heightmap, double x, double y, double z, doub
     const int x0 = std::max(0, cx - radius_px), x1 = std::min(heightmap.columns, cx + radius_px + 1);
     const int y0 = std::max(0, cy - radius_px), y1 = std::min(heightmap.rows, cy + radius_px + 1);
     if (x0 >= x1 || y0 >= y1) return;
+    const double r2 = (radius + 1e-9) * (radius + 1e-9);
+    const float val = static_cast<float>(std::max(z, bottom_z));
     for (int row = y0; row < y1; ++row) {
+        const double dy = (row - cy) * resolution;
+        const double dy2 = dy * dy;
         for (int column = x0; column < x1; ++column) {
             const double dx = (column - cx) * resolution;
-            const double dy = (row - cy) * resolution;
-            if (std::sqrt(dx * dx + dy * dy) <= radius + 1e-9)
-                heightmap.at(row, column) = static_cast<float>(std::min<double>(heightmap.at(row, column),
-                                                                                   std::max(z, bottom_z)));
+            if (dx * dx + dy2 <= r2) {
+                float& h = heightmap.at(row, column);
+                if (val < h) h = val;
+            }
         }
     }
 }

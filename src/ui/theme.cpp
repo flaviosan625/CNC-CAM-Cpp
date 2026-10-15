@@ -233,6 +233,18 @@ QGroupBox {
     margin-top: 15px; padding-top: 13px; font-weight: 600;
 }
 QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; color: #88c3ff; }
+#GroupCollapseBtn {
+    background: transparent; color: #7cb8f7; border: 1px solid #2d4562;
+    border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 500;
+}
+#GroupCollapseBtn:hover { background-color: #243851; color: #ffffff; border-color: #589bdf; }
+#GroupCollapseBtn:pressed { background-color: #1c2e44; }
+#SectionNavPill {
+    background-color: #1a2737; color: #9bbcdb; border: 1px solid #2d415b;
+    border-radius: 12px; padding: 3px 10px; font-size: 11px; font-weight: 500;
+}
+#SectionNavPill:hover { background-color: #263e5b; color: #ffffff; border-color: #498ad0; }
+#SectionNavPill:pressed { background-color: #1e5a96; }
 QPushButton {
     background-color: #24364b; border: 1px solid #3b536e; border-radius: 7px;
     padding: 8px 13px; color: #dce8f6;

@@ -3,14 +3,19 @@
 
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QObject>
 #include <QSpinBox>
 
+class QWheelEvent;
+
 namespace cnc::ui {
+
+void redirect_wheel(QWidget* widget, QWheelEvent* event);
 
 class SafeDoubleSpinBox : public QDoubleSpinBox {
     Q_OBJECT
 public:
-    using QDoubleSpinBox::QDoubleSpinBox;
+    explicit SafeDoubleSpinBox(QWidget* parent = nullptr);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -19,7 +24,7 @@ protected:
 class SafeSpinBox : public QSpinBox {
     Q_OBJECT
 public:
-    using QSpinBox::QSpinBox;
+    explicit SafeSpinBox(QWidget* parent = nullptr);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -28,10 +33,17 @@ protected:
 class SafeComboBox : public QComboBox {
     Q_OBJECT
 public:
-    using QComboBox::QComboBox;
+    explicit SafeComboBox(QWidget* parent = nullptr);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
+};
+
+class SafeWheelFilter final : public QObject {
+    Q_OBJECT
+public:
+    explicit SafeWheelFilter(QObject* parent = nullptr);
+    bool eventFilter(QObject* watched, QEvent* event) override;
 };
 
 }  // namespace cnc::ui

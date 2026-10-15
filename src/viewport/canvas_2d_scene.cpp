@@ -18,16 +18,48 @@ void Canvas2D::refresh_entities() {
     clear_layout_preview();
     clear_fit_warning_items();
     fit_warning_ids_.clear();
-    for (EntityItem* item : ent_items_) remove_item(item);
-    ent_items_.clear();
-    if (!document_) return;
+    if (!document_) {
+        for (EntityItem* item : ent_items_) remove_item(item);
+        ent_items_.clear();
+        return;
+    }
     document_->sync_dimensions();
-    const double mh = material_height;
+
+    std::vector<cad::EntityPtr> visible;
+    visible.reserve(document_->entities.size());
     for (const cad::EntityPtr& e : document_->entities) {
         if (!show_guides && cad::is_a<cad::ConstructionLine>(*e)) continue;
         const cad::Layer* lay = document_->get_layer(e->layer);
         if (lay && !lay->visible) continue;
-        const cad::MaterialSetup& mat = document_->material;
+        visible.push_back(e);
+    }
+
+    if (visible.size() == ent_items_.size()) {
+        bool match = true;
+        for (size_t i = 0; i < visible.size(); ++i) {
+            if (ent_items_[i]->entity() != visible[i]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            for (EntityItem* item : ent_items_) {
+                item->refresh();
+            }
+            rebuild_fit_warning_items();
+            refresh_selection_handles();
+            return;
+        }
+    }
+
+    for (EntityItem* item : ent_items_) remove_item(item);
+    ent_items_.clear();
+    ent_items_.reserve(visible.size());
+
+    const double mh = material_height;
+    const cad::MaterialSetup& mat = document_->material;
+    for (const cad::EntityPtr& e : visible) {
+        const cad::Layer* lay = document_->get_layer(e->layer);
         const Rgb layer_color = lay ? lay->color : e->color;
         auto* item = new EntityItem(e, mh, mat.unit_factor(), mat.units, layer_color);
         scene_->addItem(item);

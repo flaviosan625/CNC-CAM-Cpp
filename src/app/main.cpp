@@ -14,24 +14,7 @@
 #include "app/main_window.hpp"
 #include "ui/theme.hpp"
 #include "ui/machining_guide.hpp"
-
-namespace {
-
-class NoWheelSpinBoxFilter final : public QObject {
-public:
-    using QObject::QObject;
-
-    bool eventFilter(QObject* watched, QEvent* event) override {
-        if (event->type() == QEvent::Wheel) {
-            for (QObject* object = watched; object; object = object->parent()) {
-                if (qobject_cast<QAbstractSpinBox*>(object)) return true;
-            }
-        }
-        return QObject::eventFilter(watched, event);
-    }
-};
-
-}  // namespace
+#include "ui/safe_inputs.hpp"
 
 int main(int argc, char** argv) {
     // cnc_gui is a static library; explicitly register its compiled-in qrc so
@@ -40,8 +23,8 @@ int main(int argc, char** argv) {
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QApplication app(argc, argv);
-    NoWheelSpinBoxFilter no_wheel_spinbox_filter;
-    app.installEventFilter(&no_wheel_spinbox_filter);
+    auto* safe_wheel_filter = new cnc::ui::SafeWheelFilter(&app);
+    app.installEventFilter(safe_wheel_filter);
     app.setApplicationName("CNC-CAM");
     app.setOrganizationName("UNY");
     app.setFont(QFont("Segoe UI"));

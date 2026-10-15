@@ -1,4 +1,5 @@
 #include "ui/responsive.hpp"
+#include "ui/safe_inputs.hpp"
 #include <algorithm>
 #include <QBoxLayout>
 #include <QEvent>
@@ -21,6 +22,7 @@ void ResponsiveDialog::resizeEvent(QResizeEvent* event) {
 void ResponsiveDialog::showEvent(QShowEvent* event) {
     if (!prepared_) {
         prepared_ = true;
+        installEventFilter(new SafeWheelFilter(this));
         for (auto* form : findChildren<QFormLayout*>()) {
             form->setRowWrapPolicy(QFormLayout::WrapLongRows);
             form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);

@@ -311,6 +311,13 @@ std::vector<double> dxf_values(const std::vector<DxfPair>& record, int code) {
     return out;
 }
 
+std::string dxf_string(const std::vector<DxfPair>& record, int code, const std::string& fallback = "") {
+    for (const auto& pair : record) if (pair.code == code) {
+        return pair.value;
+    }
+    return fallback;
+}
+
 std::vector<cad::EntityPtr> parse_svg(QXmlStreamReader& xml) {
     std::vector<cad::EntityPtr> entities;
     double height = 0.0;
@@ -379,8 +386,172 @@ std::vector<cad::EntityPtr> parse_svg(QXmlStreamReader& xml) {
 }
 
 #ifdef CNC_HAVE_MUPDF
+class PdfVectorDevice : public mupdf::FzDevice2 {
+public:
+    std::vector<cad::EntityPtr> entities;
+    std::string current_layer;
+    double page_height_pt = 0.0;
+    static constexpr double pt_to_mm = 25.4 / 72.0;
+
+    PdfVectorDevice() {
+        use_virtual_fill_path(true);
+        use_virtual_stroke_path(true);
+    }
+
+    const ::fz_path* last_path = nullptr;
+
+    void fill_path(::fz_context* ctx, const ::fz_path* path, int, ::fz_matrix ctm,
+                   ::fz_colorspace*, const float*, float,
+                   ::fz_color_params) override {
+        last_path = path;
+        extract_path(ctx, path, ctm);
+    }
+
+    void stroke_path(::fz_context* ctx, const ::fz_path* path, const ::fz_stroke_state*,
+                     ::fz_matrix ctm, ::fz_colorspace*, const float*, float,
+                     ::fz_color_params) override {
+        if (path && path == last_path) return;
+        last_path = path;
+        extract_path(ctx, path, ctm);
+    }
+
+private:
+    struct WalkerState {
+        PdfVectorDevice* self = nullptr;
+        ::fz_matrix ctm{};
+        Points current;
+        bool closed = false;
+
+        Pt to_world(float x, float y) const {
+            const fz_point p = fz_transform_point_xy(x, y, ctm);
+            return {p.x * pt_to_mm, (self->page_height_pt - p.y) * pt_to_mm};
+        }
+
+        void flush() {
+            if (current.size() >= 2) {
+                Points clean;
+                for (const auto& pt : current) {
+                    if (clean.empty() || std::hypot(clean.back().x - pt.x, clean.back().y - pt.y) > 1e-6) {
+                        clean.push_back(pt);
+                    }
+                }
+                if (clean.size() >= 2) {
+                    if (clean.size() > 2 &&
+                        std::hypot(clean.front().x - clean.back().x, clean.front().y - clean.back().y) < 0.02) {
+                        clean.pop_back();
+                        closed = true;
+                    }
+
+                    // Reconhecer círculo
+                    if (closed && clean.size() >= 8) {
+                        double cx = 0, cy = 0;
+                        for (const auto& p : clean) { cx += p.x; cy += p.y; }
+                        cx /= clean.size(); cy /= clean.size();
+                        double r_sum = 0;
+                        for (const auto& p : clean) r_sum += std::hypot(p.x - cx, p.y - cy);
+                        const double r = r_sum / clean.size();
+                        if (r > 1e-4) {
+                            double max_dev = 0;
+                            for (const auto& p : clean)
+                                max_dev = std::max(max_dev, std::abs(std::hypot(p.x - cx, p.y - cy) - r));
+                            if (max_dev <= std::max(0.04, r * 0.015)) {
+                                auto circle = std::make_shared<cad::Circle>();
+                                circle->cx = cx; circle->cy = cy; circle->radius = r;
+                                circle->layer = self->current_layer;
+                                self->entities.push_back(circle);
+                                current.clear();
+                                closed = false;
+                                return;
+                            }
+                        }
+                    }
+
+                    // Reconhecer retângulo alinhado
+                    auto check_pts = clean;
+                    if (check_pts.size() > 1 &&
+                        std::hypot(check_pts.front().x - check_pts.back().x,
+                                   check_pts.front().y - check_pts.back().y) < 1e-6) {
+                        check_pts.pop_back();
+                    }
+                    if (closed && check_pts.size() == 4) {
+                        std::vector<double> xs, ys;
+                        for (const auto& p : check_pts) { xs.push_back(p.x); ys.push_back(p.y); }
+                        std::sort(xs.begin(), xs.end());
+                        std::sort(ys.begin(), ys.end());
+                        if (std::abs(xs[0] - xs[1]) < 0.02 && std::abs(xs[2] - xs[3]) < 0.02 &&
+                            std::abs(ys[0] - ys[1]) < 0.02 && std::abs(ys[2] - ys[3]) < 0.02 &&
+                            (xs[2] - xs[0]) > 0.01 && (ys[2] - ys[0]) > 0.01) {
+                            auto rect = std::make_shared<cad::Rectangle>();
+                            rect->x = xs[0]; rect->y = ys[0];
+                            rect->width = xs[2] - xs[0]; rect->height = ys[2] - ys[0];
+                            rect->layer = self->current_layer;
+                            self->entities.push_back(rect);
+                            current.clear();
+                            closed = false;
+                            return;
+                        }
+                    }
+
+                    auto poly = std::make_shared<cad::Polyline>();
+                    poly->points = clean;
+                    poly->is_closed = closed;
+                    poly->layer = self->current_layer;
+                    self->entities.push_back(poly);
+                }
+            }
+            current.clear();
+            closed = false;
+        }
+    };
+
+    void extract_path(::fz_context* ctx, const ::fz_path* path, ::fz_matrix ctm) {
+        if (!path) return;
+        WalkerState state{this, ctm, {}, false};
+        ::fz_path_walker walker{};
+        walker.moveto = [](fz_context*, void* arg, float x, float y) {
+            auto* s = static_cast<WalkerState*>(arg);
+            s->flush();
+            s->current.push_back(s->to_world(x, y));
+        };
+        walker.lineto = [](fz_context*, void* arg, float x, float y) {
+            auto* s = static_cast<WalkerState*>(arg);
+            s->current.push_back(s->to_world(x, y));
+        };
+        walker.curveto = [](fz_context*, void* arg, float x1, float y1, float x2, float y2, float x3, float y3) {
+            auto* s = static_cast<WalkerState*>(arg);
+            if (s->current.empty()) return;
+            const Pt p0 = s->current.back();
+            const Pt p1 = s->to_world(x1, y1);
+            const Pt p2 = s->to_world(x2, y2);
+            const Pt p3 = s->to_world(x3, y3);
+            append_cubic(s->current, p0, p1, p2, p3);
+        };
+        walker.closepath = [](fz_context*, void* arg) {
+            auto* s = static_cast<WalkerState*>(arg);
+            s->closed = true;
+            s->flush();
+        };
+        walker.rectto = [](fz_context*, void* arg, float x1, float y1, float x2, float y2) {
+            auto* s = static_cast<WalkerState*>(arg);
+            s->flush();
+            s->current = {s->to_world(x1, y1), s->to_world(x2, y1), s->to_world(x2, y2), s->to_world(x1, y2)};
+            s->closed = true;
+            s->flush();
+        };
+        walker.quadto = [](fz_context*, void* arg, float x1, float y1, float x2, float y2) {
+            auto* s = static_cast<WalkerState*>(arg);
+            if (s->current.empty()) return;
+            const Pt p0 = s->current.back();
+            const Pt p1 = s->to_world(x1, y1);
+            const Pt p2 = s->to_world(x2, y2);
+            append_quadratic(s->current, p0, p1, p2);
+        };
+        fz_walk_path(ctx, path, &walker, &state);
+        state.flush();
+    }
+};
+
 std::vector<cad::EntityPtr> import_pdf_native(const std::filesystem::path& path) {
-    constexpr double pt_to_mm = 25.4 / 72.0;
     const auto utf8_path = path.u8string();
     const std::string filename(reinterpret_cast<const char*>(utf8_path.c_str()), utf8_path.size());
     mupdf::FzDocument document(filename.c_str());
@@ -391,33 +562,15 @@ std::vector<cad::EntityPtr> import_pdf_native(const std::filesystem::path& path)
     for (int page_number = 0; page_number < page_count; ++page_number) {
         mupdf::FzPage page(document, page_number);
         const mupdf::FzRect bounds = page.fz_bound_page();
-        const float width = bounds.x1 - bounds.x0;
-        const float height = bounds.y1 - bounds.y0;
-        mupdf::FzBuffer svg_buffer(1024);
-        mupdf::FzOutput output(svg_buffer);
-        {
-            mupdf::FzDevice device = output.fz_new_svg_device(width, height,
-                                                               FZ_SVG_TEXT_AS_PATH, 0);
-            mupdf::FzCookie cookie;
-            const ::fz_matrix identity{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
-            page.fz_run_page_contents(device, identity, cookie);
-            device.fz_close_device();
-        }
-        output.fz_close_output();
-        unsigned char* data = nullptr;
-        const size_t size = svg_buffer.fz_buffer_storage(&data);
-        QBuffer input;
-        input.setData(reinterpret_cast<const char*>(data), static_cast<qsizetype>(size));
-        if (!input.open(QIODevice::ReadOnly)) continue;
-        QXmlStreamReader xml(&input);
-        auto entities = parse_svg(xml);
-        const std::string layer = "PDF p" + std::to_string(page_number + 1);
-        for (const auto& entity : entities) {
-            entity->scale(pt_to_mm, pt_to_mm, 0.0, 0.0);
-            entity->layer = layer;
-        }
-        result.insert(result.end(), entities.begin(), entities.end());
+        PdfVectorDevice dev;
+        dev.page_height_pt = bounds.y1;
+        dev.current_layer = "PDF p" + std::to_string(page_number + 1);
+        mupdf::FzCookie cookie;
+        const ::fz_matrix identity{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+        page.fz_run_page(dev, identity, cookie);
+        result.insert(result.end(), dev.entities.begin(), dev.entities.end());
     }
+    normalize(result);
     return result;
 }
 #endif
@@ -523,37 +676,38 @@ std::vector<cad::EntityPtr> import_dxf(const std::filesystem::path& path) {
         size_t end = i + 1;
         while (end < pairs.size() && pairs[end].code != 0) ++end;
         std::vector<DxfPair> record(pairs.begin() + static_cast<long>(i + 1), pairs.begin() + static_cast<long>(end));
+        cad::EntityPtr entity;
         if (type == "LINE") {
-            auto entity = std::make_shared<cad::Line>(); entity->x1 = dxf_value(record, 10); entity->y1 = dxf_value(record, 20);
-            entity->x2 = dxf_value(record, 11); entity->y2 = dxf_value(record, 21); entities.push_back(entity);
+            auto e = std::make_shared<cad::Line>(); e->x1 = dxf_value(record, 10); e->y1 = dxf_value(record, 20);
+            e->x2 = dxf_value(record, 11); e->y2 = dxf_value(record, 21); entity = e;
         } else if (type == "CIRCLE") {
-            auto entity = std::make_shared<cad::Circle>(); entity->cx = dxf_value(record, 10); entity->cy = dxf_value(record, 20); entity->radius = dxf_value(record, 40); entities.push_back(entity);
+            auto e = std::make_shared<cad::Circle>(); e->cx = dxf_value(record, 10); e->cy = dxf_value(record, 20); e->radius = dxf_value(record, 40); entity = e;
         } else if (type == "ARC") {
-            auto entity = std::make_shared<cad::Arc>(); entity->cx = dxf_value(record, 10); entity->cy = dxf_value(record, 20); entity->radius = dxf_value(record, 40); entity->start_angle = dxf_value(record, 50); entity->end_angle = dxf_value(record, 51); entities.push_back(entity);
+            auto e = std::make_shared<cad::Arc>(); e->cx = dxf_value(record, 10); e->cy = dxf_value(record, 20); e->radius = dxf_value(record, 40); e->start_angle = dxf_value(record, 50); e->end_angle = dxf_value(record, 51); entity = e;
         } else if (type == "ELLIPSE") {
-            auto entity = std::make_shared<cad::Ellipse>(); entity->cx = dxf_value(record, 10); entity->cy = dxf_value(record, 20);
-            const double mx = dxf_value(record, 11), my = dxf_value(record, 21); entity->rx = std::hypot(mx, my); entity->ry = entity->rx * dxf_value(record, 40, 1.0);
-            entity->rotation = std::atan2(my, mx) * 180.0 / M_PI; entities.push_back(entity);
+            auto e = std::make_shared<cad::Ellipse>(); e->cx = dxf_value(record, 10); e->cy = dxf_value(record, 20);
+            const double mx = dxf_value(record, 11), my = dxf_value(record, 21); e->rx = std::hypot(mx, my); e->ry = e->rx * dxf_value(record, 40, 1.0);
+            e->rotation = std::atan2(my, mx) * 180.0 / M_PI; entity = e;
         } else if (type == "LWPOLYLINE") {
             const auto xs = dxf_values(record, 10), ys = dxf_values(record, 20);
             if (xs.size() >= 2) {
-                auto entity = std::make_shared<cad::Polyline>();
-                for (size_t n = 0; n < xs.size(); ++n) entity->points.push_back({xs[n], n < ys.size() ? ys[n] : 0.0});
-                entity->is_closed = (static_cast<int>(dxf_value(record, 70)) & 1) != 0; entities.push_back(entity);
+                auto e = std::make_shared<cad::Polyline>();
+                for (size_t n = 0; n < xs.size(); ++n) e->points.push_back({xs[n], n < ys.size() ? ys[n] : 0.0});
+                e->is_closed = (static_cast<int>(dxf_value(record, 70)) & 1) != 0; entity = e;
             }
         } else if (type == "POLYLINE") {
-            auto entity = std::make_shared<cad::Polyline>();
+            auto e = std::make_shared<cad::Polyline>();
             size_t cursor = end;
             while (cursor < pairs.size() && pairs[cursor].code == 0 && pairs[cursor].value == "VERTEX") {
                 size_t vertex_end = cursor + 1;
                 while (vertex_end < pairs.size() && pairs[vertex_end].code != 0) ++vertex_end;
                 const std::vector<DxfPair> vertex(pairs.begin() + static_cast<long>(cursor + 1),
                                                   pairs.begin() + static_cast<long>(vertex_end));
-                entity->points.push_back({dxf_value(vertex, 10), dxf_value(vertex, 20)});
+                e->points.push_back({dxf_value(vertex, 10), dxf_value(vertex, 20)});
                 cursor = vertex_end;
             }
-            entity->is_closed = (static_cast<int>(dxf_value(record, 70)) & 1) != 0;
-            if (entity->points.size() >= 2) entities.push_back(entity);
+            e->is_closed = (static_cast<int>(dxf_value(record, 70)) & 1) != 0;
+            if (e->points.size() >= 2) entity = e;
             if (cursor < pairs.size() && pairs[cursor].code == 0 && pairs[cursor].value == "SEQEND") {
                 size_t seq_end = cursor + 1;
                 while (seq_end < pairs.size() && pairs[seq_end].code != 0) ++seq_end;
@@ -564,12 +718,17 @@ std::vector<cad::EntityPtr> import_dxf(const std::filesystem::path& path) {
         } else if (type == "SPLINE") {
             const auto xs = dxf_values(record, 10), ys = dxf_values(record, 20);
             if (xs.size() >= 2) {
-                auto entity = std::make_shared<cad::Polyline>();
+                auto e = std::make_shared<cad::Polyline>();
                 for (size_t n = 0; n < xs.size(); ++n)
-                    entity->points.push_back({xs[n], n < ys.size() ? ys[n] : 0.0});
-                entity->is_closed = (static_cast<int>(dxf_value(record, 70)) & 1) != 0;
-                entities.push_back(entity);
+                    e->points.push_back({xs[n], n < ys.size() ? ys[n] : 0.0});
+                e->is_closed = (static_cast<int>(dxf_value(record, 70)) & 1) != 0;
+                entity = e;
             }
+        }
+        if (entity) {
+            const std::string lay = dxf_string(record, 8);
+            if (!lay.empty()) entity->layer = lay;
+            entities.push_back(entity);
         }
         i = end;
     }
@@ -631,6 +790,54 @@ bool export_svg(const std::filesystem::path& path, const cnc::cad::Document& doc
     }
     output << "</svg>\n";
     return static_cast<bool>(output);
+}
+
+std::shared_ptr<cad::Text> create_filename_label(const std::string& filename,
+                                                 const std::vector<cad::EntityPtr>& entities,
+                                                 const std::string& layer) {
+    if (filename.empty() || entities.empty()) return nullptr;
+
+    BBox bounds{};
+    bool first = true;
+    for (const auto& entity : entities) {
+        if (!entity) continue;
+        const BBox b = entity->bounding_box();
+        if (first) {
+            bounds = b;
+            first = false;
+        } else {
+            bounds.x0 = std::min(bounds.x0, b.x0);
+            bounds.y0 = std::min(bounds.y0, b.y0);
+            bounds.x1 = std::max(bounds.x1, b.x1);
+            bounds.y1 = std::max(bounds.y1, b.y1);
+        }
+    }
+    if (first) return nullptr;
+
+    auto text = std::make_shared<cad::Text>();
+    text->content = filename;
+    text->font_family = "Arial";
+    text->align = "center";
+    text->height = 20.0;
+    text->layer = layer;
+    text->color = {0.0, 0.0, 0.0};
+
+    BBox tb = text->bounding_box();
+    const double current_w = tb.x1 - tb.x0;
+    if (current_w > 1e-4) {
+        const double target_w = 200.0;
+        text->height *= (target_w / current_w);
+        text->invalidate();
+        tb = text->bounding_box();
+    }
+
+    const double center_x = (bounds.x0 + bounds.x1) / 2.0;
+    const double gap = 10.0;
+    text->x = center_x;
+    text->y = (bounds.y0 - gap) - tb.y1;
+    text->invalidate();
+
+    return text;
 }
 
 }  // namespace cnc::io

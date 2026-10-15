@@ -42,4 +42,9 @@ BatchImportResult import_folder(const std::filesystem::path& folder, bool recurs
 // Exporta o desenho para SVG em milimetros, mantendo a origem no canto inferior esquerdo.
 bool export_svg(const std::filesystem::path& path, const cnc::cad::Document& document);
 
+// Cria entidade de texto com o nome do arquivo gravado na parte inferior do desenho, com largura de 200 mm.
+std::shared_ptr<cad::Text> create_filename_label(const std::string& filename,
+                                                 const std::vector<cad::EntityPtr>& entities,
+                                                 const std::string& layer = "Gravação");
+
 }  // namespace cnc::io

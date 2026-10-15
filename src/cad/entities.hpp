@@ -77,7 +77,11 @@ public:
         assign_from(other);
         id = keep_id;
         selected = keep_selected;
+        touch();
     }
+
+    uint64_t version = 1;
+    void touch() { ++version; }
 
 protected:
     virtual void assign_from(const Entity& other) = 0;
@@ -93,6 +97,9 @@ public:
     EntityKind kind() const override { return EntityKind::Line; }
     const char* type_name() const override { return "Line"; }
     Points to_points(int seg = 64) const override;
+    BBox bounding_box() const override {
+        return {std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2)};
+    }
     void translate(double dx, double dy) override;
     void rotate(double deg, double cx, double cy) override;
     void scale(double sx, double sy, double cx, double cy) override;
@@ -169,6 +176,7 @@ public:
     const char* type_name() const override { return "Ellipse"; }
     bool closed() const override { return true; }
     Points to_points(int seg = 64) const override;
+    BBox bounding_box() const override;
     void translate(double dx, double dy) override;
     void rotate(double deg, double cx, double cy) override;
     void scale(double sx, double sy, double cx, double cy) override;
@@ -189,6 +197,7 @@ public:
     EntityKind kind() const override { return EntityKind::Arc; }
     const char* type_name() const override { return "Arc"; }
     Points to_points(int seg = 64) const override;
+    BBox bounding_box() const override;
     void translate(double dx, double dy) override;
     void rotate(double deg, double cx, double cy) override;
     void scale(double sx, double sy, double cx, double cy) override;
@@ -210,6 +219,7 @@ public:
     const char* type_name() const override { return "Rectangle"; }
     bool closed() const override { return true; }
     Points to_points(int seg = 64) const override;
+    BBox bounding_box() const override;
     void translate(double dx, double dy) override;
     void rotate(double deg, double cx, double cy) override;
     void scale(double sx, double sy, double cx, double cy) override;
@@ -231,6 +241,7 @@ public:
     const char* type_name() const override { return "Polyline"; }
     bool closed() const override { return is_closed; }
     Points to_points(int seg = 64) const override { (void)seg; return points; }
+    BBox bounding_box() const override;
     void translate(double dx, double dy) override;
     void rotate(double deg, double cx, double cy) override;
     void scale(double sx, double sy, double cx, double cy) override;
@@ -261,11 +272,12 @@ public:
     // Converte o texto em contornos (usa QPainterPath do Qt). Precisa de um
     // QGuiApplication vivo, como o PySide6 do app original.
     const std::vector<Points>& outline_polygons() const;
-    void invalidate() { cached_.reset(); }
+    void invalidate() { cached_.reset(); touch(); }
     // Fixa os contornos (em vez de pedi-los ao Qt) - para testes que precisam de formas conhecidas.
-    void set_cached_outlines(std::vector<Points> polys) { cached_ = std::move(polys); }
+    void set_cached_outlines(std::vector<Points> polys) { cached_ = std::move(polys); touch(); }
 
     Points to_points(int seg = 64) const override;
+    BBox bounding_box() const override;
     void translate(double dx, double dy) override;
     void rotate(double deg, double cx, double cy) override;
     void scale(double sx, double sy, double cx, double cy) override;

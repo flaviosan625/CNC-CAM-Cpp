@@ -81,6 +81,12 @@ SnapSettings SnapSettings::from_json(const Json& data) {
 std::vector<NotablePoint> entity_points(const cad::Entity& e, int segments) {
     std::vector<NotablePoint> out;
 
+    if (auto* l = cad::as<cad::Line>(e)) {
+        out.push_back({{l->x1, l->y1}, SnapKind::Node});
+        out.push_back({{l->x2, l->y2}, SnapKind::Node});
+        return out;
+    }
+
     if (auto* c = cad::as<cad::Circle>(e)) {
         out.push_back({{c->cx, c->cy}, SnapKind::Center});
         for (double ang : {0.0, 90.0, 180.0, 270.0}) {
@@ -112,21 +118,6 @@ std::vector<NotablePoint> entity_points(const cad::Entity& e, int segments) {
         return out;
     }
 
-    const Points pts = e.to_points(segments);
-    if (pts.empty()) return out;
-
-    if (auto* r = cad::as<cad::Rectangle>(e); r && r->corner_radius <= 0) {
-        const size_t n = pts.size() >= 4 ? 4 : pts.size();
-        for (size_t i = 0; i < n; ++i) out.push_back({pts[i], SnapKind::Node});
-        out.push_back({e.center(), SnapKind::Center});
-        for (size_t i = 0; i < n; ++i) {
-            const Pt& a = pts[i];
-            const Pt& b = pts[(i + 1) % n];
-            out.push_back({{(a.x + b.x) / 2, (a.y + b.y) / 2}, SnapKind::Midpoint});
-        }
-        return out;
-    }
-
     if (auto* pl = cad::as<cad::Polyline>(e)) {
         for (const Pt& p : pl->points) out.push_back({p, SnapKind::Node});
         const long n = static_cast<long>(pl->points.size());
@@ -134,13 +125,35 @@ std::vector<NotablePoint> entity_points(const cad::Entity& e, int segments) {
         for (long i = 0; i < std::max(0L, limite); ++i) {
             const Pt& a = pl->points[static_cast<size_t>(i)];
             const Pt& b = pl->points[static_cast<size_t>((i + 1) % n)];
-            out.push_back({{(a.x + b.x) / 2, (a.y + b.y) / 2}, SnapKind::Midpoint});
+            out.push_back({{(a.x + b.x) / 2.0, (a.y + b.y) / 2.0}, SnapKind::Midpoint});
         }
         if (pl->is_closed) out.push_back({e.center(), SnapKind::Center});
         return out;
     }
 
-    // Linha, texto, cota e o que mais vier: extremidades e meio.
+    if (auto* r = cad::as<cad::Rectangle>(e); r && r->corner_radius <= 0) {
+        const double x1 = r->x, y1 = r->y;
+        const double x2 = r->x + r->width, y2 = r->y + r->height;
+        Pt corners[4] = {{x1, y1}, {x2, y1}, {x2, y2}, {x1, y2}};
+        if (std::fabs(r->rotation) > 1e-9) {
+            const double cx = r->x + r->width / 2.0, cy = r->y + r->height / 2.0;
+            const double a = radians(r->rotation);
+            for (auto& pt : corners) pt = cad::rot_pt(pt.x, pt.y, cx, cy, a);
+        }
+        for (int i = 0; i < 4; ++i) out.push_back({corners[i], SnapKind::Node});
+        out.push_back({r->center(), SnapKind::Center});
+        for (int i = 0; i < 4; ++i) {
+            const Pt& a = corners[i];
+            const Pt& b = corners[(i + 1) % 4];
+            out.push_back({{(a.x + b.x) / 2.0, (a.y + b.y) / 2.0}, SnapKind::Midpoint});
+        }
+        return out;
+    }
+
+    const Points pts = e.to_points(segments);
+    if (pts.empty()) return out;
+
+    // Texto, cota e o que mais vier: extremidades e meio.
     out.push_back({pts.front(), SnapKind::Node});
     out.push_back({pts.back(), SnapKind::Node});
     if (pts.size() > 2) out.push_back({pts[pts.size() / 2], SnapKind::Midpoint});
@@ -149,6 +162,30 @@ std::vector<NotablePoint> entity_points(const cad::Entity& e, int segments) {
 }
 
 std::optional<std::pair<Pt, double>> closest_on_entity(const cad::Entity& e, double x, double y, int segments) {
+    if (auto* pl = cad::as<cad::Polyline>(e)) {
+        const auto& pts = pl->points;
+        if (pts.size() < 2) return std::nullopt;
+        std::optional<Pt> best;
+        double best_d = std::numeric_limits<double>::infinity();
+        const size_t n = pts.size();
+        const size_t count = e.closed() ? n : n - 1;
+        for (size_t i = 0; i < count; ++i) {
+            const Pt& a = pts[i];
+            const Pt& b = pts[(i + 1) % n];
+            const double dx = b.x - a.x, dy = b.y - a.y;
+            const double ll = dx * dx + dy * dy;
+            if (ll < 1e-12) continue;
+            const double t = std::max(0.0, std::min(1.0, ((x - a.x) * dx + (y - a.y) * dy) / ll));
+            const double px = a.x + t * dx, py = a.y + t * dy;
+            const double d = hypot(x - px, y - py);
+            if (d < best_d) {
+                best = Pt{px, py};
+                best_d = d;
+            }
+        }
+        if (!best) return std::nullopt;
+        return std::make_pair(*best, best_d);
+    }
     const Points pts = e.to_points(segments);
     if (pts.size() < 2) return std::nullopt;
     std::optional<Pt> best;
@@ -274,10 +311,14 @@ std::optional<SnapResult> SnapEngine::snap(double wx, double wy, double px_per_m
     std::vector<SnapResult> candidatos;
     std::vector<cad::EntityPtr> perto;
 
-    if (s.geometry) {
-        for (const cad::EntityPtr& e : visible_entities(exclude)) {
+    if (s.geometry && document) {
+        for (const cad::EntityPtr& e : document->entities) {
             const BBox b = e->bounding_box();
-            if (!(b.x0 - raio <= wx && wx <= b.x1 + raio && b.y0 - raio <= wy && wy <= b.y1 + raio)) continue;
+            if (wx < b.x0 - raio || wx > b.x1 + raio || wy < b.y0 - raio || wy > b.y1 + raio) continue;
+            if (!exclude.empty() && exclude.count(e->id)) continue;
+            const cad::Layer* camada = document->get_layer(e->layer);
+            if (camada && !camada->visible) continue;
+
             perto.push_back(e);
             for (const auto& [ponto, tipo] : entity_points(*e)) {
                 if (!wants(tipo)) continue;

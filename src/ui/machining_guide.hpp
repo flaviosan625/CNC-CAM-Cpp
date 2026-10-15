@@ -93,5 +93,6 @@ private:
 QWidget* guidePlayback(MachiningGuide* guide, QWidget* parent = nullptr);
 QWidget* guideDemoControls(MachiningGuide* guide, QWidget* parent = nullptr);
 void showGuideGallery(QWidget* parent = nullptr);
+const QImage& woodTexture();
 
 } // namespace cnc::ui

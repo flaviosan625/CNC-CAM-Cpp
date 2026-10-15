@@ -10,6 +10,7 @@
 #include <tuple>
 
 #include <QAction>
+#include <QApplication>
 #include <QAbstractItemView>
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -53,6 +54,12 @@
 #include <QStatusBar>
 #include <QTabBar>
 #include <QStackedWidget>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QHeaderView>
+#include <QTabWidget>
+#include <QClipboard>
+#include <QPlainTextEdit>
 #include <QTextEdit>
 #include <QTextStream>
 #include <QTimer>
@@ -66,6 +73,7 @@
 #include "ui/icons.hpp"
 #include "ui/layer_manager_dialog.hpp"
 #include "ui/quick_edit.hpp"
+#include "ui/safe_inputs.hpp"
 #include "cad/layout.hpp"
 #include "cam/gcode.hpp"
 #include "cam/job_sheet.hpp"
@@ -159,98 +167,479 @@ private:
 
 using InteractiveGuideWidget = ui::MachiningGuide;
 
-QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& operations) {
-    QImage image(960, 340, QImage::Format_ARGB32_Premultiplied);
-    image.fill(QColor("white"));
+}  // namespace
+
+QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& operations,
+                                const cad::MaterialSetup* material) {
+    QImage image(980, 300, QImage::Format_ARGB32_Premultiplied);
+    image.fill(QColor("#f8fafc"));
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
 
-    std::optional<BBox> bounds;
+    std::optional<BBox> cut_bounds;
     for (const auto& operation : operations) {
         if (!operation.path) continue;
         for (const cam::Move& move : operation.path->moves) {
             if (!move.cutting()) continue;
-            if (!bounds) bounds = BBox{move.x, move.y, move.x, move.y};
+            if (!cut_bounds) cut_bounds = BBox{move.x, move.y, move.x, move.y};
             else {
-                bounds->x0 = std::min(bounds->x0, move.x);
-                bounds->y0 = std::min(bounds->y0, move.y);
-                bounds->x1 = std::max(bounds->x1, move.x);
-                bounds->y1 = std::max(bounds->y1, move.y);
+                cut_bounds->x0 = std::min(cut_bounds->x0, move.x);
+                cut_bounds->y0 = std::min(cut_bounds->y0, move.y);
+                cut_bounds->x1 = std::max(cut_bounds->x1, move.x);
+                cut_bounds->y1 = std::max(cut_bounds->y1, move.y);
             }
         }
     }
-    if (!bounds) {
+
+    const bool has_material = (material && material->width > 0.0 && material->height > 0.0);
+    if (!cut_bounds && !has_material) {
         painter.setPen(QColor("#536579"));
-        painter.drawText(image.rect(), Qt::AlignCenter, "Sem movimentos de corte calculados");
+        painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
+        painter.drawText(image.rect(), Qt::AlignCenter, "Sem percursos de corte calculados");
         painter.end();
         return image;
     }
 
-    const double width_mm = std::max(0.01, bounds->x1 - bounds->x0);
-    const double height_mm = std::max(0.01, bounds->y1 - bounds->y0);
-    const QRectF area(82, 40, 780, 230);
+    double mat_x0 = 0.0, mat_y0 = 0.0, mat_x1 = 0.0, mat_y1 = 0.0;
+    if (has_material) {
+        mat_x1 = material->width;
+        mat_y1 = material->height;
+        if (material->use_origin_offset) {
+            mat_x0 += material->origin_offset_x;
+            mat_x1 += material->origin_offset_x;
+            mat_y0 += material->origin_offset_y;
+            mat_y1 += material->origin_offset_y;
+        }
+        if (material->zero_x == "center") {
+            const double hw = material->width / 2.0;
+            mat_x0 -= hw; mat_x1 -= hw;
+        } else if (material->zero_x == "right") {
+            mat_x0 -= material->width; mat_x1 -= material->width;
+        }
+        if (material->zero_y == "center") {
+            const double hh = material->height / 2.0;
+            mat_y0 -= hh; mat_y1 -= hh;
+        } else if (material->zero_y == "top") {
+            mat_y0 -= material->height; mat_y1 -= material->height;
+        }
+    }
+
+    // Callout Balloon at top
+    const double cut_w = cut_bounds ? (cut_bounds->x1 - cut_bounds->x0) : 0.0;
+    const double cut_h = cut_bounds ? (cut_bounds->y1 - cut_bounds->y0) : 0.0;
+    const double area_m2 = has_material ? ((material->width * material->height) / 1000000.0)
+                                        : ((cut_w * cut_h) / 1000000.0);
+    const QString zero_z_str = (material && material->zero_z == "bottom") ? "BASE DA MESA" : "TOPO DA CHAPA";
+
+    const QRectF balloon_rect(12, 5, image.width() - 24, 28);
+    QPainterPath balloon_path;
+    balloon_path.addRoundedRect(balloon_rect, 14, 14);
+    const double mid_x = image.width() / 2.0;
+    balloon_path.moveTo(mid_x - 7, balloon_rect.bottom());
+    balloon_path.lineTo(mid_x, balloon_rect.bottom() + 5);
+    balloon_path.lineTo(mid_x + 7, balloon_rect.bottom());
+    balloon_path.closeSubpath();
+
+    QLinearGradient b_grad(balloon_rect.topLeft(), balloon_rect.bottomLeft());
+    b_grad.setColorAt(0.0, QColor("#0f172a"));
+    b_grad.setColorAt(1.0, QColor("#1e293b"));
+    painter.setBrush(b_grad);
+    painter.setPen(QPen(QColor("#38bdf8"), 1.2));
+    painter.drawPath(balloon_path);
+
+    painter.setFont(QFont("Segoe UI", 7.5, QFont::Bold));
+    painter.setPen(QColor("#ffffff"));
+    QString balloon_text;
+    if (has_material) {
+        balloon_text = QString("🏷 CHAPA: %1 × %2 mm (%3 m²)  |  📐 CORTE: %4 × %5 mm  |  📏 ESPESSURA: %6 mm  |  🎯 ZERO Z: %7")
+                           .arg(material->width, 0, 'f', 1)
+                           .arg(material->height, 0, 'f', 1)
+                           .arg(area_m2, 0, 'f', 3)
+                           .arg(cut_w, 0, 'f', 1)
+                           .arg(cut_h, 0, 'f', 1)
+                           .arg(material->thickness, 0, 'f', 1)
+                           .arg(zero_z_str);
+    } else {
+        balloon_text = QString("🏷 ENVELOPE DE CORTE: %1 × %2 mm  |  ÁREA APROXIMADA: %3 m²")
+                           .arg(cut_w, 0, 'f', 1)
+                           .arg(cut_h, 0, 'f', 1)
+                           .arg(area_m2, 0, 'f', 3);
+    }
+    painter.drawText(balloon_rect, Qt::AlignCenter, balloon_text);
+
+    // LEFT CARD: 2.5D Real workpiece and cuts
+    const QRectF left_card(12, 38, 626, 246);
+    painter.setPen(QPen(QColor("#cbd5e1"), 1.0));
+    painter.setBrush(Qt::white);
+    painter.drawRoundedRect(left_card, 6, 6);
+
+    // Technical grid inside left card
+    painter.setPen(QPen(QColor("#f1f5f9"), 0.8));
+    for (int gx = static_cast<int>(left_card.left()) + 20; gx < static_cast<int>(left_card.right()) - 10; gx += 26) {
+        painter.drawLine(gx, static_cast<int>(left_card.top()) + 6, gx, static_cast<int>(left_card.bottom()) - 6);
+    }
+    for (int gy = static_cast<int>(left_card.top()) + 10; gy < static_cast<int>(left_card.bottom()) - 6; gy += 26) {
+        painter.drawLine(static_cast<int>(left_card.left()) + 6, gy, static_cast<int>(left_card.right()) - 6, gy);
+    }
+
+    // Left card badge
+    const QRectF left_badge(left_card.left() + 6, left_card.top() + 6, 186, 15);
+    painter.setBrush(QColor("#e2e8f0"));
+    painter.setPen(QPen(QColor("#cbd5e1"), 0.8));
+    painter.drawRoundedRect(left_badge, 3, 3);
+    painter.setPen(QColor("#334155"));
+    painter.setFont(QFont("Segoe UI", 6.6, QFont::Bold));
+    painter.drawText(left_badge, Qt::AlignCenter, "VISTA 2.5D · CHAPA E PERCURSO REAL");
+
+    // Coordinates mapping for left card
+    BBox total_bounds = cut_bounds.value_or(BBox{mat_x0, mat_y0, mat_x1, mat_y1});
+    if (has_material) {
+        total_bounds.x0 = std::min(total_bounds.x0, mat_x0);
+        total_bounds.y0 = std::min(total_bounds.y0, mat_y0);
+        total_bounds.x1 = std::max(total_bounds.x1, mat_x1);
+        total_bounds.y1 = std::max(total_bounds.y1, mat_y1);
+    }
+    const double width_mm = std::max(0.01, total_bounds.x1 - total_bounds.x0);
+    const double height_mm = std::max(0.01, total_bounds.y1 - total_bounds.y0);
+
+    const QRectF area(left_card.left() + 50, left_card.top() + 26, left_card.width() - 86, left_card.height() - 56);
     const double scale = std::min(area.width() / width_mm, area.height() / height_mm);
     const double drawn_width = width_mm * scale;
     const double drawn_height = height_mm * scale;
     const double left = area.center().x() - drawn_width / 2.0;
     const double top = area.center().y() - drawn_height / 2.0;
-    const QRectF extent(left, top, drawn_width, drawn_height);
 
-    painter.setPen(QPen(QColor("#8294a6"), 1.2, Qt::DashLine));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRect(extent);
-    const std::array<QColor, 7> colors = {QColor("#1769aa"), QColor("#d45532"), QColor("#27825a"),
-                                          QColor("#8a54a2"), QColor("#bc7b16"), QColor("#16888a"),
-                                          QColor("#ba3d6c")};
+    auto to_screen = [&](double x, double y) -> QPointF {
+        return QPointF(left + (x - total_bounds.x0) * scale,
+                       top + (total_bounds.y1 - y) * scale);
+    };
+
+    // Draw realistic material sheet with wood texture & bevel
+    if (has_material) {
+        const QPointF mat_tl = to_screen(mat_x0, mat_y1);
+        const QPointF mat_br = to_screen(mat_x1, mat_y0);
+        const QRectF mat_rect(mat_tl, mat_br);
+
+        // Drop shadow
+        painter.setBrush(QColor(15, 23, 42, 35));
+        painter.setPen(Qt::NoPen);
+        painter.drawRoundedRect(mat_rect.translated(4, 5), 5, 5);
+
+        // Wood texture with clip
+        painter.save();
+        QPainterPath mat_path;
+        mat_path.addRoundedRect(mat_rect, 5, 5);
+        painter.setClipPath(mat_path);
+        painter.drawImage(mat_rect, ui::woodTexture());
+        QLinearGradient wood_lit(mat_rect.topLeft(), mat_rect.bottomRight());
+        wood_lit.setColorAt(0.0, QColor(255, 248, 230, 45));
+        wood_lit.setColorAt(1.0, QColor(50, 30, 15, 55));
+        painter.fillPath(mat_path, wood_lit);
+        painter.restore();
+
+        // Bevel border
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor("#a88252"), 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawRoundedRect(mat_rect, 5, 5);
+
+        // Usable margin (dashed safety line)
+        painter.setPen(QPen(QColor("#e8d5b5"), 1.0, Qt::DashLine));
+        painter.drawRoundedRect(mat_rect.adjusted(3, 3, -3, -3), 4, 4);
+
+        // Tag on sheet (top right of sheet to avoid bottom-left origin tripod)
+        const QRectF tag_rect(mat_rect.right() - 135, mat_rect.top() + 5, 130, 13);
+        painter.setBrush(QColor(15, 23, 42, 170));
+        painter.setPen(Qt::NoPen);
+        painter.drawRoundedRect(tag_rect, 3, 3);
+        painter.setPen(QColor("#f8fafc"));
+        painter.setFont(QFont("Segoe UI", 6.2, QFont::Bold));
+        painter.drawText(tag_rect, Qt::AlignCenter,
+                         QString("CHAPA %1×%2×%3 mm").arg(material->width, 0, 'f', 0).arg(material->height, 0, 'f', 0).arg(material->thickness, 0, 'f', 1));
+    }
+
+    // Cutting envelope
+    if (cut_bounds) {
+        const QPointF cut_tl = to_screen(cut_bounds->x0, cut_bounds->y1);
+        const QPointF cut_br = to_screen(cut_bounds->x1, cut_bounds->y0);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor("#0284c7"), 1.0, Qt::DashLine));
+        painter.drawRect(QRectF(cut_tl, cut_br));
+    }
+
+    // Toolpath cuts with Kerf, Centerline, and Feed Direction Arrows
+    const std::array<QColor, 7> colors = {
+        QColor("#00e5ff"), QColor("#ea580c"), QColor("#16a34a"),
+        QColor("#9333ea"), QColor("#d97706"), QColor("#0d9488"),
+        QColor("#e11d48")
+    };
+
+    struct ArrowMark {
+        QPointF tip;
+        double dx, dy;
+    };
+    std::vector<ArrowMark> arrows;
+
     for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
         const auto* path = operations[op_index].path;
         if (!path) continue;
+        const cam::Tool* tool = operations[op_index].job ? &operations[op_index].job->tool : nullptr;
+        const double diam = tool ? tool->diameter : 4.0;
+        const double kerf_px = std::clamp(diam * scale, 2.5, 18.0);
+
         QPainterPath cut_path;
-        bool connected = false;
+        QPainterPath rapid_path;
+        QPointF start_cut_point;
+        bool has_start_cut = false;
+        bool in_cut = false;
+        QPointF last_cut_point;
+        double segment_accum = 0.0;
+
         for (const cam::Move& move : path->moves) {
-            if (!move.cutting()) {
-                connected = false;
-                continue;
+            const QPointF point = to_screen(move.x, move.y);
+            if (move.cutting()) {
+                if (!in_cut) {
+                    cut_path.moveTo(point);
+                    if (!has_start_cut) {
+                        start_cut_point = point;
+                        has_start_cut = true;
+                    }
+                    segment_accum = 0.0;
+                } else {
+                    cut_path.lineTo(point);
+                    const double seg_len = QLineF(last_cut_point, point).length();
+                    segment_accum += seg_len;
+                    if (seg_len > 4.0 && segment_accum >= 45.0) {
+                        const double dx = (point.x() - last_cut_point.x()) / seg_len;
+                        const double dy = (point.y() - last_cut_point.y()) / seg_len;
+                        const QPointF mid = (last_cut_point + point) / 2.0;
+                        arrows.push_back({mid, dx, dy});
+                        segment_accum = 0.0;
+                    }
+                }
+                last_cut_point = point;
+                in_cut = true;
+            } else {
+                if (in_cut) rapid_path.moveTo(cut_path.currentPosition());
+                else if (rapid_path.elementCount() == 0) rapid_path.moveTo(point);
+                rapid_path.lineTo(point);
+                in_cut = false;
             }
-            const QPointF point(left + (move.x - bounds->x0) * scale,
-                                top + (bounds->y1 - move.y) * scale);
-            if (connected) cut_path.lineTo(point);
-            else cut_path.moveTo(point);
-            connected = true;
         }
-        painter.setPen(QPen(colors[op_index % colors.size()], 1.8, Qt::SolidLine,
-                            Qt::RoundCap, Qt::RoundJoin));
+
+        // Rapid positioning (G0)
+        painter.setPen(QPen(QColor("#94a3b8"), 0.8, Qt::DashLine));
+        painter.drawPath(rapid_path);
+
+        // Sunken channel groove (routed into wood)
+        painter.setPen(QPen(QColor(25, 18, 12, 140), kerf_px, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawPath(cut_path);
+
+        // Kerf inner glow
+        QColor op_color = colors[op_index % colors.size()];
+        QColor kerf_glow = op_color;
+        kerf_glow.setAlpha(65);
+        painter.setPen(QPen(kerf_glow, kerf_px * 0.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawPath(cut_path);
+
+        // Centerline vector
+        painter.setPen(QPen(op_color, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawPath(cut_path);
+
+        // Plunge/Entry marker
+        if (has_start_cut) {
+            painter.setBrush(QColor("#22c55e"));
+            painter.setPen(QPen(Qt::white, 1.2));
+            painter.drawEllipse(start_cut_point, 3.5, 3.5);
+        }
     }
 
-    painter.setPen(QPen(QColor("#40566c"), 1.0));
-    const qreal dim_y = extent.bottom() + 24.0;
-    painter.drawLine(QPointF(extent.left(), extent.bottom() + 3), QPointF(extent.left(), dim_y + 3));
-    painter.drawLine(QPointF(extent.right(), extent.bottom() + 3), QPointF(extent.right(), dim_y + 3));
-    painter.drawLine(QPointF(extent.left(), dim_y), QPointF(extent.right(), dim_y));
-    painter.drawLine(QPointF(extent.left(), dim_y), QPointF(extent.left() + 7, dim_y - 4));
-    painter.drawLine(QPointF(extent.left(), dim_y), QPointF(extent.left() + 7, dim_y + 4));
-    painter.drawLine(QPointF(extent.right(), dim_y), QPointF(extent.right() - 7, dim_y - 4));
-    painter.drawLine(QPointF(extent.right(), dim_y), QPointF(extent.right() - 7, dim_y + 4));
-    painter.fillRect(QRectF(extent.center().x() - 44, dim_y - 10, 88, 20), Qt::white);
-    painter.drawText(QRectF(extent.center().x() - 55, dim_y - 9, 110, 18), Qt::AlignCenter,
-                     QString("X  %1 mm").arg(width_mm, 0, 'f', 2));
+    // Direction arrows along cuts
+    for (const auto& arr : arrows) {
+        const double nx = -arr.dy;
+        const double ny = arr.dx;
+        QPointF w1 = arr.tip - QPointF(arr.dx * 5.5 - nx * 3.5, arr.dy * 5.5 - ny * 3.5);
+        QPointF w2 = arr.tip - QPointF(arr.dx * 5.5 + nx * 3.5, arr.dy * 5.5 + ny * 3.5);
+        painter.setPen(QPen(QColor("#ffffff"), 1.3, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(arr.tip, w1);
+        painter.drawLine(arr.tip, w2);
+    }
 
-    painter.save();
-    painter.translate(extent.right() + 30, extent.center().y());
-    painter.rotate(-90);
-    painter.fillRect(QRectF(-55, -10, 110, 20), Qt::white);
-    painter.drawText(QRectF(-55, -9, 110, 18), Qt::AlignCenter,
-                     QString("Y  %1 mm").arg(height_mm, 0, 'f', 2));
-    painter.restore();
-    painter.setPen(QColor("#536579"));
-    painter.drawText(QRectF(12, 310, image.width() - 24, 18), Qt::AlignLeft | Qt::AlignVCenter,
-                     "Envelope do percurso calculado; medidas em milimetros.");
+    // 3D Origin Tripod at (mat_x0, mat_y0)
+    if (has_material) {
+        const QPointF origin_screen = to_screen(mat_x0, mat_y0);
+        if (origin_screen.x() >= left_card.left() && origin_screen.x() <= left_card.right() &&
+            origin_screen.y() >= left_card.top() && origin_screen.y() <= left_card.bottom()) {
+            // Target bullseye
+            painter.setBrush(QColor("#ef4444"));
+            painter.setPen(QPen(Qt::white, 1.2));
+            painter.drawEllipse(origin_screen, 4.5, 4.5);
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(QColor("#ef4444"), 0.8));
+            painter.drawEllipse(origin_screen, 8.0, 8.0);
+
+            // X Axis Arrow (Red)
+            painter.setPen(QPen(QColor("#dc2626"), 2.0));
+            painter.drawLine(origin_screen, origin_screen + QPointF(24, 0));
+            QPolygonF x_arr;
+            x_arr << origin_screen + QPointF(24, 0)
+                  << origin_screen + QPointF(19, -3)
+                  << origin_screen + QPointF(19, 3);
+            painter.setBrush(QColor("#dc2626"));
+            painter.drawPolygon(x_arr);
+
+            // Y Axis Arrow (Green)
+            painter.setPen(QPen(QColor("#16a34a"), 2.0));
+            painter.drawLine(origin_screen, origin_screen - QPointF(0, 24));
+            QPolygonF y_arr;
+            y_arr << origin_screen - QPointF(0, 24)
+                  << origin_screen - QPointF(3, -19)
+                  << origin_screen + QPointF(3, -19);
+            painter.setBrush(QColor("#16a34a"));
+            painter.drawPolygon(y_arr);
+
+            // Z Axis Arrow (Blue - 3D isometric projection up-left)
+            painter.setPen(QPen(QColor("#2563eb"), 2.0));
+            painter.drawLine(origin_screen, origin_screen + QPointF(-14, -14));
+            QPolygonF z_arr;
+            z_arr << origin_screen + QPointF(-14, -14)
+                  << origin_screen + QPointF(-9, -15)
+                  << origin_screen + QPointF(-15, -9);
+            painter.setBrush(QColor("#2563eb"));
+            painter.drawPolygon(z_arr);
+
+            painter.setFont(QFont("Segoe UI", 6.8, QFont::Bold));
+            painter.setPen(QColor("#dc2626"));
+            painter.drawText(origin_screen + QPointF(26, 4), "X+");
+            painter.setPen(QColor("#16a34a"));
+            painter.drawText(origin_screen + QPointF(-6, -26), "Y+");
+            painter.setPen(QColor("#2563eb"));
+            painter.drawText(origin_screen + QPointF(-24, -16), "Z+");
+            painter.setPen(QColor("#0f172a"));
+            painter.drawText(origin_screen + QPointF(5, 12), "X0,Y0");
+        }
+    }
+
+    // Cotas Técnicas (Dimensions)
+    auto draw_h_dim = [&](double x_start, double x_end, double y_screen, const QString& label) {
+        painter.setPen(QPen(QColor("#334155"), 1.1));
+        painter.drawLine(QPointF(x_start, y_screen), QPointF(x_end, y_screen));
+        QPolygonF left_arrow;
+        left_arrow << QPointF(x_start, y_screen)
+                   << QPointF(x_start + 5, y_screen - 2.2)
+                   << QPointF(x_start + 5, y_screen + 2.2);
+        painter.setBrush(QColor("#334155"));
+        painter.drawPolygon(left_arrow);
+        QPolygonF right_arrow;
+        right_arrow << QPointF(x_end, y_screen)
+                    << QPointF(x_end - 5, y_screen - 2.2)
+                    << QPointF(x_end - 5, y_screen + 2.2);
+        painter.drawPolygon(right_arrow);
+        const double mid_pt_x = (x_start + x_end) / 2.0;
+        const QRectF pill_rect(mid_pt_x - 48, y_screen - 8, 96, 16);
+        painter.setBrush(Qt::white);
+        painter.setPen(QPen(QColor("#cbd5e1"), 1.0));
+        painter.drawRoundedRect(pill_rect, 3, 3);
+        painter.setPen(QColor("#0f172a"));
+        painter.setFont(QFont("Segoe UI", 6.8, QFont::Bold));
+        painter.drawText(pill_rect, Qt::AlignCenter, label);
+    };
+
+    auto draw_v_dim = [&](double y_start, double y_end, double x_screen, const QString& label) {
+        painter.setPen(QPen(QColor("#334155"), 1.1));
+        painter.drawLine(QPointF(x_screen, y_start), QPointF(x_screen, y_end));
+        QPolygonF top_arrow;
+        top_arrow << QPointF(x_screen, y_start)
+                  << QPointF(x_screen - 2.2, y_start + 5)
+                  << QPointF(x_screen + 2.2, y_start + 5);
+        painter.setBrush(QColor("#334155"));
+        painter.drawPolygon(top_arrow);
+        QPolygonF bottom_arrow;
+        bottom_arrow << QPointF(x_screen, y_end)
+                     << QPointF(x_screen - 2.2, y_end - 5)
+                     << QPointF(x_screen + 2.2, y_end - 5);
+        painter.drawPolygon(bottom_arrow);
+        painter.save();
+        const double mid_pt_y = (y_start + y_end) / 2.0;
+        painter.translate(x_screen, mid_pt_y);
+        painter.rotate(-90);
+        const QRectF pill_rect(-48, -8, 96, 16);
+        painter.setBrush(Qt::white);
+        painter.setPen(QPen(QColor("#cbd5e1"), 1.0));
+        painter.drawRoundedRect(pill_rect, 3, 3);
+        painter.setPen(QColor("#0f172a"));
+        painter.setFont(QFont("Segoe UI", 6.8, QFont::Bold));
+        painter.drawText(pill_rect, Qt::AlignCenter, label);
+        painter.restore();
+    };
+
+    if (cut_bounds) {
+        const QPointF cut_tl = to_screen(cut_bounds->x0, cut_bounds->y1);
+        const QPointF cut_br = to_screen(cut_bounds->x1, cut_bounds->y0);
+        draw_h_dim(cut_tl.x(), cut_br.x(), std::min(left_card.bottom() - 14.0, cut_br.y() + 14.0),
+                   QString("Corte X %1 mm").arg(cut_w, 0, 'f', 1));
+        draw_v_dim(cut_tl.y(), cut_br.y(), std::min(left_card.right() - 16.0, cut_br.x() + 14.0),
+                   QString("Corte Y %1 mm").arg(cut_h, 0, 'f', 1));
+    }
+
+    // RIGHT CARD: Card 08 Material Setup 3D (padrão de anexo)
+    const QRectF right_card(646, 38, 322, 246);
+    QLinearGradient card_grad(right_card.topLeft(), right_card.bottomLeft());
+    card_grad.setColorAt(0.0, QColor("#1e293b"));
+    card_grad.setColorAt(1.0, QColor("#0f172a"));
+    painter.setBrush(card_grad);
+    painter.setPen(QPen(QColor("#334155"), 1.0));
+    painter.drawRoundedRect(right_card, 6, 6);
+
+    // Card 08 Header Badge
+    const QRectF right_badge(right_card.left() + 6, right_card.top() + 6, 180, 15);
+    painter.setBrush(QColor("#0284c7"));
+    painter.setPen(Qt::NoPen);
+    painter.drawRoundedRect(right_badge, 3, 3);
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Segoe UI", 6.6, QFont::Bold));
+    painter.drawText(right_badge, Qt::AlignCenter, "08 · SETUP DO MATERIAL (3D ISO)");
+
+    // Render Card 08 via ui::MachiningGuide
+    ui::GuideModel guide_model;
+    if (material) {
+        guide_model.setValue("width", material->width);
+        guide_model.setValue("height", material->height);
+        guide_model.setValue("thickness", material->thickness);
+        guide_model.setValue("clearance", material->clearance_z);
+        const int ox = (material->zero_x == "center" ? 1 : (material->zero_x == "right" ? 2 : 0));
+        const int oy = (material->zero_y == "center" ? 1 : (material->zero_y == "top" ? 2 : 0));
+        guide_model.setValue("originX", ox);
+        guide_model.setValue("originY", oy);
+        guide_model.setValue("zeroZ", material->zero_z == "bottom" ? 1 : 0);
+    } else {
+        guide_model.setValue("width", cut_bounds ? (cut_bounds->x1 - cut_bounds->x0) : 100.0);
+        guide_model.setValue("height", cut_bounds ? (cut_bounds->y1 - cut_bounds->y0) : 100.0);
+        guide_model.setValue("thickness", 15.0);
+        guide_model.setValue("clearance", 10.0);
+        guide_model.setValue("originX", 0);
+        guide_model.setValue("originY", 0);
+        guide_model.setValue("zeroZ", 0);
+    }
+    ui::MachiningGuide guide("08_material", nullptr, &guide_model);
+    guide.resize(640, 440);
+    QImage card_img(640, 440, QImage::Format_ARGB32_Premultiplied);
+    card_img.fill(Qt::transparent);
+    guide.render(&card_img);
+    painter.drawImage(QRectF(right_card.left() + 4, right_card.top() + 24, right_card.width() - 8, right_card.height() - 28),
+                      card_img);
+
+    // Bottom footnote
+    painter.setFont(QFont("Segoe UI", 6.8));
+    painter.setPen(QColor("#64748b"));
+    painter.drawText(QRectF(14, image.height() - 14, image.width() - 28, 12),
+                     Qt::AlignLeft | Qt::AlignVCenter,
+                     "Padrão técnico CNC · Vetores reais, canais com diâmetro de fresa (kerf), setas de avanço e setup 3D de referência. Confirme medidas e fixação antes de usinar.");
+
     painter.end();
     return image;
 }
-
-}  // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(document_, undo_stack_) {
     setWindowTitle("CNC-CAM");
@@ -424,11 +813,12 @@ void MainWindow::show_3d_view() {
 
 void MainWindow::create_toolpath_panel() {
     auto* dock = new QDockWidget("Percursos", this);
+    toolpath_dock_ = dock;
     dock->setObjectName("ToolpathPanel");
     dock->setAllowedAreas(Qt::RightDockWidgetArea);
     dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     dock->setTitleBarWidget(new QWidget(dock));
-    dock->setMinimumWidth(286);
+    dock->setMinimumWidth(44);
 
     auto* shell = new QWidget(dock);
     auto* shell_layout = new QHBoxLayout(shell);
@@ -437,60 +827,47 @@ void MainWindow::create_toolpath_panel() {
 
     auto* rail = new QWidget(shell);
     rail->setObjectName("RightToolRail");
-    rail->setFixedWidth(50);
+    rail->setFixedWidth(44);
     auto* rail_layout = new QVBoxLayout(rail);
-    rail_layout->setContentsMargins(4, 6, 4, 8);
-    rail_layout->setSpacing(4);
-    auto* collapse = new QToolButton(rail);
-    collapse->setObjectName("RightRailToggle");
-    collapse->setFixedSize(40, 30);
-    collapse->setText("‹");
-    collapse->setToolTip("Mostrar ou ocultar o painel direito");
-    rail_layout->addWidget(collapse);
-    auto* rail_sep = new QFrame(rail);
-    rail_sep->setObjectName("RightToolRailSep");
-    rail_sep->setFrameShape(QFrame::NoFrame);
-    rail_sep->setFixedHeight(1);
-    rail_layout->addWidget(rail_sep);
+    rail_layout->setContentsMargins(2, 6, 2, 8);
+    rail_layout->setSpacing(5);
+
+    // 3 mini abas recolhidas no canto direito (padrão Illustrator)
+    // Aba 1: Seleção / Propriedades
     auto* selection_button = new QToolButton(rail);
     selection_button->setObjectName("RightRailButton");
     selection_button->setCheckable(true);
-    selection_button->setChecked(true);
-    selection_button->setFixedSize(40, 34);
+    selection_button->setChecked(false);
+    selection_button->setFixedSize(38, 34);
     selection_button->setIcon(ui::get_icon("select"));
     selection_button->setIconSize(QSize(22, 22));
-    selection_button->setToolTip("Selecao");
+    selection_button->setToolTip("Seleção e Propriedades");
     rail_layout->addWidget(selection_button);
     selection_nav_button_ = selection_button;
+
+    // Aba 2: Percursos CAM
     auto* toolpath_button = new QToolButton(rail);
     toolpath_button->setObjectName("RightRailButton");
     toolpath_button->setCheckable(true);
-    toolpath_button->setFixedSize(40, 34);
+    toolpath_button->setFixedSize(38, 34);
     toolpath_button->setIcon(ui::get_icon("tp_recalc"));
     toolpath_button->setIconSize(QSize(22, 22));
     toolpath_button->setToolTip("Percursos CAM");
     rail_layout->addWidget(toolpath_button);
     toolpath_nav_button_ = toolpath_button;
+
+    // Aba 3: Simulação
     auto* simulation_button = new QToolButton(rail);
     simulation_button->setObjectName("RightRailButton");
     simulation_button->setCheckable(true);
-    simulation_button->setFixedSize(40, 34);
+    simulation_button->setFixedSize(38, 34);
     simulation_button->setIcon(ui::get_icon("tp_preview"));
     simulation_button->setIconSize(QSize(22, 22));
-    simulation_button->setToolTip(QString::fromUtf8("Simula\xC3\xA7\xC3\xA3o do percurso"));
+    simulation_button->setToolTip(QString::fromUtf8("Simulação do percurso"));
     rail_layout->addWidget(simulation_button);
     simulation_nav_button_ = simulation_button;
-    auto* automatic_button = new QToolButton(rail);
-    automatic_button->setObjectName("RightRailButton");
-    automatic_button->setCheckable(true);
-    automatic_button->setFixedSize(40, 34);
-    automatic_button->setIcon(ui::get_icon("tp_template"));
-    automatic_button->setIconSize(QSize(22, 22));
-    automatic_button->setToolTip(QString::fromUtf8("Corte autom\xC3\xA1tico por material"));
-    rail_layout->addWidget(automatic_button);
-    automatic_nav_button_ = automatic_button;
+
     rail_layout->addStretch();
-    shell_layout->addWidget(rail);
 
     auto* stack = new QStackedWidget(shell);
     right_panel_stack_ = stack;
@@ -707,6 +1084,14 @@ void MainWindow::create_toolpath_panel() {
     layout->addWidget(save_gcode_button);
     connect(save_gcode_button, &QPushButton::clicked, this, &MainWindow::export_gcode);
 
+    auto* work_order_button = new QPushButton("Ordem de Serviço (PDF)", toolpath_page);
+    work_order_button->setIcon(ui::get_icon("tp_sheet"));
+    work_order_button->setIconSize(QSize(20, 20));
+    work_order_button->setMinimumHeight(38);
+    work_order_button->setToolTip("Visualizar detalhes da usinagem, medidas, material e baixar Ordem de Serviço em PDF");
+    layout->addWidget(work_order_button);
+    connect(work_order_button, &QPushButton::clicked, this, &MainWindow::export_setup_sheet);
+
     connect(toolpath_list_, &QListWidget::currentRowChanged, this, [this](int row) {
         if (row >= 0 && row < static_cast<int>(document_.toolpaths.size()))
             statusBar()->showMessage(QString::fromStdString(document_.toolpaths[static_cast<size_t>(row)]->summary()));
@@ -857,6 +1242,7 @@ void MainWindow::create_toolpath_panel() {
     stack->addWidget(automatic_page);
 
     auto* panel_scroll = new QScrollArea(shell);
+    right_panel_scroll_ = panel_scroll;
     panel_scroll->setObjectName("RightPanelScroll");
     panel_scroll->setWidgetResizable(true);
     panel_scroll->setFrameShape(QFrame::NoFrame);
@@ -869,17 +1255,37 @@ void MainWindow::create_toolpath_panel() {
     }
     panel_scroll->setWidget(stack);
     shell_layout->addWidget(panel_scroll, 1);
+    shell_layout->addWidget(rail, 0);
     dock->setWidget(shell);
     addDockWidget(Qt::RightDockWidgetArea, dock);
-    connect(selection_button, &QToolButton::clicked, this, [this] { show_right_page(0); });
-    connect(toolpath_button, &QToolButton::clicked, this, [this] { show_right_page(1); });
-    connect(simulation_button, &QToolButton::clicked, this, [this] { show_right_page(2); });
-    connect(automatic_button, &QToolButton::clicked, this, [this] {
-        show_right_page(3);
-        refresh_automatic_cut_panel();
+
+    auto toggle_right_tab = [this](int page_idx) {
+        if (!right_panel_scroll_ || !right_panel_stack_) return;
+        const bool is_open = right_panel_scroll_->isVisible();
+        const bool is_current = (right_panel_stack_->currentIndex() == page_idx);
+        if (is_open && is_current) {
+            // Comportamento do Illustrator: clicar na aba ativa recolhe o painel de volta para o canto
+            set_right_panel_collapsed(true);
+        } else {
+            // Abre ou troca para a aba selecionada no canto
+            show_right_page(page_idx);
+        }
+    };
+
+    connect(selection_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(0); });
+    connect(toolpath_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(1); });
+    connect(simulation_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(2); });
+
+    connect(stack, &QStackedWidget::currentChanged, this, [this](int page) {
+        if (page >= 0 && right_panel_scroll_ && !right_panel_scroll_->isVisible()) {
+            set_right_panel_collapsed(false);
+        }
     });
-    connect(collapse, &QToolButton::clicked, dock, [dock] { dock->setVisible(false); });
-    show_right_page(0);
+
+    stack->setCurrentIndex(1);
+    // Inicia recolhido no canto com 3 mini abas visíveis (estilo Illustrator)
+    set_right_panel_collapsed(true);
+
     refresh_automatic_cut_panel();
     refresh_toolpaths();
 }
@@ -1800,15 +2206,37 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         QString("Percurso de %1").arg(QString::fromUtf8(cam::toolpath_label(job.kind))));
     const QSize screen_size = screen() ? screen()->availableGeometry().size() : QSize(1280, 800);
     dialog.setMinimumSize(360, 320);
-    dialog.resize(std::min(880, screen_size.width() - 48),
-                  std::min(760, screen_size.height() - 96));
+    dialog.resize(std::min(960, screen_size.width() - 48),
+                  std::min(840, screen_size.height() - 80));
 
     auto* root = new QVBoxLayout(&dialog);
     root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
+
+    auto* top_bar = new QWidget(&dialog);
+    auto* top_bar_layout = new QHBoxLayout(top_bar);
+    top_bar_layout->setContentsMargins(16, 10, 16, 4);
+    top_bar_layout->setSpacing(8);
+
     auto* selection = new QLabel(
-        QString("%1 vetor(es) selecionado(s)").arg(job.entity_ids.size()), &dialog);
-    selection->setStyleSheet("color: #96a9c1; padding: 12px 16px 10px;");
-    root->addWidget(selection);
+        QString("%1 vetor(es) selecionado(s)").arg(job.entity_ids.size()), top_bar);
+    selection->setStyleSheet("color: #96a9c1; padding: 2px 0; font-weight: 500;");
+    top_bar_layout->addWidget(selection);
+    top_bar_layout->addStretch();
+
+    auto* collapse_all_btn = new QPushButton("Minimizar tudo", top_bar);
+    collapse_all_btn->setToolTip("Recolher todas as seções para visualização compacta");
+    auto* expand_all_btn = new QPushButton("Expandir tudo", top_bar);
+    expand_all_btn->setToolTip("Expandir todas as seções");
+    top_bar_layout->addWidget(collapse_all_btn);
+    top_bar_layout->addWidget(expand_all_btn);
+    root->addWidget(top_bar);
+
+    auto* nav_bar = new QWidget(&dialog);
+    auto* nav_layout = new ui::FlowLayout(4);
+    nav_layout->setContentsMargins(16, 0, 16, 8);
+    nav_bar->setLayout(nav_layout);
+    root->addWidget(nav_bar);
 
     auto* scroll = new QScrollArea(&dialog);
     scroll->setWidgetResizable(true);
@@ -1913,7 +2341,13 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     const auto bind_guide_field = [guide_model, guide_keys, &dialog](const QString& label, QWidget* field) {
         QString key = guide_keys.value(label);
         if (label == "Ângulo" && field->parentWidget()) {
-            const auto* section = qobject_cast<QGroupBox*>(field->parentWidget()->parentWidget());
+            const QGroupBox* section = nullptr;
+            for (QWidget* p = field->parentWidget(); p; p = p->parentWidget()) {
+                if (auto* gb = qobject_cast<QGroupBox*>(p)) {
+                    section = gb;
+                    break;
+                }
+            }
             if (section && section->title() == "Rampas") key = "rampAngle";
         }
         if (key.isEmpty()) return;
@@ -1949,7 +2383,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     auto add_double = [&](QFormLayout* form, const QString& label, double value,
                           double minimum, double maximum, const QString& suffix,
                           const std::function<void(double)>& setter) -> QDoubleSpinBox* {
-        auto* field = new QDoubleSpinBox(body);
+        auto* field = new ui::SafeDoubleSpinBox(body);
         field->setRange(minimum, maximum);
         field->setDecimals(3);
         field->setSuffix(suffix);
@@ -1961,7 +2395,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     };
     auto add_int = [&](QFormLayout* form, const QString& label, int value,
                        int minimum, int maximum, const std::function<void(int)>& setter) -> QSpinBox* {
-        auto* field = new QSpinBox(body);
+        auto* field = new ui::SafeSpinBox(body);
         field->setRange(minimum, maximum);
         field->setValue(value);
         form->addRow(label, field);
@@ -1981,7 +2415,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     auto add_enum = [&](QFormLayout* form, const QString& label, int current,
                         const std::vector<std::pair<QString, int>>& options,
                         const std::function<void(int)>& setter) -> QComboBox* {
-        auto* field = new QComboBox(body);
+        auto* field = new ui::SafeComboBox(body);
         for (const auto& [text, value] : options)
             field->addItem(text, value);
         field->setCurrentIndex(std::max(0, field->findData(current)));
@@ -2006,32 +2440,64 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         }
         return nullptr;
     };
+
+    struct SectionGroup {
+        QGroupBox* box = nullptr;
+        QWidget* content = nullptr;
+        QToolButton* toggle_btn = nullptr;
+        QString title;
+    };
+    std::vector<SectionGroup> section_groups;
+
     auto add_group = [&](const QString& title, GuideTopics guides = {}) {
         auto* box = new QGroupBox(title, body);
-        auto* section = new QHBoxLayout(box);
-        section->setContentsMargins(10, 8, 10, 8);
+        box->setObjectName("CamConfigGroup");
+        auto* box_layout = new QVBoxLayout(box);
+        box_layout->setContentsMargins(10, 4, 10, 8);
+        box_layout->setSpacing(4);
+
+        auto* header_bar = new QWidget(box);
+        auto* header_layout = new QHBoxLayout(header_bar);
+        header_layout->setContentsMargins(0, 0, 0, 0);
+        header_layout->setSpacing(6);
+        header_layout->addStretch();
+
+        auto* toggle_btn = new QToolButton(header_bar);
+        toggle_btn->setObjectName("GroupCollapseBtn");
+        toggle_btn->setText("Minimizar");
+        toggle_btn->setCursor(Qt::PointingHandCursor);
+        toggle_btn->setToolTip("Recolher ou expandir esta seção");
+        header_layout->addWidget(toggle_btn);
+        box_layout->addWidget(header_bar);
+
+        auto* content = new QWidget(box);
+        auto* section = new QHBoxLayout(content);
+        section->setContentsMargins(0, 0, 0, 0);
         section->setSpacing(14);
-        new ui::AdaptiveSection(box, section, 790);
-        auto* fields = new QWidget(box);
+        new ui::AdaptiveSection(box, section, 600);
+
+        auto* fields = new QWidget(content);
         auto* form = new QFormLayout(fields);
-        form->setContentsMargins(4, 8, 4, 8);
-        form->setSpacing(7);
+        form->setContentsMargins(4, 4, 4, 4);
+        form->setSpacing(6);
         form->setRowWrapPolicy(QFormLayout::WrapLongRows);
         form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         section->addWidget(fields, 1);
+
         if (!guides.empty()) {
-            auto* card = new QWidget(box);
+            auto* card = new QWidget(content);
             card->setObjectName("CamGuideCard");
             auto* guide_layout = new QVBoxLayout(card);
             guide_layout->setContentsMargins(0, 0, 0, 0);
-            auto* choice = new QComboBox(card);
+            guide_layout->setSpacing(4);
+            auto* choice = new ui::SafeComboBox(card);
             choice->setObjectName("CamGuideTopic");
             choice->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
             choice->setMinimumContentsLength(10);
             for (const auto& [label, key] : guides) choice->addItem(label, key);
             auto* image = new InteractiveGuideWidget(guides.front().second, card, guide_model);
-            image->setMinimumHeight(230);
-            image->setMaximumHeight(390);
+            image->setMinimumHeight(160);
+            image->setMaximumHeight(260);
             interactive_guides.push_back(image);
             guide_layout->addWidget(choice);
             guide_layout->addWidget(image, 1);
@@ -2060,7 +2526,19 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             });
             section->addWidget(card, 1);
         }
+
+        box_layout->addWidget(content);
         body_layout->addWidget(box);
+
+        SectionGroup sg{box, content, toggle_btn, title};
+        section_groups.push_back(sg);
+
+        QObject::connect(toggle_btn, &QToolButton::clicked, box, [content, toggle_btn] {
+            const bool will_show = !content->isVisible();
+            content->setVisible(will_show);
+            toggle_btn->setText(will_show ? "Minimizar" : "Expandir");
+        });
+
         return form;
     };
 
@@ -2086,8 +2564,14 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     tool_actions_layout->addStretch();
     tool_form->addRow("Biblioteca", tool_actions);
     tool_form->addRow("Selecionada", selected_tool_name);
-    auto* tool_group_box = qobject_cast<QGroupBox*>(tool_form->parentWidget()->parentWidget());
-    body_layout->removeWidget(tool_group_box);
+    QGroupBox* tool_group_box = nullptr;
+    for (QWidget* p = tool_form->parentWidget(); p; p = p->parentWidget()) {
+        if (auto* gb = qobject_cast<QGroupBox*>(p)) {
+            tool_group_box = gb;
+            break;
+        }
+    }
+    if (tool_group_box) body_layout->removeWidget(tool_group_box);
     std::function<void()> refresh_pass_summary;
 
     // Os parametros da ferramenta sao editados somente no banco. Mantemos este
@@ -2384,7 +2868,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             auto* bridge_spacing = add_double(form, "Espacamento entre pontes", settings.tab_spacing,
                                               0.5, 5000, " mm",
                                               [&settings](double v) { settings.tab_spacing = v; });
-            auto* bridge_distribution = new QComboBox(body);
+            auto* bridge_distribution = new ui::SafeComboBox(body);
             bridge_distribution->addItem("Quantidade fixa por contorno", 0);
             bridge_distribution->addItem("Uma ponte a cada espacamento", 1);
             bridge_distribution->setCurrentIndex(settings.tab_spacing > 0.0 ? 1 : 0);
@@ -2786,6 +3270,60 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
     }, job.settings);
     body_layout->addStretch();
 
+    connect(collapse_all_btn, &QPushButton::clicked, &dialog, [&section_groups] {
+        for (const auto& sg : section_groups) {
+            if (sg.content) sg.content->setVisible(false);
+            if (sg.toggle_btn) sg.toggle_btn->setText("Expandir");
+        }
+    });
+    connect(expand_all_btn, &QPushButton::clicked, &dialog, [&section_groups] {
+        for (const auto& sg : section_groups) {
+            if (sg.content) sg.content->setVisible(true);
+            if (sg.toggle_btn) sg.toggle_btn->setText("Minimizar");
+        }
+    });
+
+    for (int i = 0; i < body_layout->count(); ++i) {
+        auto* box = qobject_cast<QGroupBox*>(body_layout->itemAt(i)->widget());
+        if (!box || !box->isVisible()) continue;
+        auto it = std::find_if(section_groups.begin(), section_groups.end(),
+                               [box](const SectionGroup& sg) { return sg.box == box; });
+        if (it != section_groups.end()) {
+            const auto sg = *it;
+            auto* pill = new QToolButton(nav_bar);
+            pill->setObjectName("SectionNavPill");
+            pill->setText(sg.title);
+            pill->setCursor(Qt::PointingHandCursor);
+            pill->setToolTip(QString("Ir para %1").arg(sg.title));
+            QObject::connect(pill, &QToolButton::clicked, &dialog, [scroll, sg] {
+                if (sg.content && !sg.content->isVisible()) {
+                    sg.content->setVisible(true);
+                    if (sg.toggle_btn) sg.toggle_btn->setText("Minimizar");
+                }
+                if (sg.box) {
+                    scroll->ensureWidgetVisible(sg.box, 0, 15);
+                }
+            });
+            nav_layout->addWidget(pill);
+        } else if (box->title() == "Passagens") {
+            auto* pill = new QToolButton(nav_bar);
+            pill->setObjectName("SectionNavPill");
+            pill->setText(box->title());
+            pill->setCursor(Qt::PointingHandCursor);
+            pill->setToolTip(QString("Ir para %1").arg(box->title()));
+            QObject::connect(pill, &QToolButton::clicked, &dialog, [scroll, box] {
+                scroll->ensureWidgetVisible(box, 0, 15);
+            });
+            nav_layout->addWidget(pill);
+        }
+    }
+
+    if (nav_layout->count() <= 1) {
+        nav_bar->setVisible(false);
+        collapse_all_btn->setVisible(false);
+        expand_all_btn->setVisible(false);
+    }
+
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
     auto* calculate_button = buttons->button(QDialogButtonBox::Save);
     calculate_button->setText("Calcular");
@@ -2805,7 +3343,11 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
         update_guide_mode("06_limpar_area", static_cast<int>(pocket->fill));
         update_guide_mode("07_ataque_rampeado", pocket->ramp == cam::RampType::None ? 0 : 1);
     }
-    root->addWidget(buttons);
+    auto* button_bar = new QWidget(&dialog);
+    auto* button_layout = new QHBoxLayout(button_bar);
+    button_layout->setContentsMargins(16, 8, 16, 12);
+    button_layout->addWidget(buttons);
+    root->addWidget(button_bar);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     if (dialog.exec() != QDialog::Accepted) return false;
@@ -2863,8 +3405,12 @@ void MainWindow::add_toolpath_from_panel() {
     document_.add_toolpath(job);
     const auto errors = document_.recalculate_toolpaths(job);
     refresh_toolpaths();
-    if (errors.empty()) statusBar()->showMessage(QString("Percurso criado: %1").arg(QString::fromStdString(job->name)));
-    else statusBar()->showMessage(QString::fromStdString(errors.front()));
+    if (errors.empty()) {
+        statusBar()->showMessage(QString("Percurso criado: %1").arg(QString::fromStdString(job->name)));
+        export_setup_sheet();
+    } else {
+        statusBar()->showMessage(QString::fromStdString(errors.front()));
+    }
 }
 
 void MainWindow::edit_current_toolpath() {
@@ -3162,11 +3708,33 @@ void MainWindow::refresh_simulation_status() {
     if (simulation_restart_button_) simulation_restart_button_->setEnabled(true);
 }
 
+void MainWindow::set_right_panel_collapsed(bool collapsed) {
+    if (!toolpath_dock_ || !right_panel_scroll_) return;
+    if (collapsed) {
+        right_panel_scroll_->setVisible(false);
+        toolpath_dock_->setFixedWidth(44);
+        if (selection_nav_button_) selection_nav_button_->setChecked(false);
+        if (toolpath_nav_button_) toolpath_nav_button_->setChecked(false);
+        if (simulation_nav_button_) simulation_nav_button_->setChecked(false);
+    } else {
+        toolpath_dock_->setMinimumWidth(286);
+        toolpath_dock_->setMaximumWidth(450);
+        resizeDocks({toolpath_dock_}, {300}, Qt::Horizontal);
+        toolpath_dock_->resize(300, toolpath_dock_->height());
+        right_panel_scroll_->setVisible(true);
+        const int idx = right_panel_stack_ ? right_panel_stack_->currentIndex() : 0;
+        if (selection_nav_button_) selection_nav_button_->setChecked(idx == 0);
+        if (toolpath_nav_button_) toolpath_nav_button_->setChecked(idx == 1);
+        if (simulation_nav_button_) simulation_nav_button_->setChecked(idx == 2);
+    }
+}
+
 void MainWindow::show_right_page(int index) {
     if (!right_panel_stack_ || index < 0 || index >= right_panel_stack_->count()) return;
+    set_right_panel_collapsed(false);
     right_panel_stack_->setCurrentIndex(index);
-    const std::array<QToolButton*, 4> buttons = {
-        selection_nav_button_, toolpath_nav_button_, simulation_nav_button_, automatic_nav_button_};
+    const std::array<QToolButton*, 3> buttons = {
+        selection_nav_button_, toolpath_nav_button_, simulation_nav_button_};
     for (int i = 0; i < static_cast<int>(buttons.size()); ++i) {
         if (buttons[static_cast<size_t>(i)]) buttons[static_cast<size_t>(i)]->setChecked(i == index);
     }
@@ -3252,6 +3820,7 @@ void MainWindow::create_automatic_cut() {
     if (errors.empty()) {
         statusBar()->showMessage(
             QString("Corte automático criado e calculado: %1").arg(QString::fromStdString(job->name)));
+        export_setup_sheet();
     } else {
         statusBar()->showMessage(QString::fromStdString(errors.front()));
     }
@@ -3343,19 +3912,82 @@ void MainWindow::export_gcode() {
 }
 
 void MainWindow::export_setup_sheet() {
-    std::vector<cam::SetupSheetOperation> operations;
+    // 1. Build default G-code settings from preferences
+    cam::GCodeSettings gcode_settings;
+    QSettings preferences;
+    gcode_settings.post = static_cast<cam::PostProcessor>(preferences.value("gcode/post", 0).toInt());
+    gcode_settings.tool_change = preferences.value(QString("gcode/toolChange/%1").arg(static_cast<int>(gcode_settings.post)), false).toBool();
+    gcode_settings.line_numbers = preferences.value("gcode/lineNumbers", true).toBool();
+    gcode_settings.comments = preferences.value("gcode/comments", true).toBool();
+    gcode_settings.home_at_end = preferences.value("gcode/returnHome", true).toBool();
+
+    // 2. Register/update all currently calculated toolpaths in job_history_
     for (const auto& job : document_.toolpaths) {
-        if (!job || !job->visible) continue;
-        for (const cam::Toolpath& path : job->results) {
-            if (path.visible) operations.push_back({&path, job.get()});
+        if (!job || job->results.empty()) continue;
+        auto it = std::find_if(job_history_.begin(), job_history_.end(), [&](const auto& rec) {
+            return rec.id == job->id;
+        });
+        std::vector<const cam::Toolpath*> job_paths;
+        std::vector<cam::SetupSheetOperation> ops;
+        double job_secs = 0.0, job_cut = 0.0;
+        for (const auto& res : job->results) {
+            if (res.visible) {
+                job_paths.push_back(&res);
+                ops.push_back({&res, job.get()});
+                job_secs += res.estimated_seconds();
+                auto [c_len, r_len] = res.lengths();
+                (void)r_len;
+                job_cut += c_len;
+            }
+        }
+        if (ops.empty()) continue;
+
+        std::string code;
+        if (!job_paths.empty()) {
+            code = cam::generate_gcode(job_paths, document_.material, gcode_settings, job->name);
+        }
+
+        if (it != job_history_.end()) {
+            it->name = job->name;
+            it->gcode = std::move(code);
+            it->total_seconds = job_secs;
+            it->total_cut_m = job_cut / 1000.0;
+            it->operations = std::move(ops);
+            it->material = document_.material;
+            if (it->part_name.empty()) it->part_name = document_.title().empty() ? job->name : document_.title();
+            if (it->material_profile.empty()) it->material_profile = document_.material.material_profile.empty() ? "MDF 15mm" : document_.material.material_profile;
+            it->width = document_.material.width > 0 ? document_.material.width : 1000.0;
+            it->height = document_.material.height > 0 ? document_.material.height : 1000.0;
+            it->thickness = document_.material.thickness > 0 ? document_.material.thickness : 15.0;
+            it->area_m2 = std::format("{:.3f}", (it->width * it->height) / 1000000.0);
+        } else {
+            RegisteredJobRecord rec;
+            rec.id = job->id;
+            rec.name = job->name;
+            rec.part_name = document_.title().empty() ? job->name : document_.title();
+            rec.material_profile = document_.material.material_profile.empty() ? "MDF 15mm" : document_.material.material_profile;
+            rec.width = document_.material.width > 0 ? document_.material.width : 1000.0;
+            rec.height = document_.material.height > 0 ? document_.material.height : 1000.0;
+            rec.thickness = document_.material.thickness > 0 ? document_.material.thickness : 15.0;
+            rec.area_m2 = std::format("{:.3f}", (rec.width * rec.height) / 1000000.0);
+            rec.gcode = std::move(code);
+            rec.total_seconds = job_secs;
+            rec.total_cut_m = job_cut / 1000.0;
+            rec.timestamp = QDateTime::currentDateTime();
+            rec.operations = std::move(ops);
+            rec.material = document_.material;
+            rec.info.part_name = rec.part_name;
+            rec.info.material_type = rec.material_profile;
+            rec.info.area_m2 = rec.area_m2;
+            job_history_.push_back(std::move(rec));
         }
     }
-    if (operations.empty()) {
-        statusBar()->showMessage("Recalcule um percurso antes de criar a ordem de servico");
+
+    if (job_history_.empty()) {
+        statusBar()->showMessage("Recalcule um percurso antes de abrir a central de ordens de serviço");
         return;
     }
 
-    QSettings preferences;
     QString logo_path = preferences.value("jobSheet/logoPath").toString();
     QImage logo_image;
     if (!logo_path.isEmpty() && QFileInfo::exists(logo_path)) {
@@ -3367,38 +3999,490 @@ void MainWindow::export_setup_sheet() {
     }
 
     ui::ResponsiveDialog dialog(this);
-    dialog.setWindowTitle("Dados da ordem de servico");
-    dialog.setMinimumWidth(500);
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* form = new QFormLayout();
-    auto* customer = new QLineEdit(&dialog);
-    auto* contact = new QLineEdit(&dialog);
-    auto* order_number = new QLineEdit(&dialog);
-    auto* part_name = new QLineEdit(QString::fromStdString(document_.title()), &dialog);
-    auto* revision = new QLineEdit(&dialog);
-    auto* operator_name = new QLineEdit(&dialog);
-    auto* notes = new QTextEdit(&dialog);
-    notes->setMaximumHeight(90);
-    form->addRow("Cliente", customer);
-    form->addRow("Contato", contact);
-    form->addRow("Numero da OS/pedido", order_number);
-    form->addRow("Peca", part_name);
-    form->addRow("Revisao", revision);
-    form->addRow("Operador", operator_name);
-    form->addRow("Observacoes", notes);
+    dialog.setWindowTitle("Central de Ordens de Serviço & G-Code — UNY CV");
+    dialog.resize(960, 700);
+    dialog.setMinimumSize(860, 580);
+    dialog.installEventFilter(new ui::SafeWheelFilter(&dialog));
 
-    auto* logo_row = new QWidget(&dialog);
+    auto* main_layout = new QVBoxLayout(&dialog);
+    main_layout->setSpacing(8);
+    main_layout->setContentsMargins(14, 12, 14, 12);
+
+    // Header with App / Company branding
+    auto* header_widget = new QWidget(&dialog);
+    auto* header_layout = new QHBoxLayout(header_widget);
+    header_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto* title_box = new QVBoxLayout();
+    title_box->setSpacing(2);
+    auto* title_lbl = new QLabel("📋 CENTRAL DE ORDENS DE SERVIÇO & G-CODE", header_widget);
+    title_lbl->setStyleSheet("font-size: 14pt; font-weight: bold; color: #1682d4;");
+    auto* subtitle_lbl = new QLabel(
+        QString("Projeto: %1 · %2 percurso(s) acumulados no histórico")
+            .arg(QString::fromStdString(document_.title().empty() ? "Sem título" : document_.title()))
+            .arg(job_history_.size()), header_widget);
+    subtitle_lbl->setObjectName("MutedText");
+    title_box->addWidget(title_lbl);
+    title_box->addWidget(subtitle_lbl);
+    header_layout->addLayout(title_box, 1);
+
+    auto* logo_badge = new QLabel(logo_path.isEmpty() ? "UNY CV" : QFileInfo(logo_path).fileName(), header_widget);
+    logo_badge->setStyleSheet("background: #e2e8f0; color: #0f172a; font-weight: bold; padding: 6px 14px; border-radius: 6px;");
+    header_layout->addWidget(logo_badge);
+    main_layout->addWidget(header_widget);
+
+    // Job Selector Bar (History Accumulation Bar)
+    auto* selector_card = new QFrame(&dialog);
+    selector_card->setStyleSheet("QFrame { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px 8px; }");
+    auto* selector_layout = new QHBoxLayout(selector_card);
+    selector_layout->setContentsMargins(4, 4, 4, 4);
+    selector_layout->setSpacing(8);
+
+    auto* sel_lbl = new QLabel("Folha / Percurso Ativo:", selector_card);
+    sel_lbl->setStyleSheet("font-weight: bold; color: #0f172a; font-size: 8.5pt;");
+    auto* job_combo = new ui::SafeComboBox(selector_card);
+    job_combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+    for (size_t i = 0; i < job_history_.size(); ++i) {
+        const auto& rec = job_history_[i];
+        job_combo->addItem(QString("[%1] %2 — %3 (%4 min · %5 m)")
+            .arg(i + 1)
+            .arg(QString::fromStdString(rec.name))
+            .arg(rec.timestamp.toString("dd/MM HH:mm"))
+            .arg(rec.total_seconds / 60.0, 0, 'f', 1)
+            .arg(rec.total_cut_m, 0, 'f', 2),
+            static_cast<int>(i));
+    }
+    const int combined_index = static_cast<int>(job_history_.size());
+    if (job_history_.size() > 1) {
+        job_combo->addItem("★ [TODOS OS PERCURSOS COMBINADOS] (Visão Geral do Projeto)", combined_index);
+    }
+    job_combo->setCurrentIndex(static_cast<int>(job_history_.size() - 1));
+
+    selector_layout->addWidget(sel_lbl);
+    selector_layout->addWidget(job_combo, 1);
+    main_layout->addWidget(selector_card);
+
+    // Metric Cards Bar
+    auto* metrics_widget = new QWidget(&dialog);
+    auto* metrics_layout = new QHBoxLayout(metrics_widget);
+    metrics_layout->setSpacing(8);
+    metrics_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto create_card = [&](const QString& label_text, const QString& accent_color) {
+        auto* card = new QFrame(metrics_widget);
+        card->setStyleSheet(QString(
+            "QFrame { background: #f8fafc; border: 1px solid #cbd5e1; border-top: 3px solid %1; border-radius: 6px; padding: 4px 8px; }"
+        ).arg(accent_color));
+        auto* cl = new QVBoxLayout(card);
+        cl->setSpacing(1);
+        cl->setContentsMargins(4, 3, 4, 3);
+        auto* l = new QLabel(label_text, card);
+        l->setStyleSheet("font-size: 7pt; font-weight: bold; color: #64748b; text-transform: uppercase;");
+        auto* v = new QLabel("—", card);
+        v->setStyleSheet("font-size: 11.5pt; font-weight: bold; color: #0f172a;");
+        cl->addWidget(l);
+        cl->addWidget(v);
+        metrics_layout->addWidget(card);
+        return v;
+    };
+
+    QLabel* area_card_val = create_card("Área da Chapa (m²)", "#0284c7");
+    QLabel* dims_card_val = create_card("Dimensões Chapa (X × Y × Z)", "#10b981");
+    QLabel* time_card_val = create_card("Tempo de Corte Estimado", "#f59e0b");
+    QLabel* cut_card_val = create_card("Comprimento de Corte", "#8b5cf6");
+    main_layout->addWidget(metrics_widget);
+
+    auto* tabs = new QTabWidget(&dialog);
+    tabs->setStyleSheet(R"QSS(
+        QTabWidget::pane {
+            border: 1px solid #334a64;
+            background: #141d27;
+            border-radius: 8px;
+            top: -1px;
+        }
+        QTabBar::tab {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #223244, stop:1 #192533);
+            color: #b8c9dc;
+            border: 1px solid #364e6b;
+            border-bottom: none;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            padding: 9px 20px;
+            margin-right: 5px;
+            font-weight: 700;
+            font-size: 9.5pt;
+        }
+        QTabBar::tab:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2e435c, stop:1 #213346);
+            color: #ffffff;
+            border-color: #52759e;
+        }
+        QTabBar::tab:selected {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1e3a5f, stop:1 #142232);
+            color: #60a5fa;
+            border: 1px solid #3b82f6;
+            border-top: 3px solid #60a5fa;
+            border-bottom: 2px solid #142232;
+            font-weight: 800;
+        }
+    )QSS");
+
+    // Tab 1: Operations Table
+    auto* tab_table = new QWidget();
+    auto* table_layout = new QVBoxLayout(tab_table);
+    table_layout->setContentsMargins(6, 6, 6, 6);
+
+    auto* table = new QTableWidget(tab_table);
+    table->setColumnCount(13);
+    table->setHorizontalHeaderLabels({
+        "#", "Operação", "Tipo", "Ferramenta", "Ø (mm)", "Avanço XY",
+        "Mergulho Z", "RPM", "Faixa Z", "Passo Z", "Pontes", "Corte", "Tempo"
+    });
+    table->setAlternatingRowColors(true);
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setStyleSheet(R"QSS(
+        QTableWidget {
+            background-color: #17212d;
+            color: #e2e8f0;
+            gridline-color: #27374b;
+            border: 1px solid #334a64;
+            border-radius: 8px;
+            selection-background-color: #e2e8f0;
+            selection-color: #0f172a;
+            outline: none;
+            font-size: 9pt;
+        }
+        QTableWidget::item {
+            padding: 7px 5px;
+            border-bottom: 1px solid #202d3e;
+        }
+        QTableWidget::item:selected {
+            background-color: #e2e8f0;
+            color: #0f172a;
+            font-weight: 700;
+        }
+        QTableWidget::item:hover:!selected {
+            background-color: #223245;
+            color: #ffffff;
+        }
+        QHeaderView::section {
+            background-color: #0d1520;
+            color: #94a3b8;
+            font-weight: 700;
+            font-size: 8.5pt;
+            padding: 7px 4px;
+            border: 1px solid #1a2636;
+            border-top: none;
+        }
+    )QSS");
+    table_layout->addWidget(table);
+    tabs->addTab(tab_table, "📋 Tabela de Operações");
+
+    // Tab 2: Visual Preview (Desenho Percurso)
+    auto* tab_preview = new QWidget();
+    auto* preview_layout = new QVBoxLayout(tab_preview);
+    preview_layout->setContentsMargins(6, 6, 6, 6);
+    preview_layout->setSpacing(6);
+
+    auto* preview_toolbar = new QWidget(tab_preview);
+    auto* pt_layout = new QHBoxLayout(preview_toolbar);
+    pt_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto* pt_title = new QLabel("📐 Ilustração Técnica do Percurso e Posicionamento na Chapa", preview_toolbar);
+    pt_title->setStyleSheet("font-weight: bold; color: #60a5fa; font-size: 9pt;");
+    auto* copy_img_btn = new QPushButton("📋 Copiar Ilustração", preview_toolbar);
+    copy_img_btn->setIcon(ui::get_icon("copy"));
+    auto* save_img_btn = new QPushButton("💾 Salvar Imagem HD (.png)...", preview_toolbar);
+    save_img_btn->setIcon(ui::get_icon("tp_gcode"));
+
+    pt_layout->addWidget(pt_title, 1);
+    pt_layout->addWidget(copy_img_btn);
+    pt_layout->addWidget(save_img_btn);
+    preview_layout->addWidget(preview_toolbar);
+
+    auto* preview_scroll = new QScrollArea(tab_preview);
+    preview_scroll->setWidgetResizable(true);
+    preview_scroll->setStyleSheet("QScrollArea { background-color: #0b1118; border: 1px solid #233448; border-radius: 8px; }");
+    auto* preview_label = new QLabel(preview_scroll);
+    preview_label->setAlignment(Qt::AlignCenter);
+    preview_scroll->setWidget(preview_label);
+    preview_layout->addWidget(preview_scroll, 1);
+    tabs->addTab(tab_preview, "📐 Desenho Percurso");
+
+    // Tab 3: Stored G-Code Copy
+    auto* tab_gcode = new QWidget();
+    auto* gcode_layout = new QVBoxLayout(tab_gcode);
+    gcode_layout->setContentsMargins(6, 6, 6, 6);
+    gcode_layout->setSpacing(6);
+
+    auto* gcode_status_bar = new QWidget(tab_gcode);
+    auto* gcode_status_layout = new QHBoxLayout(gcode_status_bar);
+    gcode_status_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto* gcode_status_lbl = new QLabel("✓ Cópia do G-Code gravada e pronta para uso", gcode_status_bar);
+    gcode_status_lbl->setStyleSheet("font-weight: bold; color: #0284c7;");
+    auto* copy_gcode_btn = new QPushButton("📋 Copiar G-Code", gcode_status_bar);
+    copy_gcode_btn->setIcon(ui::get_icon("copy"));
+    auto* save_gcode_btn = new QPushButton("💾 Salvar Cópia do G-Code (.nc)...", gcode_status_bar);
+    save_gcode_btn->setIcon(ui::get_icon("tp_gcode"));
+
+    gcode_status_layout->addWidget(gcode_status_lbl, 1);
+    gcode_status_layout->addWidget(copy_gcode_btn);
+    gcode_status_layout->addWidget(save_gcode_btn);
+    gcode_layout->addWidget(gcode_status_bar);
+
+    auto* gcode_editor = new QPlainTextEdit(tab_gcode);
+    gcode_editor->setReadOnly(true);
+    gcode_editor->setStyleSheet("font-family: Consolas, monospace; font-size: 9pt; background: #0f172a; color: #38bdf8;");
+    gcode_layout->addWidget(gcode_editor, 1);
+    tabs->addTab(tab_gcode, "💾 Cópia do G-Code Guardada");
+
+    // Tab 4: Material and Identificação
+    auto* tab_info = new QWidget();
+    auto* info_scroll = new QScrollArea(tab_info);
+    info_scroll->setWidgetResizable(true);
+    auto* info_container = new QWidget(info_scroll);
+    auto* info_layout = new QVBoxLayout(info_container);
+
+    auto* info_form = new QFormLayout();
+    info_form->setSpacing(8);
+
+    auto* part_name = new QLineEdit(info_container);
+    auto* order_number = new QLineEdit(info_container);
+    auto* customer = new QLineEdit(info_container);
+    auto* contact = new QLineEdit(info_container);
+    auto* operator_name = new QLineEdit(info_container);
+    auto* revision = new QLineEdit("1.0", info_container);
+
+    auto* material_combo = new ui::SafeComboBox(info_container);
+    material_combo->setEditable(true);
+    material_combo->addItems({
+        "MDF 15mm", "MDF 18mm", "MDF 6mm", "MDF 3mm",
+        "Compensado Naval 15mm", "Compensado Pinus 18mm",
+        "Acrílico Cristal 3mm", "Acrílico Cristal 5mm",
+        "ACM (Alumínio Composto) 4mm",
+        "PVC Expandido 10mm", "PVC Expandido 15mm",
+        "Alumínio 3mm", "Madeira Maciça"
+    });
+
+    auto* mat_dim_row = new QWidget(info_container);
+    auto* mat_dim_layout = new QHBoxLayout(mat_dim_row);
+    mat_dim_layout->setContentsMargins(0, 0, 0, 0);
+
+    auto* width_spin = new ui::SafeDoubleSpinBox(mat_dim_row);
+    width_spin->setRange(1.0, 100000.0);
+    width_spin->setDecimals(1);
+    width_spin->setSuffix(" mm");
+
+    auto* height_spin = new ui::SafeDoubleSpinBox(mat_dim_row);
+    height_spin->setRange(1.0, 100000.0);
+    height_spin->setDecimals(1);
+    height_spin->setSuffix(" mm");
+
+    auto* thickness_spin = new ui::SafeDoubleSpinBox(mat_dim_row);
+    thickness_spin->setRange(0.1, 1000.0);
+    thickness_spin->setDecimals(1);
+    thickness_spin->setSuffix(" mm");
+
+    mat_dim_layout->addWidget(new QLabel("X:"));
+    mat_dim_layout->addWidget(width_spin);
+    mat_dim_layout->addWidget(new QLabel("Y:"));
+    mat_dim_layout->addWidget(height_spin);
+    mat_dim_layout->addWidget(new QLabel("Z:"));
+    mat_dim_layout->addWidget(thickness_spin);
+
+    auto* notes = new QTextEdit(info_container);
+    notes->setMaximumHeight(70);
+
+    info_form->addRow("Nome do Arquivo / Peça", part_name);
+    info_form->addRow("Material", material_combo);
+    info_form->addRow("Dimensões da Chapa (X / Y / Z)", mat_dim_row);
+    info_form->addRow("Cliente", customer);
+    info_form->addRow("Contato", contact);
+    info_form->addRow("Número da OS / Pedido", order_number);
+    info_form->addRow("Operador", operator_name);
+    info_form->addRow("Revisão", revision);
+    info_form->addRow("Observações", notes);
+
+    auto* logo_row = new QWidget(info_container);
     auto* logo_layout = new QHBoxLayout(logo_row);
     logo_layout->setContentsMargins(0, 0, 0, 0);
-    auto* logo_status = new QLabel(logo_path.isEmpty() ? "Logo UNY CV padrao" : QFileInfo(logo_path).fileName(), logo_row);
+    auto* logo_status = new QLabel(logo_path.isEmpty() ? "Logo UNY CV padrão" : QFileInfo(logo_path).fileName(), logo_row);
     logo_status->setObjectName("MutedText");
-    auto* choose_logo = new QPushButton("Escolher PNG/JPG...", logo_row);
+    auto* choose_logo = new QPushButton("Escolher Imagem...", logo_row);
     auto* remove_logo = new QPushButton("Remover", logo_row);
     logo_layout->addWidget(logo_status, 1);
     logo_layout->addWidget(choose_logo);
     logo_layout->addWidget(remove_logo);
-    form->addRow("Logo da empresa", logo_row);
-    layout->addLayout(form);
+    info_form->addRow("Logotipo da Empresa", logo_row);
+
+    info_layout->addLayout(info_form);
+    info_scroll->setWidget(info_container);
+    auto* tab_info_layout = new QVBoxLayout(tab_info);
+    tab_info_layout->setContentsMargins(6, 6, 6, 6);
+    tab_info_layout->addWidget(info_scroll);
+    tabs->addTab(tab_info, "🛠 Material e Identificação");
+
+    main_layout->addWidget(tabs, 1);
+
+    // Active selection state
+    std::vector<cam::SetupSheetOperation> active_operations;
+    cad::MaterialSetup active_material = document_.material;
+    std::string active_gcode;
+    QImage current_preview_img;
+
+    auto populate_active_job = [&](int combo_idx) {
+        if (combo_idx < 0) return;
+        active_operations.clear();
+
+        if (combo_idx < static_cast<int>(job_history_.size())) {
+            const auto& rec = job_history_[static_cast<size_t>(combo_idx)];
+            active_operations = rec.operations;
+            active_material = rec.material;
+            active_gcode = rec.gcode;
+
+            part_name->setText(QString::fromStdString(rec.part_name));
+            if (material_combo->findText(QString::fromStdString(rec.material_profile)) == -1)
+                material_combo->insertItem(0, QString::fromStdString(rec.material_profile));
+            material_combo->setCurrentText(QString::fromStdString(rec.material_profile));
+            width_spin->setValue(rec.width);
+            height_spin->setValue(rec.height);
+            thickness_spin->setValue(rec.thickness);
+
+            const int total_m = static_cast<int>(rec.total_seconds / 60.0);
+            const int total_s = static_cast<int>(rec.total_seconds) % 60;
+            area_card_val->setText(QString::fromStdString(rec.area_m2) + " m²");
+            dims_card_val->setText(QString("%1 × %2 × %3 mm").arg(rec.width, 0, 'f', 1).arg(rec.height, 0, 'f', 1).arg(rec.thickness, 0, 'f', 1));
+            time_card_val->setText(QString("%1 min %2 s").arg(total_m).arg(total_s, 2, 10, QChar('0')));
+            cut_card_val->setText(QString::number(rec.total_cut_m, 'f', 2) + " m");
+        } else {
+            // Combined view of all accumulated jobs
+            double comb_secs = 0.0, comb_cut = 0.0;
+            std::string combined_gcode;
+            for (const auto& rec : job_history_) {
+                for (const auto& op : rec.operations) active_operations.push_back(op);
+                comb_secs += rec.total_seconds;
+                comb_cut += rec.total_cut_m;
+                if (!combined_gcode.empty()) combined_gcode += "\n\n( ===== PROXIMA OPERACAO ===== )\n";
+                combined_gcode += rec.gcode;
+            }
+            active_material = document_.material;
+            active_gcode = combined_gcode;
+
+            part_name->setText(QString::fromStdString(document_.title().empty() ? "Projeto_Completo" : document_.title()));
+            const double w = active_material.width > 0 ? active_material.width : 1000.0;
+            const double h = active_material.height > 0 ? active_material.height : 1000.0;
+            const double t = active_material.thickness > 0 ? active_material.thickness : 15.0;
+            width_spin->setValue(w);
+            height_spin->setValue(h);
+            thickness_spin->setValue(t);
+
+            const int total_m = static_cast<int>(comb_secs / 60.0);
+            const int total_s = static_cast<int>(comb_secs) % 60;
+            area_card_val->setText(QString::number((w * h) / 1000000.0, 'f', 3) + " m²");
+            dims_card_val->setText(QString("%1 × %2 × %3 mm").arg(w, 0, 'f', 1).arg(h, 0, 'f', 1).arg(t, 0, 'f', 1));
+            time_card_val->setText(QString("%1 min %2 s").arg(total_m).arg(total_s, 2, 10, QChar('0')));
+            cut_card_val->setText(QString::number(comb_cut, 'f', 2) + " m");
+        }
+
+        // Fill Table
+        table->setRowCount(static_cast<int>(active_operations.size()));
+        for (int i = 0; i < static_cast<int>(active_operations.size()); ++i) {
+            const auto& op = active_operations[static_cast<size_t>(i)];
+            const cam::Toolpath* path = op.path;
+            if (!path) continue;
+
+            double cut_len = 0.0, rapid_len = 0.0;
+            std::tie(cut_len, rapid_len) = path->lengths();
+            const double op_secs = path->estimated_seconds();
+            const int op_m = static_cast<int>(op_secs / 60.0);
+            const int op_s = static_cast<int>(op_secs) % 60;
+
+            auto [z_min, z_max] = path->depth_range();
+            const cam::Tool* tool = op.job ? &op.job->tool : nullptr;
+
+            table->setItem(i, 0, new QTableWidgetItem(QString::number(i + 1)));
+            table->setItem(i, 1, new QTableWidgetItem(QString::fromStdString(path->name)));
+            table->setItem(i, 2, new QTableWidgetItem(op.job ? QString::fromUtf8(op.job->type_label()) : "Percurso"));
+            table->setItem(i, 3, new QTableWidgetItem(QString::fromStdString(path->tool_name)));
+            table->setItem(i, 4, new QTableWidgetItem(tool ? QString::number(tool->diameter, 'f', 2) : "—"));
+            table->setItem(i, 5, new QTableWidgetItem(QString::number(path->feed_rate, 'f', 0) + " mm/min"));
+            table->setItem(i, 6, new QTableWidgetItem(QString::number(path->plunge_rate, 'f', 0) + " mm/min"));
+            table->setItem(i, 7, new QTableWidgetItem(QString::number(path->spindle_speed)));
+            table->setItem(i, 8, new QTableWidgetItem(QString("%1 a %2 mm").arg(z_min, 0, 'f', 1).arg(z_max, 0, 'f', 1)));
+            table->setItem(i, 9, new QTableWidgetItem(tool ? QString::number(tool->pass_depth, 'f', 2) + " mm" : "—"));
+            table->setItem(i, 10, new QTableWidgetItem(QString::fromStdString(cam::bridge_summary(op.job))));
+            table->setItem(i, 11, new QTableWidgetItem(QString::number(cut_len / 1000.0, 'f', 2) + " m"));
+            table->setItem(i, 12, new QTableWidgetItem(QString("%1 min %2 s").arg(op_m).arg(op_s, 2, 10, QChar('0'))));
+        }
+        table->clearSelection();
+
+        // Render Preview
+        current_preview_img = make_job_layout_preview(active_operations, &active_material);
+        preview_label->setPixmap(QPixmap::fromImage(current_preview_img));
+
+        // Update G-Code Viewer
+        gcode_editor->setPlainText(QString::fromStdString(active_gcode));
+        const int line_count = static_cast<int>(std::count(active_gcode.begin(), active_gcode.end(), '\n') + 1);
+        gcode_status_lbl->setText(QString("✓ Cópia do G-Code gravada e pronta para uso (%1 linhas geradas)").arg(line_count));
+    };
+
+    populate_active_job(job_combo->currentIndex());
+    connect(job_combo, &QComboBox::currentIndexChanged, &dialog, populate_active_job);
+
+    auto update_dimensions_and_area = [&]() {
+        const double w = width_spin->value();
+        const double h = height_spin->value();
+        const double t = thickness_spin->value();
+        active_material.width = w;
+        active_material.height = h;
+        active_material.thickness = t;
+        active_material.material_profile = material_combo->currentText().toStdString();
+
+        const double area_m2 = (w * h) / 1000000.0;
+        area_card_val->setText(QString::number(area_m2, 'f', 3) + " m²");
+        dims_card_val->setText(QString("%1 × %2 × %3 mm").arg(w, 0, 'f', 1).arg(h, 0, 'f', 1).arg(t, 0, 'f', 1));
+
+        int cur_idx = job_combo->currentIndex();
+        if (cur_idx >= 0 && cur_idx < static_cast<int>(job_history_.size())) {
+            auto& rec = job_history_[static_cast<size_t>(cur_idx)];
+            rec.width = w; rec.height = h; rec.thickness = t;
+            rec.material_profile = active_material.material_profile;
+            rec.area_m2 = std::format("{:.3f}", area_m2);
+            rec.material = active_material;
+        }
+
+        current_preview_img = make_job_layout_preview(active_operations, &active_material);
+        preview_label->setPixmap(QPixmap::fromImage(current_preview_img));
+    };
+
+    QObject::connect(width_spin, &QDoubleSpinBox::valueChanged, &dialog, update_dimensions_and_area);
+    QObject::connect(height_spin, &QDoubleSpinBox::valueChanged, &dialog, update_dimensions_and_area);
+    QObject::connect(thickness_spin, &QDoubleSpinBox::valueChanged, &dialog, update_dimensions_and_area);
+    QObject::connect(material_combo, &QComboBox::currentTextChanged, &dialog, update_dimensions_and_area);
+
+    connect(copy_img_btn, &QPushButton::clicked, &dialog, [&] {
+        if (!current_preview_img.isNull()) {
+            QGuiApplication::clipboard()->setImage(current_preview_img);
+            QMessageBox::information(&dialog, "Ilustração Copiada", "Ilustração técnica copiada para a área de transferência com sucesso!");
+        }
+    });
+
+    connect(save_img_btn, &QPushButton::clicked, &dialog, [&] {
+        if (current_preview_img.isNull()) return;
+        QString default_filename = QString::fromStdString(document_.title().empty() ? "Ilustracao_Percurso" : document_.title()) + "_Preview.png";
+        QString save_path = QFileDialog::getSaveFileName(&dialog, "Salvar Ilustração Técnica em HD", default_filename, "Imagem PNG (*.png)");
+        if (!save_path.isEmpty()) {
+            if (QFileInfo(save_path).suffix().isEmpty()) save_path += ".png";
+            current_preview_img.save(save_path, "PNG");
+            QMessageBox::information(&dialog, "Ilustração Salva", QString("Ilustração técnica salva com sucesso:\n%1").arg(save_path));
+        }
+    });
 
     connect(choose_logo, &QPushButton::clicked, &dialog, [&] {
         const QString selected = QFileDialog::getOpenFileName(
@@ -3408,52 +4492,187 @@ void MainWindow::export_setup_sheet() {
         QImageReader reader(selected);
         QImage loaded = reader.read();
         if (loaded.isNull()) {
-            QMessageBox::warning(&dialog, "Logo invalido", "Nao foi possivel ler esta imagem.");
+            QMessageBox::warning(&dialog, "Logo inválido", "Não foi possível ler esta imagem.");
             return;
         }
         logo_path = selected;
         logo_image = std::move(loaded);
         preferences.setValue("jobSheet/logoPath", logo_path);
         logo_status->setText(QFileInfo(logo_path).fileName());
+        logo_badge->setText(QFileInfo(logo_path).fileName());
     });
     connect(remove_logo, &QPushButton::clicked, &dialog, [&] {
         logo_path.clear();
         logo_image = {};
         preferences.remove("jobSheet/logoPath");
-        logo_status->setText("Logo UNY CV padrao");
+        logo_status->setText("Logo UNY CV padrão");
+        logo_badge->setText("UNY CV");
     });
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText("Gerar PDF");
-    buttons->button(QDialogButtonBox::Cancel)->setText("Cancelar");
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-    if (dialog.exec() != QDialog::Accepted) return;
+    // G-Code actions (copy and save)
+    auto save_current_gcode = [&]() {
+        if (active_gcode.empty()) {
+            QMessageBox::information(&dialog, "Sem G-Code", "Nenhum G-Code gerado para salvar.");
+            return;
+        }
+        QString default_name = (part_name->text().isEmpty() ? "Percurso" : part_name->text().trimmed()) + ".nc";
+        QString save_path = QFileDialog::getSaveFileName(&dialog, "Salvar Cópia do G-Code", default_name,
+                                                        "G-Code (*.nc *.tap *.gcode);;Todos os arquivos (*)");
+        if (save_path.isEmpty()) return;
+        QFile file(save_path);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            QMessageBox::critical(&dialog, "Erro ao salvar G-Code", file.errorString());
+            return;
+        }
+        file.write(QByteArray::fromStdString(active_gcode));
+        file.close();
+        statusBar()->showMessage(QString("Cópia do G-Code salva: %1").arg(save_path));
+        QMessageBox::information(&dialog, "G-Code Salvo", QString("G-Code salvo com sucesso em:\n%1").arg(save_path));
+    };
 
-    cam::SetupSheetInfo info;
-    info.customer = customer->text().toStdString();
-    info.contact = contact->text().toStdString();
-    info.order_number = order_number->text().toStdString();
-    info.part_name = part_name->text().toStdString();
-    info.revision = revision->text().toStdString();
-    info.operator_name = operator_name->text().toStdString();
-    info.notes = notes->toPlainText().toStdString();
-    if (!logo_image.isNull()) info.logo_source = "job-logo";
+    connect(save_gcode_btn, &QPushButton::clicked, &dialog, save_current_gcode);
+    connect(copy_gcode_btn, &QPushButton::clicked, &dialog, [&] {
+        QGuiApplication::clipboard()->setText(QString::fromStdString(active_gcode));
+        QMessageBox::information(&dialog, "G-Code Copiado", "O código G-Code foi copiado para a área de transferência.");
+    });
 
-    QString path = QFileDialog::getSaveFileName(
-        this, "Salvar ordem de servico em PDF",
-        QString::fromStdString(document_.title()) + "_OS.pdf", "PDF (*.pdf)");
-    if (path.isEmpty()) return;
-    if (QFileInfo(path).suffix().isEmpty()) path += ".pdf";
+    // Bottom Action Buttons Bar
+    auto* bottom_bar = new QWidget(&dialog);
+    auto* bottom_layout = new QHBoxLayout(bottom_bar);
+    bottom_layout->setContentsMargins(0, 4, 0, 0);
 
-    QString pdf_error;
-    if (!cam::write_job_setup_sheet_pdf(path, operations, document_.material, document_.title(), info,
-                                        make_job_layout_preview(operations), logo_image, &pdf_error)) {
-        QMessageBox::critical(this, "Erro ao gerar PDF", pdf_error);
-        return;
+    auto* hint_label = new QLabel("Dica: Você pode fechar a janela para continuar acumulando percursos e gerar tudo no final.", bottom_bar);
+    hint_label->setObjectName("MutedText");
+    bottom_layout->addWidget(hint_label, 1);
+
+    auto* close_btn = new QPushButton("Fechar", bottom_bar);
+    close_btn->setMinimumHeight(38);
+    close_btn->setMinimumWidth(80);
+
+    auto* save_gcode_quick_btn = new QPushButton("💾 Salvar G-Code", bottom_bar);
+    save_gcode_quick_btn->setMinimumHeight(38);
+    save_gcode_quick_btn->setToolTip("Salvar o arquivo de corte .nc deste percurso para usar no futuro");
+
+    auto* gen_pdf_btn = new QPushButton("📄 GERAR PDF DA OS", bottom_bar);
+    gen_pdf_btn->setProperty("primary", true);
+    gen_pdf_btn->setIcon(ui::get_icon("tp_sheet"));
+    gen_pdf_btn->setIconSize(QSize(20, 20));
+    gen_pdf_btn->setMinimumHeight(40);
+    gen_pdf_btn->setMinimumWidth(180);
+    gen_pdf_btn->setStyleSheet("font-weight: bold; font-size: 9.5pt;");
+
+    QPushButton* gen_all_pdf_btn = nullptr;
+    if (job_history_.size() > 1) {
+        gen_all_pdf_btn = new QPushButton("📚 GERAR TODAS AS FOLHAS (PDF)", bottom_bar);
+        gen_all_pdf_btn->setIcon(ui::get_icon("tp_sheet"));
+        gen_all_pdf_btn->setIconSize(QSize(20, 20));
+        gen_all_pdf_btn->setMinimumHeight(40);
+        gen_all_pdf_btn->setMinimumWidth(230);
+        gen_all_pdf_btn->setStyleSheet("font-weight: bold; font-size: 9.5pt; color: #166534; background: #dcfce7; border: 1px solid #86efac;");
+        gen_all_pdf_btn->setToolTip("Gera um único PDF contendo todas as ordens de serviço acumuladas no projeto");
     }
-    statusBar()->showMessage(QString("Ordem de servico PDF criada: %1").arg(path));
+
+    bottom_layout->addWidget(close_btn);
+    bottom_layout->addWidget(save_gcode_quick_btn);
+    bottom_layout->addWidget(gen_pdf_btn);
+    if (gen_all_pdf_btn) bottom_layout->addWidget(gen_all_pdf_btn);
+    main_layout->addWidget(bottom_bar);
+
+    connect(close_btn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(save_gcode_quick_btn, &QPushButton::clicked, &dialog, save_current_gcode);
+
+    // Generate Single Sheet PDF (Fazer na hora)
+    connect(gen_pdf_btn, &QPushButton::clicked, &dialog, [&] {
+        cam::SetupSheetInfo info;
+        info.customer = customer->text().toStdString();
+        info.contact = contact->text().toStdString();
+        info.order_number = order_number->text().toStdString();
+        info.part_name = part_name->text().toStdString();
+        info.revision = revision->text().toStdString();
+        info.operator_name = operator_name->text().toStdString();
+        info.notes = notes->toPlainText().toStdString();
+        info.material_type = material_combo->currentText().toStdString();
+
+        const double w = width_spin->value();
+        const double h = height_spin->value();
+        const double t = thickness_spin->value();
+        const double area_val = (w * h) / 1000000.0;
+        info.area_m2 = std::format("{:.3f}", area_val);
+
+        cad::MaterialSetup sheet_mat = active_material;
+        sheet_mat.width = w;
+        sheet_mat.height = h;
+        sheet_mat.thickness = t;
+        sheet_mat.material_profile = info.material_type;
+
+        document_.material = sheet_mat;
+        document_.modified = true;
+
+        if (!logo_image.isNull()) info.logo_source = "job-logo";
+
+        QString default_filename = (info.part_name.empty()
+                                        ? "Ordem_de_Servico"
+                                        : QString::fromStdString(info.part_name)) + "_OS.pdf";
+        QString save_path = QFileDialog::getSaveFileName(
+            &dialog, "Salvar Ordem de Serviço em PDF (A4)",
+            default_filename, "PDF (*.pdf)");
+        if (save_path.isEmpty()) return;
+        if (QFileInfo(save_path).suffix().isEmpty()) save_path += ".pdf";
+
+        QImage layout_img = make_job_layout_preview(active_operations, &sheet_mat);
+        QString pdf_error;
+        if (!cam::write_job_setup_sheet_pdf(save_path, active_operations, sheet_mat, document_.title(), info,
+                                            layout_img, logo_image, &pdf_error)) {
+            QMessageBox::critical(&dialog, "Erro ao gerar PDF", pdf_error);
+            return;
+        }
+        statusBar()->showMessage(QString("Ordem de serviço PDF criada: %1").arg(save_path));
+        QMessageBox::information(&dialog, "PDF da OS Gerado",
+            QString("Ordem de Serviço salva com sucesso em 1 folha A4:\n%1").arg(save_path));
+        dialog.accept();
+    });
+
+    // Generate All Sheets PDF (Acumulado)
+    if (gen_all_pdf_btn) {
+        connect(gen_all_pdf_btn, &QPushButton::clicked, &dialog, [&] {
+            std::vector<cam::MultiJobSheetEntry> entries;
+            for (const auto& rec : job_history_) {
+                cam::MultiJobSheetEntry entry;
+                entry.operations = rec.operations;
+                entry.material = rec.material;
+                entry.job_name = rec.name;
+                entry.info = rec.info;
+                entry.info.customer = customer->text().toStdString();
+                entry.info.contact = contact->text().toStdString();
+                entry.info.order_number = order_number->text().toStdString();
+                entry.info.operator_name = operator_name->text().toStdString();
+                entry.info.revision = revision->text().toStdString();
+                entry.info.notes = notes->toPlainText().toStdString();
+                if (!logo_image.isNull()) entry.info.logo_source = "job-logo";
+                entry.layout_preview = make_job_layout_preview(rec.operations, &rec.material);
+                entries.push_back(std::move(entry));
+            }
+
+            QString default_filename = QString::fromStdString(document_.title().empty() ? "Ordens_de_Servico" : document_.title()) + "_Todas_Folhas.pdf";
+            QString save_path = QFileDialog::getSaveFileName(
+                &dialog, "Salvar Todas as Folhas Acumuladas em PDF",
+                default_filename, "PDF (*.pdf)");
+            if (save_path.isEmpty()) return;
+            if (QFileInfo(save_path).suffix().isEmpty()) save_path += ".pdf";
+
+            QString pdf_error;
+            if (!cam::write_multi_job_setup_sheet_pdf(save_path, entries, logo_image, &pdf_error)) {
+                QMessageBox::critical(&dialog, "Erro ao gerar PDF", pdf_error);
+                return;
+            }
+            statusBar()->showMessage(QString("Todas as Ordens de Serviço foram salvas: %1").arg(save_path));
+            QMessageBox::information(&dialog, "PDF Acumulado Gerado",
+                QString("Todas as %1 folhas foram geradas com sucesso em:\n%2").arg(entries.size()).arg(save_path));
+            dialog.accept();
+        });
+    }
+
+    dialog.exec();
 }
 
 void MainWindow::export_svg() {
@@ -3468,20 +4687,75 @@ void MainWindow::export_svg() {
 }
 
 void MainWindow::import_files(const QStringList& paths) {
-    for (const QString& path : paths) import_file(path);
+    if (paths.isEmpty()) return;
+    if (paths.size() == 1) {
+        import_file(paths.first());
+        return;
+    }
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    std::vector<cad::EntityPtr> all_entities;
+    int success_count = 0;
+    QStringList failed_files;
+
+    for (const QString& path : paths) {
+        if (path.isEmpty()) continue;
+        try {
+            auto entities = io::import_file(std::filesystem::path(path.toStdWString()));
+            if (!entities.empty()) {
+                if (auto label = io::create_filename_label(QFileInfo(path).fileName().toStdString(), entities)) {
+                    if (!document_.get_layer(label->layer)) {
+                        auto& lay = document_.add_layer(label->layer);
+                        lay.color = {0.0, 0.0, 0.0};
+                    }
+                    entities.push_back(label);
+                }
+                all_entities.insert(all_entities.end(), entities.begin(), entities.end());
+                ++success_count;
+            }
+        } catch (const std::exception& error) {
+            failed_files.append(QFileInfo(path).fileName() + ": " + QString::fromUtf8(error.what()));
+        }
+    }
+
+    if (!all_entities.empty()) {
+        tool_context_.add(all_entities, QString("Importar %1 arquivos").arg(success_count).toStdString(), true);
+        refresh_document_view();
+        canvas_widget_->canvas->fit_view();
+    }
+    QApplication::restoreOverrideCursor();
+
+    if (!failed_files.isEmpty()) {
+        QMessageBox::warning(this, "Avisos na importação",
+                             QString("%1 arquivo(s) importado(s) com sucesso.\nFalhas:\n%2")
+                                 .arg(success_count)
+                                 .arg(failed_files.join("\n")));
+    } else if (success_count > 0) {
+        statusBar()->showMessage(QString("%1 arquivo(s) importado(s) com %2 vetores")
+                                     .arg(success_count)
+                                     .arg(static_cast<qlonglong>(all_entities.size())));
+    }
 }
 
 void MainWindow::import_file(const QString& path) {
     if (path.isEmpty()) return;
     try {
-        const auto entities = io::import_file(std::filesystem::path(path.toStdWString()));
+        auto entities = io::import_file(std::filesystem::path(path.toStdWString()));
         if (entities.empty()) {
             QMessageBox::information(this, "Importar", "Nenhum vetor encontrado no arquivo.");
             return;
         }
 
+        if (auto label = io::create_filename_label(QFileInfo(path).fileName().toStdString(), entities)) {
+            if (!document_.get_layer(label->layer)) {
+                auto& lay = document_.add_layer(label->layer);
+                lay.color = {0.0, 0.0, 0.0};
+            }
+            entities.push_back(label);
+        }
+
         const QString suffix = QFileInfo(path).suffix().toUpper();
-        tool_context_.add(entities, QString("Importar %1").arg(suffix).toStdString());
+        tool_context_.add(entities, QString("Importar %1").arg(suffix).toStdString(), true);
         refresh_document_view();
         canvas_widget_->canvas->fit_view();
         statusBar()->showMessage(QString("%1 vetor(es) importado(s) de %2")
@@ -3512,6 +4786,9 @@ void MainWindow::import_folder() {
         for (const auto& [layer, layer_entities] : result.entities_by_file) {
             if (!document_.get_layer(layer)) document_.add_layer(layer);
             entities.insert(entities.end(), layer_entities.begin(), layer_entities.end());
+            if (auto label = io::create_filename_label(layer, layer_entities, layer)) {
+                entities.push_back(label);
+            }
         }
         tool_context_.add(entities, "Importar em lote", true);
         refresh_document_view();
@@ -4634,7 +5911,7 @@ void MainWindow::create_actions() {
                         &MainWindow::recalculate_toolpaths);
     cam_menu->addAction("Simular percursos", QKeySequence(), this, &MainWindow::toggle_simulation);
     cam_menu->addSeparator();
-    cam_menu->addAction("Criar folha de trabalho", QKeySequence(), this, &MainWindow::export_setup_sheet);
+    cam_menu->addAction("Ordem de Serviço (PDF)...", QKeySequence(), this, &MainWindow::export_setup_sheet);
     cam_menu->addAction("Salvar G-Code", QKeySequence("Ctrl+Shift+G"), this,
                         &MainWindow::export_gcode);
 

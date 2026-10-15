@@ -7,12 +7,15 @@
 #include <optional>
 #include <vector>
 
+#include <QDateTime>
 #include <QMainWindow>
 #include <QPointer>
 #include <QPoint>
 #include <QStringList>
 
 #include "cam/job.hpp"
+#include "cam/job_sheet.hpp"
+#include "cam/setup_sheet.hpp"
 #include "cad/document.hpp"
 #include "sim/playback.hpp"
 #include "tools/base.hpp"
@@ -27,6 +30,8 @@ class QCheckBox;
 class QListWidget;
 class QProgressBar;
 class QPushButton;
+class QDockWidget;
+class QScrollArea;
 class QSlider;
 class QTimer;
 class QToolButton;
@@ -38,6 +43,9 @@ class Viewport3D;
 }  // namespace cnc::vp
 
 namespace cnc::app {
+
+QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& operations,
+                               const cad::MaterialSetup* material = nullptr);
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -90,6 +98,7 @@ private:
     void refresh_simulation_view();
     void refresh_simulation_status();
     void show_right_page(int index);
+    void set_right_panel_collapsed(bool collapsed);
     void refresh_automatic_cut_panel();
     void create_automatic_cut();
     void show_guides_gallery();
@@ -100,6 +109,25 @@ private:
     void import_file(const QString& path);
     void import_folder();
     bool save_file(const QString& path = {});
+
+    struct RegisteredJobRecord {
+        std::string id;
+        std::string name;
+        std::string part_name;
+        std::string material_profile;
+        double width = 0.0;
+        double height = 0.0;
+        double thickness = 0.0;
+        std::string area_m2;
+        std::string gcode;
+        double total_seconds = 0.0;
+        double total_cut_m = 0.0;
+        QDateTime timestamp;
+        std::vector<cam::SetupSheetOperation> operations;
+        cad::MaterialSetup material;
+        cam::SetupSheetInfo info;
+    };
+    std::vector<RegisteredJobRecord> job_history_;
 
     cad::Document document_;
     std::vector<cad::EntityPtr> clipboard_entities_;
@@ -136,6 +164,8 @@ private:
     QPushButton* simulation_step_button_ = nullptr;
     QPushButton* simulation_finish_button_ = nullptr;
     QPushButton* simulation_restart_button_ = nullptr;
+    QDockWidget* toolpath_dock_ = nullptr;
+    QScrollArea* right_panel_scroll_ = nullptr;
     QToolButton* selection_nav_button_ = nullptr;
     QToolButton* toolpath_nav_button_ = nullptr;
     QToolButton* simulation_nav_button_ = nullptr;

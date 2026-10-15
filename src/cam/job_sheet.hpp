@@ -25,7 +25,11 @@ struct SetupSheetInfo {
     std::string operator_name;
     std::string notes;
     std::string logo_source;
+    std::string material_type;
+    std::string area_m2;
 };
+
+std::string bridge_summary(const ToolpathJob* job);
 
 std::string job_setup_sheet_html(const std::vector<SetupSheetOperation>& operations,
                                 const cad::MaterialSetup& material,
@@ -40,5 +44,18 @@ bool write_job_setup_sheet_pdf(const QString& path,
                                const QImage& layout_preview,
                                const QImage& logo,
                                QString* error = nullptr);
+
+struct MultiJobSheetEntry {
+    std::vector<SetupSheetOperation> operations;
+    cad::MaterialSetup material;
+    std::string job_name;
+    SetupSheetInfo info;
+    QImage layout_preview;
+};
+
+bool write_multi_job_setup_sheet_pdf(const QString& path,
+                                     const std::vector<MultiJobSheetEntry>& entries,
+                                     const QImage& logo,
+                                     QString* error = nullptr);
 
 }  // namespace cnc::cam

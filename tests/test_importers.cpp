@@ -48,8 +48,8 @@ TEST_CASE("importadores: DXF ASCII aceita polilinhas antigas e splines") {
     const auto path = write_fixture(
         "cnccam_import_dxf_test.dxf",
         "0\nSECTION\n2\nENTITIES\n"
-        "0\nLINE\n10\n10\n20\n20\n11\n30\n21\n20\n"
-        "0\nLWPOLYLINE\n70\n1\n10\n40\n20\n10\n10\n60\n20\n10\n"
+        "0\nLINE\n8\nCORTE\n10\n10\n20\n20\n11\n30\n21\n20\n"
+        "0\nLWPOLYLINE\n8\nGRAVACAO\n70\n1\n10\n40\n20\n10\n10\n60\n20\n10\n"
         "0\nPOLYLINE\n70\n1\n"
         "0\nVERTEX\n10\n70\n20\n10\n"
         "0\nVERTEX\n10\n80\n20\n10\n"
@@ -60,7 +60,9 @@ TEST_CASE("importadores: DXF ASCII aceita polilinhas antigas e splines") {
     const auto entities = io::import_dxf(path);
     REQUIRE(entities.size() == 4);
     CHECK(entities[0]->kind() == cad::EntityKind::Line);
+    CHECK(entities[0]->layer == "CORTE");
     CHECK(entities[1]->kind() == cad::EntityKind::Polyline);
+    CHECK(entities[1]->layer == "GRAVACAO");
     CHECK(entities[2]->kind() == cad::EntityKind::Polyline);
     CHECK(entities[3]->kind() == cad::EntityKind::Polyline);
     CHECK(entities[1]->closed());
@@ -87,6 +89,7 @@ TEST_CASE("importadores: PDF vetorial nativo abre arquivo real") {
     if (!std::filesystem::exists(path)) return;
     const auto entities = io::import_file(path);
     CHECK_FALSE(entities.empty());
+    MESSAGE("Entities count: ", entities.size());
     if (!entities.empty()) CHECK(entities.front()->layer == "PDF p1");
 #endif
 }
@@ -112,4 +115,20 @@ TEST_CASE("importadores: pasta em lote cria uma camada por arquivo") {
     CHECK(result.failed.empty());
 
     std::filesystem::remove_all(folder);
+}
+
+TEST_CASE("importadores: gravacao do nome do arquivo na parte inferior com 200mm") {
+    std::vector<cad::EntityPtr> ents;
+    auto rect = std::make_shared<cad::Rectangle>();
+    rect->x = 0; rect->y = 0; rect->width = 600; rect->height = 400;
+    ents.push_back(rect);
+
+    auto label = io::create_filename_label("gabinete_lateral.dxf", ents);
+    REQUIRE(label != nullptr);
+    CHECK(label->content == "gabinete_lateral.dxf");
+    CHECK(label->layer == "Gravação");
+    const auto box = label->bounding_box();
+    CHECK(box.x1 - box.x0 == doctest::Approx(200.0).epsilon(0.01));
+    CHECK((box.x0 + box.x1) / 2.0 == doctest::Approx(300.0).epsilon(0.01));
+    CHECK(box.y1 <= -5.0);
 }

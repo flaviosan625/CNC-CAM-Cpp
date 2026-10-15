@@ -51,6 +51,8 @@ private:
     double unit_factor_;
     std::string units_;
     Rgb layer_color_;
+    uint64_t cached_version_ = 0;
+    double cached_mh_ = -1.0;
     QGraphicsSimpleTextItem* dimension_label_ = nullptr;
     QGraphicsPathItem* extension_item_ = nullptr;
 };
