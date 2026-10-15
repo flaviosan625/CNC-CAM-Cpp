@@ -19,6 +19,11 @@ namespace {
 const QColor kSelPen(255, 140, 0);
 constexpr Rgb kDefaultLayerColor{0.1, 0.1, 0.1};
 
+bool dense_contour(const cad::Entity& entity) {
+    const auto* polyline = cad::as<cad::Polyline>(entity);
+    return cad::is_a<cad::Text>(entity) || (polyline && polyline->points.size() >= 64);
+}
+
 void poly_to_path(QPainterPath& p, const Points& pts, double mh, bool close) {
     if (pts.size() < 2) return;
     p.moveTo(pts[0].x, mh - pts[0].y);
@@ -178,6 +183,11 @@ EntityItem::EntityItem(cad::EntityPtr entity, double mh, double unit_factor, std
       unit_factor_(unit_factor),
       units_(std::move(units)),
       layer_color_(layer_color ? *layer_color : entity_->color) {
+    // Static imported contours and outlined labels are expensive to rasterize.
+    // Qt keeps a device-resolution image and invalidates it on path/style/zoom
+    // changes, while other pieces can be repainted without tracing every node.
+    if (dense_contour(*entity_))
+        setCacheMode(QGraphicsItem::DeviceCoordinateCache);
     if (cad::is_a<cad::Dimension>(entity_)) {
         dimension_label_ = new QGraphicsSimpleTextItem(this);
         extension_item_ = new QGraphicsPathItem(this);
@@ -187,10 +197,47 @@ EntityItem::EntityItem(cad::EntityPtr entity, double mh, double unit_factor, std
     refresh();
 }
 
+void EntityItem::update_context(double mh, double unit_factor, const std::string& units,
+                               const Rgb& layer_color) {
+    if (unit_factor_ != unit_factor || units_ != units) context_dirty_ = true;
+    if (layer_color_ != layer_color) style_dirty_ = true;
+    mh_ = mh;
+    unit_factor_ = unit_factor;
+    units_ = units;
+    layer_color_ = layer_color;
+}
+
+BBox EntityItem::world_bounds() const {
+    if (!cached_bounds_ || bounds_version_ != entity_->version) {
+        cached_bounds_ = entity_->bounding_box();
+        bounds_version_ = entity_->version;
+    }
+    return *cached_bounds_;
+}
+
+bool EntityItem::hit_test_world(double x, double y, double tolerance) const {
+    const BBox bounds = world_bounds();
+    if (x < bounds.x0 - tolerance || x > bounds.x1 + tolerance ||
+        y < bounds.y0 - tolerance || y > bounds.y1 + tolerance) return false;
+    if (!cached_hit_path_ || hit_tolerance_ != tolerance) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(2 * tolerance);
+        QPainterPath hit_path = path();
+        if (extension_item_) hit_path.addPath(extension_item_->path());
+        cached_hit_path_ = stroker.createStroke(hit_path);
+        hit_tolerance_ = tolerance;
+    }
+    return cached_hit_path_->contains(QPointF(x, mh_ - y));
+}
+
 void EntityItem::refresh() {
-    if (cached_version_ != entity_->version || std::fabs(cached_mh_ - mh_) > 1e-6) {
+    const bool geometry_changed = cached_version_ != entity_->version ||
+                                  std::fabs(cached_mh_ - mh_) > 1e-6 || context_dirty_;
+    if (geometry_changed) {
+        cached_hit_path_.reset();
         cached_version_ = entity_->version;
         cached_mh_ = mh_;
+        context_dirty_ = false;
         if (auto* dim = cad::as<cad::Dimension>(entity_)) {
             const auto [main_path, extension_path] = build_dimension_paths(*dim, mh_);
             setPath(main_path);
@@ -217,7 +264,11 @@ void EntityItem::refresh() {
             }
         }
     }
-    apply_style();
+    if (geometry_changed || style_dirty_ || cached_selected_ != entity_->selected) {
+        apply_style();
+        style_dirty_ = false;
+        cached_selected_ = entity_->selected;
+    }
 }
 
 QColor EntityItem::layer_qcolor() const {
@@ -232,6 +283,7 @@ QColor EntityItem::layer_qcolor() const {
 void EntityItem::apply_style() {
     const cad::Entity& e = *entity_;
     const auto* dim = cad::as<cad::Dimension>(e);
+    const bool fast_outline = !e.selected && dense_contour(e);
     QColor col;
     double width;
     if (e.selected) {
@@ -248,14 +300,16 @@ void EntityItem::apply_style() {
         width = 1.2;
     } else {
         col = layer_qcolor();
-        width = 1.2;
+        width = fast_outline ? 1.0 : 1.2;
     }
 
     QPen pen(col, width);
     if (cad::is_a<cad::ConstructionLine>(e)) pen.setStyle(Qt::DashLine);
     pen.setCosmetic(true);
-    pen.setJoinStyle(Qt::RoundJoin);
-    pen.setCapStyle(Qt::RoundCap);
+    // A one-pixel cosmetic outline uses Qt's fast stroke path. Rounded joins
+    // on thousands of tiny imported segments dominated every zoom frame.
+    pen.setJoinStyle(fast_outline ? Qt::BevelJoin : Qt::RoundJoin);
+    pen.setCapStyle(fast_outline ? Qt::FlatCap : Qt::RoundCap);
     setPen(pen);
     if (extension_item_ && dim) {
         QColor extension_color;

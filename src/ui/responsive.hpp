@@ -10,6 +10,8 @@ namespace cnc::ui {
 class ResponsiveDialog : public QDialog {
 public:
     explicit ResponsiveDialog(QWidget* parent = nullptr) : QDialog(parent) {}
+    // Keep the synchronous form flow while leaving the drawing workspace interactive.
+    int exec();
 protected:
     void showEvent(QShowEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;

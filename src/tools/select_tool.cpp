@@ -157,8 +157,7 @@ bool SelectTool::move_scale(double wx, double wy, Qt::KeyboardModifiers mods) {
     const auto [sx, sy] = scale_factors(wx, wy, mods);
     // Escalamos sempre a partir do estado original, entao e preciso desfazer o passo anterior
     // antes de aplicar o novo.
-    restore_live_transform();
-    begin_live_transform(cmd_targets_);
+    restore_live_transform(false, true);
     for (const cad::EntityPtr& e : cmd_targets_) e->scale(sx, sy, pivot_.x, pivot_.y);
     moved_ = true;
     ctx->refresh();
@@ -187,8 +186,7 @@ bool SelectTool::on_move(double wx, double wy, Qt::KeyboardModifiers mods) {
         // Cada evento recoloca a peca no estado do clique e aplica o deslocamento inteiro de novo.
         // Mover por incremento enquanto o encaixe raciocina sobre o total faria o ima contar duas
         // vezes o que ja tinha andado.
-        restore_live_transform();
-        begin_live_transform(cmd_targets_);
+        restore_live_transform(false, true);
         const auto [ddx, ddy] = move_delta(wx, wy, mods);
         for (const cad::EntityPtr& e : cmd_targets_) e->translate(ddx, ddy);
         last_ = {start_.x + ddx, start_.y + ddy};
@@ -247,16 +245,16 @@ bool SelectTool::on_release(double wx, double wy, Qt::MouseButton button, Qt::Ke
         if (mode_ == "handle-rotate") {
             move_rotate(wx, wy, mods);
             const double total = acc_;
-            restore_live_transform();
+            restore_live_transform(false);
             if (std::fabs(total) > 1e-9) {
                 ctx->transform(targets, [total, pivot](cad::Entity& e) { e.rotate(total, pivot.x, pivot.y); }, "Rotacionar");
-            }
+            } else ctx->refresh();
         } else {
             const auto [sx, sy] = scale_factors(wx, wy, mods);
-            restore_live_transform();
+            restore_live_transform(false);
             if (std::fabs(sx - 1.0) > 1e-6 || std::fabs(sy - 1.0) > 1e-6) {
                 ctx->transform(targets, [sx, sy, pivot](cad::Entity& e) { e.scale(sx, sy, pivot.x, pivot.y); }, "Redimensionar");
-            }
+            } else ctx->refresh();
         }
         mode_.clear();
         handle_.reset();
@@ -293,7 +291,7 @@ bool SelectTool::on_release(double wx, double wy, Qt::MouseButton button, Qt::Ke
         const bool moveu = moved_, copiar = copying_;
         const double tx = last_.x - start_.x, ty = last_.y - start_.y;
         const auto targets = cmd_targets_;
-        restore_live_transform();
+        restore_live_transform(false);
         if (moveu && copiar) {
             std::vector<cad::EntityPtr> copias;
             for (const cad::EntityPtr& e : targets) copias.push_back(e->clone());
@@ -301,7 +299,7 @@ bool SelectTool::on_release(double wx, double wy, Qt::MouseButton button, Qt::Ke
             ctx->add(copias, "Arrastar cópia", true);
         } else if (moveu) {
             ctx->transform(targets, [tx, ty](cad::Entity& e) { e.translate(tx, ty); }, "Mover");
-        }
+        } else ctx->refresh();
         mode_.clear();
         grab_.reset();
         copying_ = false;

@@ -74,9 +74,13 @@ public:
     void restore_from(const Entity& other) {
         const std::string keep_id = id;
         const bool keep_selected = selected;
+        const uint64_t keep_version = version;
         assign_from(other);
         id = keep_id;
         selected = keep_selected;
+        // A snapshot can be older than the last frame. Geometry caches track
+        // this object's version, which must keep advancing through drag/undo.
+        version = keep_version;
         touch();
     }
 
@@ -373,6 +377,8 @@ std::shared_ptr<Polyline> make_star(double cx, double cy, double r_out, int poin
 // Atalhos de tipo, no lugar do isinstance do Python.
 template <class T>
 inline T* as(const EntityPtr& e) { return dynamic_cast<T*>(e.get()); }
+template <class T>
+inline T* as(Entity& e) { return dynamic_cast<T*>(&e); }
 template <class T>
 inline const T* as(const Entity& e) { return dynamic_cast<const T*>(&e); }
 template <class T>

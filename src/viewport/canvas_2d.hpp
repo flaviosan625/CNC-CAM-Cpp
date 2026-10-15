@@ -10,6 +10,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <QGraphicsEllipseItem>
@@ -188,7 +189,7 @@ public:
     void clear_snap_marker();
 
     // -- alcas e rotulo de angulo --
-    void refresh_selection_handles();
+    void refresh_selection_handles(bool notify = true);
     void show_angle_label(double wx, double wy, double graus);
     void clear_angle_label();
 
@@ -242,6 +243,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    std::optional<BBox> selection_bbox_for(const std::vector<cad::EntityPtr>& selected) const;
     void rebuild_background();
     void add_margin_rect();
     void clear_fit_warning_items();
@@ -272,6 +274,7 @@ private:
     bool dragging_tab_marker_ = false;
     std::vector<QGraphicsItem*> bg_items_;
     std::vector<EntityItem*> ent_items_;
+    std::unordered_map<const cad::Entity*, EntityItem*> ent_item_index_;
     std::set<std::string> fit_warning_ids_;
     std::vector<QGraphicsItem*> fit_warning_items_;
     std::vector<QGraphicsItem*> layout_preview_items_;
@@ -303,6 +306,7 @@ public:
     QToolButton* fit_button;
 
     void set_material(double w, double h);
+    void set_document(cad::Document* document);
 
 signals:
     void mouse_moved(double wx, double wy);

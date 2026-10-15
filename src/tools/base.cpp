@@ -112,7 +112,13 @@ TransformCommand::TransformCommand(cad::Document& doc, std::vector<cad::EntityPt
 
 void TransformCommand::execute() {
     if (!has_after_) {
-        for (const cad::EntityPtr& e : ents_) apply_(*e);
+        for (const cad::EntityPtr& e : ents_) {
+            const auto version = e->version;
+            apply_(*e);
+            // Property editors can assign fields directly rather than calling a
+            // geometry method. Invalidate drawing/picking/snap caches for them.
+            if (e->version == version) e->touch();
+        }
         for (const cad::EntityPtr& e : ents_) after_.push_back(e->copy());
         has_after_ = true;
     } else {
@@ -192,13 +198,13 @@ void BaseTool::begin_live_transform(const std::vector<cad::EntityPtr>& entities)
     for (const cad::EntityPtr& e : entities) transform_before_.emplace_back(e, e->copy());
 }
 
-void BaseTool::restore_live_transform() {
+void BaseTool::restore_live_transform(bool refresh, bool keep_snapshot) {
     for (const auto& [entity, snapshot] : transform_before_) {
         entity->restore_from(*snapshot);
         entity->selected = snapshot->selected;
     }
-    if (!transform_before_.empty()) ctx->refresh();
-    transform_before_.clear();
+    if (refresh && !transform_before_.empty()) ctx->refresh();
+    if (!keep_snapshot) transform_before_.clear();
 }
 
 bool BaseTool::on_key(int key) {

@@ -37,14 +37,29 @@ if(EXISTS "${CNC_MUPDF_ROOT}/include/mupdf/classes.h" AND
 endif()
 
 if(MSVC)
-    # Keep Ninja's byte prefix consistent with MSVC's actual language pack.
-    # PT-only Build Tools fall back to Portuguese even when VSLANG=1033 is set;
-    # CMake's OEM-codepage detection can otherwise cache a mojibake prefix and
-    # silently miss all header dependencies.
-    set(CMAKE_CL_SHOWINCLUDES_PREFIX "Note: including file: ")
-    get_filename_component(_cnc_msvc_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    if(EXISTS "${_cnc_msvc_bin}/1046/clui.dll" AND NOT EXISTS "${_cnc_msvc_bin}/1033/clui.dll")
-        set(CMAKE_CL_SHOWINCLUDES_PREFIX "Observação: incluindo arquivo: ")
+    # Ninja compares the raw bytes of /showIncludes. VSLANG cannot select a
+    # language pack that is not installed; decoding this output as the OEM
+    # codepage also corrupts its UTF-8 prefix. Probe the real compiler without
+    # transcoding, instead of guessing the language or trusting an old cache.
+    if(CMAKE_GENERATOR MATCHES "Ninja")
+        set(_cnc_showincludes_dir "${CMAKE_BINARY_DIR}/CMakeFiles/ShowIncludesRaw")
+        file(MAKE_DIRECTORY "${_cnc_showincludes_dir}")
+        file(WRITE "${_cnc_showincludes_dir}/probe.h" "#pragma once\n")
+        file(WRITE "${_cnc_showincludes_dir}/probe.cpp" "#include \"probe.h\"\n")
+        execute_process(
+            COMMAND "${CMAKE_CXX_COMPILER}" ${CMAKE_CXX_COMPILER_ID_ARG1}
+                /nologo /showIncludes /c probe.cpp /Foprobe.obj
+            WORKING_DIRECTORY "${_cnc_showincludes_dir}"
+            OUTPUT_VARIABLE _cnc_showincludes_output
+            ERROR_VARIABLE _cnc_showincludes_error
+            RESULT_VARIABLE _cnc_showincludes_result
+            ENCODING NONE)
+        if(_cnc_showincludes_result EQUAL 0 AND
+           "${_cnc_showincludes_output}" MATCHES "(^|\n)([^:\n][^:\n]+:[^:\n]*[^: \n][^: \n]:?[ \t]+)([A-Za-z]:\\\\|\\./|\\.\\\\|/)")
+            set(CMAKE_CL_SHOWINCLUDES_PREFIX "${CMAKE_MATCH_2}")
+        else()
+            message(FATAL_ERROR "Could not detect MSVC /showIncludes prefix; header dependency tracking would be unsafe.\n${_cnc_showincludes_output}\n${_cnc_showincludes_error}")
+        endif()
     endif()
     add_compile_options(/utf-8 /W4 /permissive- /Zc:__cplusplus /EHsc /external:W0 /Ob2 /arch:AVX2)
     add_compile_definitions(NOMINMAX _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)

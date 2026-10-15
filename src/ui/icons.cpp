@@ -53,6 +53,71 @@ QIcon make_icon(const std::function<void(QPainter&, int)>& draw,
 }
 
 QIcon icon_for(const QString& name) {
+    if (name == "rail_selection") {
+        return make_icon([](QPainter& p, int) {
+            const QRectF box(7, 7, 19, 19);
+            p.drawRect(box);
+            for (const QPointF& point : {QPointF(7, 7), QPointF(26, 7),
+                                         QPointF(7, 26), QPointF(26, 26)})
+                p.drawEllipse(point, 1.5, 1.5);
+            QPolygonF cursor{{QPointF(12, 12), QPointF(12, 23), QPointF(15, 20),
+                              QPointF(18, 25), QPointF(20, 24), QPointF(17, 19), QPointF(22, 19)}};
+            p.drawPolygon(cursor);
+        }, QColor("#a9d8ff"), 1.8);
+    }
+    if (name == "rail_toolpaths") {
+        return make_icon([](QPainter& p, int) {
+            QPainterPath route;
+            route.moveTo(6, 25);
+            route.lineTo(13, 25);
+            route.lineTo(13, 16);
+            route.lineTo(22, 16);
+            route.lineTo(22, 8);
+            p.drawPath(route);
+            p.drawLine(18, 8, 22, 4);
+            p.drawLine(22, 4, 26, 8);
+            for (const QPointF& point : {QPointF(6, 25), QPointF(13, 16),
+                                         QPointF(22, 16), QPointF(22, 8)})
+                p.drawEllipse(point, 1.7, 1.7);
+            p.drawLine(26, 9, 26, 24);
+            p.drawLine(23, 24, 29, 24);
+        }, QColor("#a9d8ff"), 1.9);
+    }
+    if (name == "rail_automatic") {
+        return make_icon([](QPainter& p, int) {
+            for (int y : {9, 16, 23}) p.drawLine(5, y, 23, y);
+            p.drawLine(11, 6, 11, 12);
+            p.drawLine(18, 13, 18, 19);
+            p.drawLine(8, 20, 8, 26);
+            QPolygonF spark{{QPointF(26, 4), QPointF(27, 9), QPointF(31, 11),
+                             QPointF(27, 13), QPointF(26, 18), QPointF(24, 13),
+                             QPointF(20, 11), QPointF(24, 9)}};
+            p.drawPolygon(spark);
+        }, QColor("#a9d8ff"), 1.8);
+    }
+    if (name == "rail_simulation") {
+        return make_icon([](QPainter& p, int) {
+            QPolygonF top{{QPointF(6, 11), QPointF(16, 5), QPointF(26, 11), QPointF(16, 17)}};
+            p.drawPolygon(top);
+            p.drawLine(6, 11, 6, 22);
+            p.drawLine(6, 22, 16, 28);
+            p.drawLine(16, 28, 16, 17);
+            p.drawLine(26, 11, 26, 20);
+            QPolygonF play{{QPointF(21, 17), QPointF(29, 21), QPointF(21, 25)}};
+            p.drawPolygon(play);
+        }, QColor("#a9d8ff"), 1.8);
+    }
+    if (name == "rail_order") {
+        return make_icon([](QPainter& p, int) {
+            p.drawRoundedRect(QRectF(7, 4, 19, 25), 2, 2);
+            for (int y : {11, 17, 23}) {
+                p.drawRect(QRectF(10, y - 2, 3, 3));
+                p.drawLine(16, y, 23, y);
+            }
+            p.drawLine(10, 11, 11, 12);
+            p.drawLine(11, 12, 13, 9);
+        }, QColor("#a9d8ff"), 1.8);
+    }
     if (name == "zoom_fit") {
         return make_icon([](QPainter& p, int s) {
             p.drawRect(kMargin + 3, kMargin + 3, s - 2 * kMargin - 6, s - 2 * kMargin - 6);

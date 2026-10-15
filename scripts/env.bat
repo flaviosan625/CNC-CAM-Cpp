@@ -12,7 +12,7 @@ if "%CNC_VTK%"==""  set "CNC_VTK=%USERPROFILE%\toolchains\vtk-9.7.1\vtk-wheel-sd
 
 rem Compila fora da pasta do projeto: sem espacos nem "+" no caminho do build.
 rem Ninja precisa reconhecer /showIncludes para recompilar dependencias de headers.
-rem Idioma fixo evita prefixos localizados/codificados de forma diferente pelo CMake.
+rem Ninja compara bytes: mantenha /showIncludes em UTF-8 em todas as compilacoes.
 if not defined VSCMD_VER (
     rem o vcvars procura o vswhere no PATH; ele mora na pasta do instalador do VS
     set "PATH=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer;%PATH%"
@@ -20,6 +20,7 @@ if not defined VSCMD_VER (
     if errorlevel 1 ( echo [env] vcvars64 falhou & exit /b 1 )
 )
 set "VSLANG=1033"
+chcp 65001 >nul
 set "PATH=%CNC_VS%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;%CNC_VS%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%CNC_QT%\bin;%CNC_DEPS%\bin;%PATH%"
 set "CMAKE_PREFIX_PATH=%CNC_QT%;%CNC_DEPS%;%CNC_VTK%"
 exit /b 0

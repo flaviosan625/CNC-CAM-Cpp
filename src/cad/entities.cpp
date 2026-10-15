@@ -518,7 +518,16 @@ BBox Text::bounding_box() const {
 void Text::translate(double dx, double dy) {
     x += dx;
     y += dy;
-    invalidate();
+    // Moving labels does not change the font or the glyphs. Reuse the existing
+    // outlines instead of asking Qt to tessellate every letter on each frame.
+    if (cached_) {
+        for (auto& polygon : *cached_)
+            for (auto& point : polygon) {
+                point.x += dx;
+                point.y += dy;
+            }
+    }
+    touch();
 }
 
 void Text::rotate(double deg, double cx, double cy) {

@@ -86,4 +86,9 @@ void Canvas2DWidget::set_material(double w, double h) {
     canvas->setup_material(w, h);
 }
 
+void Canvas2DWidget::set_document(cad::Document* document) {
+    if (document) ruler_v->set_material_height(document->material.height);
+    canvas->set_document(document);
+}
+
 }  // namespace cnc::vp

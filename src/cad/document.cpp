@@ -256,12 +256,21 @@ void Document::sync_dimensions() {
             vy = 0.0;
             length = 1.0;
         }
+        const double next_x2 = cx + radius * vx / length;
+        const double next_y2 = cy + radius * vy / length;
+        const double next_x3 = dim->x3 + (cx - old_cx);
+        const double next_y3 = dim->y3 + (cy - old_cy);
+        if (dim->x1 == cx && dim->y1 == cy && dim->x2 == next_x2 &&
+            dim->y2 == next_y2 && dim->x3 == next_x3 && dim->y3 == next_y3) continue;
         dim->x1 = cx;
         dim->y1 = cy;
-        dim->x2 = cx + radius * vx / length;
-        dim->y2 = cy + radius * vy / length;
-        dim->x3 += cx - old_cx;
-        dim->y3 += cy - old_cy;
+        dim->x2 = next_x2;
+        dim->y2 = next_y2;
+        dim->x3 = next_x3;
+        dim->y3 = next_y3;
+        // Linked dimensions are edited here rather than through transforms.
+        // Notify the viewport and snap caches only when their geometry changes.
+        dim->touch();
     }
 }
 

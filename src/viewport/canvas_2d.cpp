@@ -23,14 +23,16 @@ Canvas2D::Canvas2D(QWidget* parent) : QGraphicsView(parent) {
     setResizeAnchor(QGraphicsView::AnchorViewCenter);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    // Atualiza so a regiao alterada; redesenhar a chapa inteira a cada no
+    // movimentado fica caro em desenhos importados grandes.
+    setViewportUpdateMode(QGraphicsView::MinimalViewportUpdate);
     setStyleSheet("border: none;");
     setFocusPolicy(Qt::StrongFocus);
     scene_->setBackgroundBrush(QBrush(QColor(ui::color("canvas"))));
 
     shortcut_table = shortcuts::load();
     // O ponto azul fica a X pixels do canto: muda com o zoom.
-    connect(this, &Canvas2D::view_changed, this, &Canvas2D::refresh_selection_handles);
+    connect(this, &Canvas2D::view_changed, this, [this] { refresh_selection_handles(false); });
 
     setMouseTracking(true);
     setAcceptDrops(true);
@@ -57,6 +59,13 @@ void Canvas2D::set_document(cad::Document* doc) {
     document_ = doc;
     snap.document = doc;
     material_ = doc ? &doc->material : nullptr;
+    if (doc) {
+        material_width = doc->material.width;
+        material_height = doc->material.height;
+        const double margin = std::max(material_width, material_height) * 3;
+        scene_->setSceneRect(-margin, -margin, material_width + 2 * margin,
+                             material_height + 2 * margin);
+    }
     rebuild_background();
     refresh_entities();
 }

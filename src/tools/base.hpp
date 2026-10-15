@@ -200,7 +200,7 @@ public:
     virtual void activate() { ctx->prompt(hint()); }
     virtual void deactivate();
     void begin_live_transform(const std::vector<cad::EntityPtr>& entities);
-    void restore_live_transform();
+    void restore_live_transform(bool refresh = true, bool keep_snapshot = false);
     virtual std::string hint() const { return label(); }
     // Ferramentas "instant" implementam aqui a acao direta.
     virtual void run() {}

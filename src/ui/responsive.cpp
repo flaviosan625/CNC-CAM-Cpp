@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <QBoxLayout>
 #include <QEvent>
+#include <QEventLoop>
 #include <QFormLayout>
 #include <QLabel>
 #include <QResizeEvent>
@@ -12,6 +13,15 @@
 #include <QSplitter>
 
 namespace cnc::ui {
+int ResponsiveDialog::exec() {
+    setWindowModality(Qt::NonModal);
+    QEventLoop loop;
+    QObject::connect(this, &QDialog::finished, &loop, &QEventLoop::quit);
+    show();
+    loop.exec();
+    return result();
+}
+
 void ResponsiveDialog::resizeEvent(QResizeEvent* event) {
     for (auto* splitter : findChildren<QSplitter*>()) {
         if (splitter->property("keepOrientation").toBool()) continue;
@@ -43,11 +53,22 @@ void ResponsiveDialog::showEvent(QShowEvent* event) {
         setMinimumSize(340, 280); setSizeGripEnabled(true);
     }
     if (screen()) {
-        const QRect available = screen()->availableGeometry().adjusted(18, 34, -18, -18);
-        setMinimumSize(std::min(340, available.width()), std::min(280, available.height()));
-        resize(std::min(width(), available.width()), std::min(height(), available.height()));
-        move(std::clamp(x(), available.left(), std::max(available.left(), available.right() - width())),
-             std::clamp(y(), available.top(), std::max(available.top(), available.bottom() - height())));
+        const QRect available = screen()->availableGeometry().adjusted(8, 34, -8, -8);
+        QWidget* host = parentWidget() ? parentWidget()->window() : nullptr;
+        if (!host || host == this) host = nullptr;
+        const QRect host_rect = host
+            ? QRect(host->mapToGlobal(QPoint(0, 0)), host->size())
+            : available;
+        const int dock_width = std::clamp(host_rect.width() / 4, 340, 420);
+        const int dock_height = std::min(host_rect.height(), available.height());
+        setMinimumSize(std::min(320, dock_width), std::min(280, dock_height));
+        resize(dock_width, dock_height);
+        const int right = host_rect.right() + 1;
+        const int x = std::clamp(right - dock_width, available.left(),
+                                 std::max(available.left(), available.right() - dock_width + 1));
+        const int y = std::clamp(host_rect.top(), available.top(),
+                                 std::max(available.top(), available.bottom() - dock_height + 1));
+        move(x, y);
     }
     QDialog::showEvent(event);
 }

@@ -149,15 +149,16 @@ QMenu::item:disabled { color: #62758f; }
 #PropPanel { background-color: #192230; border-left: 1px solid #2b3b50; }
 #RightToolRail { background-color: #1c222b; border-left: 1px solid #343b45; }
 #RightRailButton, #RightRailToggle {
-    background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 0;
+    background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 0;
+    color: #c5d9ea;
 }
 #RightRailButton:hover, #RightRailToggle:hover {
-    background-color: #2b333d; border-color: #3b4652;
+    background-color: #23394a; border-color: #3c6078;
 }
 #RightRailButton:checked {
-    background-color: #35414d; border-left: 2px solid #75bcff;
+    background-color: #16475b; border: 1px solid #227b96; border-left: 3px solid #38d6ee;
 }
-#RightRailButton:checked:hover { background-color: #3d4b58; }
+#RightRailButton:checked:hover { background-color: #1c566d; }
 #RightRailToggle { color: #aab6c3; font-size: 16px; font-weight: 600; }
 #RightToolRailSep { background-color: #343b45; border: none; max-height: 1px; }
 #PropTitle {

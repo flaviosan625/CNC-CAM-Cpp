@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <numeric>
 #include <set>
 #include <tuple>
 
@@ -43,6 +44,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QListWidget>
+#include <QResizeEvent>
 #include <QDoubleSpinBox>
 #include <QSignalBlocker>
 #include <QScrollArea>
@@ -75,6 +77,7 @@
 #include "ui/quick_edit.hpp"
 #include "ui/safe_inputs.hpp"
 #include "cad/layout.hpp"
+#include "cad/selection.hpp"
 #include "cam/gcode.hpp"
 #include "cam/job_sheet.hpp"
 #include "cam/presets.hpp"
@@ -165,22 +168,75 @@ private:
     QToolButton* button_ = nullptr;
 };
 
+class AspectPixmapLabel final : public QLabel {
+public:
+    explicit AspectPixmapLabel(QWidget* parent = nullptr) : QLabel(parent) {
+        setAlignment(Qt::AlignCenter);
+        setMinimumSize(0, 200);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    }
+
+    void set_source_image(const QImage& image) {
+        source_ = image;
+        update_pixmap();
+    }
+
+protected:
+    void resizeEvent(QResizeEvent* event) override {
+        QLabel::resizeEvent(event);
+        update_pixmap();
+    }
+
+private:
+    void update_pixmap() {
+        if (source_.isNull() || width() <= 0 || height() <= 0) {
+            clear();
+            return;
+        }
+        setPixmap(QPixmap::fromImage(source_).scaled(size(), Qt::KeepAspectRatio,
+                                                      Qt::SmoothTransformation));
+    }
+    QImage source_;
+};
+
 using InteractiveGuideWidget = ui::MachiningGuide;
 
 }  // namespace
 
+// This renderer is exclusive to the OS perspective; profile guides continue
+// using their original interactive MachiningGuide illustrations.
 QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& operations,
-                                const cad::MaterialSetup* material) {
-    QImage image(980, 300, QImage::Format_ARGB32_Premultiplied);
-    image.fill(QColor("#f8fafc"));
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::TextAntialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+                                const cad::MaterialSetup* material,
+                                const JobPreviewOptions& options) {
+    const double canvas_w = std::max(320, options.width);
+    const double supersample = std::clamp(options.supersample, 1.0, 6.0);
+    const auto make_canvas = [&](double height) {
+        QImage image(qRound(canvas_w * supersample), qRound(height * supersample),
+                     QImage::Format_ARGB32_Premultiplied);
+        image.fill(QColor("#0b1521"));
+        return image;
+    };
+    const auto start_painter = [&](QPainter& painter) {
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        // Everything below works in logical units; the scale keeps the strokes
+        // and the lettering crisp at the resolution the sheet is printed at.
+        painter.scale(supersample, supersample);
+    };
+
+    // Only the selected toolpath is drawn on a per-operation sheet.
+    const auto included = [&](size_t index) {
+        return options.only_operation < 0 ||
+               static_cast<size_t>(options.only_operation) == index;
+    };
 
     std::optional<BBox> cut_bounds;
-    for (const auto& operation : operations) {
-        if (!operation.path) continue;
+    double cut_z_min = 0.0, cut_z_max = 0.0;
+    bool has_cut_z = false;
+    for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
+        const auto& operation = operations[op_index];
+        if (!operation.path || !included(op_index)) continue;
         for (const cam::Move& move : operation.path->moves) {
             if (!move.cutting()) continue;
             if (!cut_bounds) cut_bounds = BBox{move.x, move.y, move.x, move.y};
@@ -190,455 +246,410 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
                 cut_bounds->x1 = std::max(cut_bounds->x1, move.x);
                 cut_bounds->y1 = std::max(cut_bounds->y1, move.y);
             }
+            if (!has_cut_z) {
+                cut_z_min = cut_z_max = move.z;
+                has_cut_z = true;
+            } else {
+                cut_z_min = std::min(cut_z_min, move.z);
+                cut_z_max = std::max(cut_z_max, move.z);
+            }
         }
     }
 
-    const bool has_material = (material && material->width > 0.0 && material->height > 0.0);
+    const bool has_material = material && material->width > 0.0 && material->height > 0.0;
     if (!cut_bounds && !has_material) {
-        painter.setPen(QColor("#536579"));
-        painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
-        painter.drawText(image.rect(), Qt::AlignCenter, "Sem percursos de corte calculados");
-        painter.end();
+        QImage image = make_canvas(options.min_height);
+        QPainter painter(&image);
+        start_painter(painter);
+        painter.setPen(QColor("#cbd5e1"));
+        painter.setFont(QFont("Segoe UI", 12, QFont::DemiBold));
+        painter.drawText(QRectF(0, 0, canvas_w, options.min_height), Qt::AlignCenter,
+                         "Sem percursos de corte calculados");
         return image;
     }
 
-    double mat_x0 = 0.0, mat_y0 = 0.0, mat_x1 = 0.0, mat_y1 = 0.0;
-    if (has_material) {
-        mat_x1 = material->width;
-        mat_y1 = material->height;
-        if (material->use_origin_offset) {
-            mat_x0 += material->origin_offset_x;
-            mat_x1 += material->origin_offset_x;
-            mat_y0 += material->origin_offset_y;
-            mat_y1 += material->origin_offset_y;
-        }
-        if (material->zero_x == "center") {
-            const double hw = material->width / 2.0;
-            mat_x0 -= hw; mat_x1 -= hw;
-        } else if (material->zero_x == "right") {
-            mat_x0 -= material->width; mat_x1 -= material->width;
-        }
-        if (material->zero_y == "center") {
-            const double hh = material->height / 2.0;
-            mat_y0 -= hh; mat_y1 -= hh;
-        } else if (material->zero_y == "top") {
-            mat_y0 -= material->height; mat_y1 -= material->height;
-        }
-    }
+    const double board_width = has_material ? material->width
+                                             : std::max(100.0, cut_bounds->x1 - cut_bounds->x0 + 20.0);
+    const double board_height = has_material ? material->height
+                                              : std::max(100.0, cut_bounds->y1 - cut_bounds->y0 + 20.0);
+    const double thickness = has_material ? material->thickness : 15.0;
+    const double z_top = has_material ? material->surface_z() : 0.0;
+    const double z_bottom = z_top - thickness;
+    const double origin_x = has_material ? material->origin_xy().x : 0.0;
+    const double origin_y = has_material ? material->origin_xy().y : 0.0;
+    const double mat_x0 = origin_x;
+    const double mat_y0 = origin_y;
+    const double mat_x1 = origin_x + board_width;
+    const double mat_y1 = origin_y + board_height;
+    const double cut_width = cut_bounds ? cut_bounds->x1 - cut_bounds->x0 : 0.0;
+    const double cut_height = cut_bounds ? cut_bounds->y1 - cut_bounds->y0 : 0.0;
+    const double area_m2 = board_width * board_height / 1000000.0;
 
-    // Callout Balloon at top
-    const double cut_w = cut_bounds ? (cut_bounds->x1 - cut_bounds->x0) : 0.0;
-    const double cut_h = cut_bounds ? (cut_bounds->y1 - cut_bounds->y0) : 0.0;
-    const double area_m2 = has_material ? ((material->width * material->height) / 1000000.0)
-                                        : ((cut_w * cut_h) / 1000000.0);
-    const QString zero_z_str = (material && material->zero_z == "bottom") ? "BASE DA MESA" : "TOPO DA CHAPA";
-
-    const QRectF balloon_rect(12, 5, image.width() - 24, 28);
-    QPainterPath balloon_path;
-    balloon_path.addRoundedRect(balloon_rect, 14, 14);
-    const double mid_x = image.width() / 2.0;
-    balloon_path.moveTo(mid_x - 7, balloon_rect.bottom());
-    balloon_path.lineTo(mid_x, balloon_rect.bottom() + 5);
-    balloon_path.lineTo(mid_x + 7, balloon_rect.bottom());
-    balloon_path.closeSubpath();
-
-    QLinearGradient b_grad(balloon_rect.topLeft(), balloon_rect.bottomLeft());
-    b_grad.setColorAt(0.0, QColor("#0f172a"));
-    b_grad.setColorAt(1.0, QColor("#1e293b"));
-    painter.setBrush(b_grad);
-    painter.setPen(QPen(QColor("#38bdf8"), 1.2));
-    painter.drawPath(balloon_path);
-
-    painter.setFont(QFont("Segoe UI", 7.5, QFont::Bold));
-    painter.setPen(QColor("#ffffff"));
-    QString balloon_text;
-    if (has_material) {
-        balloon_text = QString("🏷 CHAPA: %1 × %2 mm (%3 m²)  |  📐 CORTE: %4 × %5 mm  |  📏 ESPESSURA: %6 mm  |  🎯 ZERO Z: %7")
-                           .arg(material->width, 0, 'f', 1)
-                           .arg(material->height, 0, 'f', 1)
-                           .arg(area_m2, 0, 'f', 3)
-                           .arg(cut_w, 0, 'f', 1)
-                           .arg(cut_h, 0, 'f', 1)
-                           .arg(material->thickness, 0, 'f', 1)
-                           .arg(zero_z_str);
-    } else {
-        balloon_text = QString("🏷 ENVELOPE DE CORTE: %1 × %2 mm  |  ÁREA APROXIMADA: %3 m²")
-                           .arg(cut_w, 0, 'f', 1)
-                           .arg(cut_h, 0, 'f', 1)
-                           .arg(area_m2, 0, 'f', 3);
-    }
-    painter.drawText(balloon_rect, Qt::AlignCenter, balloon_text);
-
-    // LEFT CARD: 2.5D Real workpiece and cuts
-    const QRectF left_card(12, 38, 626, 246);
-    painter.setPen(QPen(QColor("#cbd5e1"), 1.0));
-    painter.setBrush(Qt::white);
-    painter.drawRoundedRect(left_card, 6, 6);
-
-    // Technical grid inside left card
-    painter.setPen(QPen(QColor("#f1f5f9"), 0.8));
-    for (int gx = static_cast<int>(left_card.left()) + 20; gx < static_cast<int>(left_card.right()) - 10; gx += 26) {
-        painter.drawLine(gx, static_cast<int>(left_card.top()) + 6, gx, static_cast<int>(left_card.bottom()) - 6);
-    }
-    for (int gy = static_cast<int>(left_card.top()) + 10; gy < static_cast<int>(left_card.bottom()) - 6; gy += 26) {
-        painter.drawLine(static_cast<int>(left_card.left()) + 6, gy, static_cast<int>(left_card.right()) - 6, gy);
-    }
-
-    // Left card badge
-    const QRectF left_badge(left_card.left() + 6, left_card.top() + 6, 186, 15);
-    painter.setBrush(QColor("#e2e8f0"));
-    painter.setPen(QPen(QColor("#cbd5e1"), 0.8));
-    painter.drawRoundedRect(left_badge, 3, 3);
-    painter.setPen(QColor("#334155"));
-    painter.setFont(QFont("Segoe UI", 6.6, QFont::Bold));
-    painter.drawText(left_badge, Qt::AlignCenter, "VISTA 2.5D · CHAPA E PERCURSO REAL");
-
-    // Coordinates mapping for left card
-    BBox total_bounds = cut_bounds.value_or(BBox{mat_x0, mat_y0, mat_x1, mat_y1});
-    if (has_material) {
-        total_bounds.x0 = std::min(total_bounds.x0, mat_x0);
-        total_bounds.y0 = std::min(total_bounds.y0, mat_y0);
-        total_bounds.x1 = std::max(total_bounds.x1, mat_x1);
-        total_bounds.y1 = std::max(total_bounds.y1, mat_y1);
-    }
-    const double width_mm = std::max(0.01, total_bounds.x1 - total_bounds.x0);
-    const double height_mm = std::max(0.01, total_bounds.y1 - total_bounds.y0);
-
-    const QRectF area(left_card.left() + 50, left_card.top() + 26, left_card.width() - 86, left_card.height() - 56);
-    const double scale = std::min(area.width() / width_mm, area.height() / height_mm);
-    const double drawn_width = width_mm * scale;
-    const double drawn_height = height_mm * scale;
-    const double left = area.center().x() - drawn_width / 2.0;
-    const double top = area.center().y() - drawn_height / 2.0;
-
-    auto to_screen = [&](double x, double y) -> QPointF {
-        return QPointF(left + (x - total_bounds.x0) * scale,
-                       top + (total_bounds.y1 - y) * scale);
+    constexpr double x_axis_x = .92, x_axis_y = .28;
+    constexpr double y_axis_x = -.92, y_axis_y = .28;
+    constexpr double z_scale = .9;
+    const auto raw_project = [&](double x, double y, double z) {
+        const double dx = x - mat_x0;
+        const double dy = y - mat_y0;
+        return QPointF(x_axis_x * dx + y_axis_x * dy,
+                       x_axis_y * dx + y_axis_y * dy - (z - z_top) * z_scale);
     };
 
-    // Draw realistic material sheet with wood texture & bevel
-    if (has_material) {
-        const QPointF mat_tl = to_screen(mat_x0, mat_y1);
-        const QPointF mat_br = to_screen(mat_x1, mat_y0);
-        const QRectF mat_rect(mat_tl, mat_br);
+    double raw_x0 = std::numeric_limits<double>::max();
+    double raw_y0 = std::numeric_limits<double>::max();
+    double raw_x1 = std::numeric_limits<double>::lowest();
+    double raw_y1 = std::numeric_limits<double>::lowest();
+    const auto include_raw = [&](const QPointF& point) {
+        raw_x0 = std::min(raw_x0, point.x());
+        raw_y0 = std::min(raw_y0, point.y());
+        raw_x1 = std::max(raw_x1, point.x());
+        raw_y1 = std::max(raw_y1, point.y());
+    };
+    const std::array<QPointF, 4> board_corners = {
+        QPointF(mat_x0, mat_y0), QPointF(mat_x1, mat_y0),
+        QPointF(mat_x1, mat_y1), QPointF(mat_x0, mat_y1)};
+    for (const QPointF& corner : board_corners) {
+        include_raw(raw_project(corner.x(), corner.y(), z_top));
+        include_raw(raw_project(corner.x(), corner.y(), z_bottom));
+    }
+    for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
+        const auto& operation = operations[op_index];
+        if (!operation.path || !included(op_index)) continue;
+        for (const cam::Move& move : operation.path->moves)
+            if (move.cutting()) include_raw(raw_project(move.x, move.y, move.z));
+    }
+    const double raw_width = std::max(1.0, raw_x1 - raw_x0);
+    const double raw_height = std::max(1.0, raw_y1 - raw_y0);
 
-        // Drop shadow
-        painter.setBrush(QColor(15, 23, 42, 35));
-        painter.setPen(Qt::NoPen);
-        painter.drawRoundedRect(mat_rect.translated(4, 5), 5, 5);
+    // The cotas sit in a strip under the stock rather than in a side column, so
+    // the drawing keeps nearly the full width.  The canvas is then made exactly
+    // as tall as the projected stock needs, which is what stops the sheet from
+    // padding the drawing with dead space instead of enlarging it.
+    constexpr double kDrawingTop = 70.0;
+    constexpr double kLegendHeight = 62.0;
+    constexpr double kChromeHeight = kDrawingTop + kLegendHeight + 24.0;
+    const QRectF drawing_probe(18.0, kDrawingTop, canvas_w - 36.0, 1.0);
+    const double wanted = drawing_probe.width() / (raw_width / raw_height);
+    const double canvas_h = std::clamp(wanted + kChromeHeight,
+                                       static_cast<double>(options.min_height),
+                                       static_cast<double>(options.max_height));
 
-        // Wood texture with clip
-        painter.save();
-        QPainterPath mat_path;
-        mat_path.addRoundedRect(mat_rect, 5, 5);
-        painter.setClipPath(mat_path);
-        painter.drawImage(mat_rect, ui::woodTexture());
-        QLinearGradient wood_lit(mat_rect.topLeft(), mat_rect.bottomRight());
-        wood_lit.setColorAt(0.0, QColor(255, 248, 230, 45));
-        wood_lit.setColorAt(1.0, QColor(50, 30, 15, 55));
-        painter.fillPath(mat_path, wood_lit);
-        painter.restore();
+    QImage image = make_canvas(canvas_h);
+    QPainter painter(&image);
+    start_painter(painter);
 
-        // Bevel border
+    const QRectF header(12, 6, canvas_w - 24, 32);
+    QPainterPath header_path;
+    header_path.addRoundedRect(header, 15, 15);
+    painter.setBrush(QLinearGradient(header.topLeft(), header.bottomLeft()));
+    QLinearGradient header_gradient(header.topLeft(), header.bottomLeft());
+    header_gradient.setColorAt(0.0, QColor("#111f31"));
+    header_gradient.setColorAt(1.0, QColor("#1b2a3d"));
+    painter.setBrush(header_gradient);
+    painter.setPen(QPen(QColor("#29d9ef"), 1.1));
+    painter.drawPath(header_path);
+    painter.setPen(QColor("#f5f8fc"));
+    painter.setFont(QFont("Segoe UI", 9.5, QFont::DemiBold));
+    QString header_text = QString("CHAPA %1 × %2 × %3 mm  |  CORTE X %4 × Y %5 mm  |  Z %6…%7 mm  |  ZERO Z: %8")
+        .arg(board_width, 0, 'f', 1).arg(board_height, 0, 'f', 1)
+        .arg(thickness, 0, 'f', 1).arg(cut_width, 0, 'f', 1)
+        .arg(cut_height, 0, 'f', 1)
+        .arg(has_cut_z ? cut_z_min : z_top, 0, 'f', 2)
+        .arg(has_cut_z ? cut_z_max : z_top, 0, 'f', 2)
+        .arg(has_material && material->zero_z == "bottom" ? "BASE DA CHAPA" : "TOPO DA CHAPA");
+    painter.drawText(header.adjusted(12, 0, -12, 0), Qt::AlignCenter, header_text);
+
+    const QRectF viewport(12, 46, canvas_w - 24, canvas_h - 62);
+    QLinearGradient viewport_gradient(viewport.topLeft(), viewport.bottomLeft());
+    viewport_gradient.setColorAt(0.0, QColor("#172636"));
+    viewport_gradient.setColorAt(1.0, QColor("#0d1825"));
+    painter.setBrush(viewport_gradient);
+    painter.setPen(QPen(QColor("#344b61"), 1.0));
+    painter.drawRoundedRect(viewport, 7, 7);
+
+    QString badge_text = "VISTA 3D ISO · PERCURSO REAL E MATERIAL";
+    if (options.only_operation >= 0 &&
+        static_cast<size_t>(options.only_operation) < operations.size() &&
+        operations[options.only_operation].path) {
+        badge_text = QString("PERCURSO %1 · %2")
+                         .arg(options.only_operation + 1)
+                         .arg(QString::fromStdString(operations[options.only_operation].path->name));
+    }
+    const QRectF badge(22, 52, std::max(270.0, badge_text.size() * 6.4 + 28.0), 20);
+    painter.setBrush(QColor("#1879ad"));
+    painter.setPen(Qt::NoPen);
+    painter.drawRoundedRect(badge, 4, 4);
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Segoe UI", 8.5, QFont::Bold));
+    painter.drawText(badge, Qt::AlignCenter, badge_text);
+
+    const QRectF legend(18.0, canvas_h - kLegendHeight - 16.0, canvas_w - 36.0, kLegendHeight);
+    const QRectF drawing_area(18.0, kDrawingTop, canvas_w - 36.0,
+                              legend.top() - kDrawingTop - 6.0);
+    const double projection_scale = std::min(drawing_area.width() / raw_width,
+                                              drawing_area.height() / raw_height);
+    const QPointF raw_center((raw_x0 + raw_x1) / 2.0, (raw_y0 + raw_y1) / 2.0);
+    const auto project = [&](double x, double y, double z) {
+        const QPointF point = raw_project(x, y, z);
+        return drawing_area.center() + (point - raw_center) * projection_scale;
+    };
+
+    std::array<QPointF, 4> top_face, bottom_face;
+    for (size_t i = 0; i < board_corners.size(); ++i) {
+        top_face[i] = project(board_corners[i].x(), board_corners[i].y(), z_top);
+        bottom_face[i] = project(board_corners[i].x(), board_corners[i].y(), z_bottom);
+    }
+    QPolygonF top_polygon;
+    for (const QPointF& point : top_face) top_polygon << point;
+    const QPolygonF front_face{top_face[0], top_face[1], bottom_face[1], bottom_face[0]};
+    const QPolygonF right_face{top_face[1], top_face[2], bottom_face[2], bottom_face[1]};
+
+    painter.save();
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 0, 0, 75));
+    painter.drawPolygon(top_polygon.translated(7, 12));
+    painter.setBrush(QLinearGradient(right_face.boundingRect().topLeft(), right_face.boundingRect().bottomLeft()));
+    QLinearGradient right_shade(right_face.boundingRect().topLeft(), right_face.boundingRect().bottomLeft());
+    right_shade.setColorAt(0.0, QColor("#b89261"));
+    right_shade.setColorAt(1.0, QColor("#65452e"));
+    painter.setBrush(right_shade);
+    painter.drawPolygon(right_face);
+    QLinearGradient front_shade(front_face.boundingRect().topLeft(), front_face.boundingRect().bottomLeft());
+    front_shade.setColorAt(0.0, QColor("#c19a68"));
+    front_shade.setColorAt(1.0, QColor("#795535"));
+    painter.setBrush(front_shade);
+    painter.drawPolygon(front_face);
+    painter.restore();
+
+    painter.save();
+    QPainterPath top_clip;
+    top_clip.addPolygon(top_polygon);
+    painter.setClipPath(top_clip);
+    const QRectF texture_bounds = top_polygon.boundingRect();
+    painter.drawImage(texture_bounds, ui::woodTexture());
+    QLinearGradient wood_light(texture_bounds.topLeft(), texture_bounds.bottomRight());
+    wood_light.setColorAt(0.0, QColor(255, 246, 222, 78));
+    wood_light.setColorAt(1.0, QColor(45, 30, 19, 56));
+    painter.fillRect(texture_bounds, wood_light);
+    painter.restore();
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor("#f0d4a9"), 1.35));
+    painter.drawPolygon(top_polygon);
+
+    // Layer lines make the stock thickness readable in the perspective view.
+    for (int layer = 1; layer <= 3; ++layer) {
+        const double z = z_top - thickness * layer / 4.0;
+        painter.setPen(QPen(QColor(72, 43, 24, 90), .8));
+        painter.drawLine(project(mat_x0, mat_y0, z), project(mat_x1, mat_y0, z));
+        painter.drawLine(project(mat_x1, mat_y0, z), project(mat_x1, mat_y1, z));
+    }
+
+    // Draw a clipped, inset safety margin and a material name plate.
+    if (has_material && material->margin > 0.0 &&
+        board_width > material->margin * 2 && board_height > material->margin * 2) {
+        const std::array<QPointF, 4> margin_corners = {
+            QPointF(mat_x0 + material->margin, mat_y0 + material->margin),
+            QPointF(mat_x1 - material->margin, mat_y0 + material->margin),
+            QPointF(mat_x1 - material->margin, mat_y1 - material->margin),
+            QPointF(mat_x0 + material->margin, mat_y1 - material->margin)};
+        QPolygonF margin_polygon;
+        for (const QPointF& corner : margin_corners)
+            margin_polygon << project(corner.x(), corner.y(), z_top);
+        painter.setPen(QPen(QColor("#f3e4c8"), .8, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(QColor("#a88252"), 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        painter.drawRoundedRect(mat_rect, 5, 5);
-
-        // Usable margin (dashed safety line)
-        painter.setPen(QPen(QColor("#e8d5b5"), 1.0, Qt::DashLine));
-        painter.drawRoundedRect(mat_rect.adjusted(3, 3, -3, -3), 4, 4);
-
-        // Tag on sheet (top right of sheet to avoid bottom-left origin tripod)
-        const QRectF tag_rect(mat_rect.right() - 135, mat_rect.top() + 5, 130, 13);
-        painter.setBrush(QColor(15, 23, 42, 170));
-        painter.setPen(Qt::NoPen);
-        painter.drawRoundedRect(tag_rect, 3, 3);
-        painter.setPen(QColor("#f8fafc"));
-        painter.setFont(QFont("Segoe UI", 6.2, QFont::Bold));
-        painter.drawText(tag_rect, Qt::AlignCenter,
-                         QString("CHAPA %1×%2×%3 mm").arg(material->width, 0, 'f', 0).arg(material->height, 0, 'f', 0).arg(material->thickness, 0, 'f', 1));
+        painter.drawPolygon(margin_polygon);
     }
+    const QRectF material_tag(top_polygon.boundingRect().topRight() + QPointF(-122, 3), QSizeF(118, 19));
+    painter.setBrush(QColor(13, 25, 38, 210));
+    painter.setPen(Qt::NoPen);
+    painter.drawRoundedRect(material_tag, 3, 3);
+    painter.setPen(QColor("#fff8e9"));
+    painter.setFont(QFont("Segoe UI", 7.6, QFont::Bold));
+    painter.drawText(material_tag, Qt::AlignCenter,
+        QString("%1 × %2 × %3 mm").arg(board_width, 0, 'f', 0)
+                                      .arg(board_height, 0, 'f', 0)
+                                      .arg(thickness, 0, 'f', 1));
 
-    // Cutting envelope
-    if (cut_bounds) {
-        const QPointF cut_tl = to_screen(cut_bounds->x0, cut_bounds->y1);
-        const QPointF cut_br = to_screen(cut_bounds->x1, cut_bounds->y0);
-        painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(QColor("#0284c7"), 1.0, Qt::DashLine));
-        painter.drawRect(QRectF(cut_tl, cut_br));
-    }
-
-    // Toolpath cuts with Kerf, Centerline, and Feed Direction Arrows
-    const std::array<QColor, 7> colors = {
-        QColor("#00e5ff"), QColor("#ea580c"), QColor("#16a34a"),
-        QColor("#9333ea"), QColor("#d97706"), QColor("#0d9488"),
-        QColor("#e11d48")
-    };
-
-    struct ArrowMark {
-        QPointF tip;
-        double dx, dy;
-    };
-    std::vector<ArrowMark> arrows;
-
+    const std::array<QColor, 7> operation_colors = {
+        QColor("#29d9ef"), QColor("#ffae55"), QColor("#55d68b"), QColor("#b49cff"),
+        QColor("#f27ca2"), QColor("#61a6ff"), QColor("#f2d35e")};
+    struct DirectionMark { QPointF tip; QPointF direction; QColor color; };
+    std::vector<DirectionMark> direction_marks;
+    std::optional<QPointF> first_cut_point;
+    std::optional<double> deepest_cut;
     for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
         const auto* path = operations[op_index].path;
-        if (!path) continue;
+        if (!path || path->moves.empty() || !included(op_index)) continue;
         const cam::Tool* tool = operations[op_index].job ? &operations[op_index].job->tool : nullptr;
-        const double diam = tool ? tool->diameter : 4.0;
-        const double kerf_px = std::clamp(diam * scale, 2.5, 18.0);
-
+        const double diameter = tool ? tool->diameter : 4.0;
+        const double kerf = std::clamp(diameter * projection_scale, 3.0, 12.0);
         QPainterPath cut_path;
-        QPainterPath rapid_path;
-        QPointF start_cut_point;
-        bool has_start_cut = false;
-        bool in_cut = false;
-        QPointF last_cut_point;
-        double segment_accum = 0.0;
-
+        bool have_previous = false, previous_cutting = false;
+        QPointF previous_point;
+        double distance_since_arrow = 0.0;
         for (const cam::Move& move : path->moves) {
-            const QPointF point = to_screen(move.x, move.y);
+            const QPointF point = project(move.x, move.y, move.z);
             if (move.cutting()) {
-                if (!in_cut) {
-                    cut_path.moveTo(point);
-                    if (!has_start_cut) {
-                        start_cut_point = point;
-                        has_start_cut = true;
-                    }
-                    segment_accum = 0.0;
-                } else {
+                if (!first_cut_point) first_cut_point = point;
+                if (previous_cutting) {
                     cut_path.lineTo(point);
-                    const double seg_len = QLineF(last_cut_point, point).length();
-                    segment_accum += seg_len;
-                    if (seg_len > 4.0 && segment_accum >= 45.0) {
-                        const double dx = (point.x() - last_cut_point.x()) / seg_len;
-                        const double dy = (point.y() - last_cut_point.y()) / seg_len;
-                        const QPointF mid = (last_cut_point + point) / 2.0;
-                        arrows.push_back({mid, dx, dy});
-                        segment_accum = 0.0;
+                    const double segment = QLineF(previous_point, point).length();
+                    distance_since_arrow += segment;
+                    if (segment > 2.0 && distance_since_arrow >= 58.0) {
+                        direction_marks.push_back({(previous_point + point) / 2.0,
+                                                   point - previous_point,
+                                                   operation_colors[op_index % operation_colors.size()]});
+                        distance_since_arrow = 0.0;
                     }
+                } else {
+                    cut_path.moveTo(point);
+                    distance_since_arrow = 0.0;
                 }
-                last_cut_point = point;
-                in_cut = true;
-            } else {
-                if (in_cut) rapid_path.moveTo(cut_path.currentPosition());
-                else if (rapid_path.elementCount() == 0) rapid_path.moveTo(point);
-                rapid_path.lineTo(point);
-                in_cut = false;
+                deepest_cut = deepest_cut ? std::max(*deepest_cut, z_top - move.z)
+                                          : z_top - move.z;
             }
+            previous_point = point;
+            have_previous = true;
+            previous_cutting = move.cutting();
         }
 
-        // Rapid positioning (G0)
-        painter.setPen(QPen(QColor("#94a3b8"), 0.8, Qt::DashLine));
-        painter.drawPath(rapid_path);
-
-        // Sunken channel groove (routed into wood)
-        painter.setPen(QPen(QColor(25, 18, 12, 140), kerf_px, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        // The OS illustrates only material removed by the cutter. G0 travel
+        // moves remain available in the real simulation and G-code, but do not
+        // clutter the production drawing with dashed lines between cut shapes.
+        painter.setPen(QPen(QColor(37, 27, 19, 190), kerf, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawPath(cut_path);
-
-        // Kerf inner glow
-        QColor op_color = colors[op_index % colors.size()];
-        QColor kerf_glow = op_color;
-        kerf_glow.setAlpha(65);
-        painter.setPen(QPen(kerf_glow, kerf_px * 0.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        QColor glow = operation_colors[op_index % operation_colors.size()];
+        glow.setAlpha(90);
+        painter.setPen(QPen(glow, std::max(2.0, kerf * .72), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawPath(cut_path);
-
-        // Centerline vector
-        painter.setPen(QPen(op_color, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setPen(QPen(operation_colors[op_index % operation_colors.size()], 1.45,
+                            Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawPath(cut_path);
-
-        // Plunge/Entry marker
-        if (has_start_cut) {
-            painter.setBrush(QColor("#22c55e"));
-            painter.setPen(QPen(Qt::white, 1.2));
-            painter.drawEllipse(start_cut_point, 3.5, 3.5);
-        }
     }
 
-    // Direction arrows along cuts
-    for (const auto& arr : arrows) {
-        const double nx = -arr.dy;
-        const double ny = arr.dx;
-        QPointF w1 = arr.tip - QPointF(arr.dx * 5.5 - nx * 3.5, arr.dy * 5.5 - ny * 3.5);
-        QPointF w2 = arr.tip - QPointF(arr.dx * 5.5 + nx * 3.5, arr.dy * 5.5 + ny * 3.5);
-        painter.setPen(QPen(QColor("#ffffff"), 1.3, Qt::SolidLine, Qt::RoundCap));
-        painter.drawLine(arr.tip, w1);
-        painter.drawLine(arr.tip, w2);
+    for (const DirectionMark& mark : direction_marks) {
+        const double length = std::max(1.0, QLineF(QPointF(), mark.direction).length());
+        const QPointF unit = mark.direction / length;
+        const QPointF normal(-unit.y(), unit.x());
+        painter.setPen(QPen(mark.color, 1.4, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(mark.tip, mark.tip - unit * 7.0 + normal * 3.4);
+        painter.drawLine(mark.tip, mark.tip - unit * 7.0 - normal * 3.4);
     }
 
-    // 3D Origin Tripod at (mat_x0, mat_y0)
-    if (has_material) {
-        const QPointF origin_screen = to_screen(mat_x0, mat_y0);
-        if (origin_screen.x() >= left_card.left() && origin_screen.x() <= left_card.right() &&
-            origin_screen.y() >= left_card.top() && origin_screen.y() <= left_card.bottom()) {
-            // Target bullseye
-            painter.setBrush(QColor("#ef4444"));
-            painter.setPen(QPen(Qt::white, 1.2));
-            painter.drawEllipse(origin_screen, 4.5, 4.5);
-            painter.setBrush(Qt::NoBrush);
-            painter.setPen(QPen(QColor("#ef4444"), 0.8));
-            painter.drawEllipse(origin_screen, 8.0, 8.0);
+    if (first_cut_point) {
+        painter.setBrush(QColor("#35dc91"));
+        painter.setPen(QPen(Qt::white, 1.0));
+        painter.drawEllipse(*first_cut_point, 4, 4);
 
-            // X Axis Arrow (Red)
-            painter.setPen(QPen(QColor("#dc2626"), 2.0));
-            painter.drawLine(origin_screen, origin_screen + QPointF(24, 0));
-            QPolygonF x_arr;
-            x_arr << origin_screen + QPointF(24, 0)
-                  << origin_screen + QPointF(19, -3)
-                  << origin_screen + QPointF(19, 3);
-            painter.setBrush(QColor("#dc2626"));
-            painter.drawPolygon(x_arr);
-
-            // Y Axis Arrow (Green)
-            painter.setPen(QPen(QColor("#16a34a"), 2.0));
-            painter.drawLine(origin_screen, origin_screen - QPointF(0, 24));
-            QPolygonF y_arr;
-            y_arr << origin_screen - QPointF(0, 24)
-                  << origin_screen - QPointF(3, -19)
-                  << origin_screen + QPointF(3, -19);
-            painter.setBrush(QColor("#16a34a"));
-            painter.drawPolygon(y_arr);
-
-            // Z Axis Arrow (Blue - 3D isometric projection up-left)
-            painter.setPen(QPen(QColor("#2563eb"), 2.0));
-            painter.drawLine(origin_screen, origin_screen + QPointF(-14, -14));
-            QPolygonF z_arr;
-            z_arr << origin_screen + QPointF(-14, -14)
-                  << origin_screen + QPointF(-9, -15)
-                  << origin_screen + QPointF(-15, -9);
-            painter.setBrush(QColor("#2563eb"));
-            painter.drawPolygon(z_arr);
-
-            painter.setFont(QFont("Segoe UI", 6.8, QFont::Bold));
-            painter.setPen(QColor("#dc2626"));
-            painter.drawText(origin_screen + QPointF(26, 4), "X+");
-            painter.setPen(QColor("#16a34a"));
-            painter.drawText(origin_screen + QPointF(-6, -26), "Y+");
-            painter.setPen(QColor("#2563eb"));
-            painter.drawText(origin_screen + QPointF(-24, -16), "Z+");
-            painter.setPen(QColor("#0f172a"));
-            painter.drawText(origin_screen + QPointF(5, 12), "X0,Y0");
-        }
+        // A compact metallic cutter points at the real first plunge of the path.
+        const QRectF cutter_body(first_cut_point->x() - 5, first_cut_point->y() - 35, 10, 25);
+        QLinearGradient steel(cutter_body.topLeft(), cutter_body.topRight());
+        steel.setColorAt(0.0, QColor("#657585"));
+        steel.setColorAt(.35, QColor("#eff5fa"));
+        steel.setColorAt(.7, QColor("#8999a8"));
+        steel.setColorAt(1.0, QColor("#4a5966"));
+        painter.setBrush(steel);
+        painter.setPen(QPen(QColor("#dce5ed"), .7));
+        painter.drawRoundedRect(cutter_body, 2, 2);
+        painter.setPen(QPen(QColor("#344451"), 1.0));
+        painter.drawLine(cutter_body.left() + 3, cutter_body.top() + 8,
+                         cutter_body.right() - 1, cutter_body.bottom() - 1);
+        painter.drawLine(cutter_body.right() - 3, cutter_body.top() + 8,
+                         cutter_body.left() + 1, cutter_body.bottom() - 1);
+        painter.setPen(QPen(QColor("#b9c6d1"), .7));
+        painter.drawLine(cutter_body.left(), cutter_body.top() + 5,
+                         cutter_body.right(), cutter_body.top() + 5);
     }
 
-    // Cotas Técnicas (Dimensions)
-    auto draw_h_dim = [&](double x_start, double x_end, double y_screen, const QString& label) {
-        painter.setPen(QPen(QColor("#334155"), 1.1));
-        painter.drawLine(QPointF(x_start, y_screen), QPointF(x_end, y_screen));
-        QPolygonF left_arrow;
-        left_arrow << QPointF(x_start, y_screen)
-                   << QPointF(x_start + 5, y_screen - 2.2)
-                   << QPointF(x_start + 5, y_screen + 2.2);
-        painter.setBrush(QColor("#334155"));
-        painter.drawPolygon(left_arrow);
-        QPolygonF right_arrow;
-        right_arrow << QPointF(x_end, y_screen)
-                    << QPointF(x_end - 5, y_screen - 2.2)
-                    << QPointF(x_end - 5, y_screen + 2.2);
-        painter.drawPolygon(right_arrow);
-        const double mid_pt_x = (x_start + x_end) / 2.0;
-        const QRectF pill_rect(mid_pt_x - 48, y_screen - 8, 96, 16);
-        painter.setBrush(Qt::white);
-        painter.setPen(QPen(QColor("#cbd5e1"), 1.0));
-        painter.drawRoundedRect(pill_rect, 3, 3);
-        painter.setPen(QColor("#0f172a"));
-        painter.setFont(QFont("Segoe UI", 6.8, QFont::Bold));
-        painter.drawText(pill_rect, Qt::AlignCenter, label);
+    // Origin tripod follows the same projected X/Y/Z basis as the stock.
+    const QPointF origin = project(mat_x0, mat_y0, z_top);
+    const auto arrow = [&](QPointF from, QPointF to, QColor color, const QString& label) {
+        const QPointF delta = to - from;
+        const double length = std::max(1.0, QLineF(from, to).length());
+        const QPointF unit = delta / length;
+        const QPointF normal(-unit.y(), unit.x());
+        painter.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(from, to);
+        painter.setBrush(color);
+        painter.setPen(Qt::NoPen);
+        painter.drawPolygon(QPolygonF{to, to - unit * 5.5 + normal * 2.5,
+                                          to - unit * 5.5 - normal * 2.5});
+        painter.setPen(color);
+        painter.setFont(QFont("Segoe UI", 8, QFont::Bold));
+        painter.drawText(to + QPointF(2, -2), label);
     };
+    arrow(origin, origin + QPointF(x_axis_x, x_axis_y) * 22.0, QColor("#f05b5b"), "X");
+    arrow(origin, origin + QPointF(y_axis_x, y_axis_y) * 22.0, QColor("#4dd78a"), "Y");
+    arrow(origin, origin + QPointF(0, -22), QColor("#63a7ff"), "Z");
+    painter.setBrush(QColor("#ffae55"));
+    painter.setPen(QPen(Qt::white, .8));
+    painter.drawEllipse(origin, 3.3, 3.3);
 
-    auto draw_v_dim = [&](double y_start, double y_end, double x_screen, const QString& label) {
-        painter.setPen(QPen(QColor("#334155"), 1.1));
-        painter.drawLine(QPointF(x_screen, y_start), QPointF(x_screen, y_end));
-        QPolygonF top_arrow;
-        top_arrow << QPointF(x_screen, y_start)
-                  << QPointF(x_screen - 2.2, y_start + 5)
-                  << QPointF(x_screen + 2.2, y_start + 5);
-        painter.setBrush(QColor("#334155"));
-        painter.drawPolygon(top_arrow);
-        QPolygonF bottom_arrow;
-        bottom_arrow << QPointF(x_screen, y_end)
-                     << QPointF(x_screen - 2.2, y_end - 5)
-                     << QPointF(x_screen + 2.2, y_end - 5);
-        painter.drawPolygon(bottom_arrow);
-        painter.save();
-        const double mid_pt_y = (y_start + y_end) / 2.0;
-        painter.translate(x_screen, mid_pt_y);
-        painter.rotate(-90);
-        const QRectF pill_rect(-48, -8, 96, 16);
-        painter.setBrush(Qt::white);
-        painter.setPen(QPen(QColor("#cbd5e1"), 1.0));
-        painter.drawRoundedRect(pill_rect, 3, 3);
-        painter.setPen(QColor("#0f172a"));
-        painter.setFont(QFont("Segoe UI", 6.8, QFont::Bold));
-        painter.drawText(pill_rect, Qt::AlignCenter, label);
-        painter.restore();
-    };
+    // The cotas run as a strip under the stock: spreading them across the width
+    // leaves room for type the operator can read from the machine.
+    painter.setBrush(QColor(9, 20, 31, 205));
+    painter.setPen(QPen(QColor("#334b61"), .9));
+    painter.drawRoundedRect(legend, 6, 6);
 
-    if (cut_bounds) {
-        const QPointF cut_tl = to_screen(cut_bounds->x0, cut_bounds->y1);
-        const QPointF cut_br = to_screen(cut_bounds->x1, cut_bounds->y0);
-        draw_h_dim(cut_tl.x(), cut_br.x(), std::min(left_card.bottom() - 14.0, cut_br.y() + 14.0),
-                   QString("Corte X %1 mm").arg(cut_w, 0, 'f', 1));
-        draw_v_dim(cut_tl.y(), cut_br.y(), std::min(left_card.right() - 16.0, cut_br.x() + 14.0),
-                   QString("Corte Y %1 mm").arg(cut_h, 0, 'f', 1));
+    const std::array<std::pair<QString, QString>, 5> cotas = {{
+        {"CHAPA X × Y × Z", QString("%1 × %2 × %3 mm").arg(board_width, 0, 'f', 1)
+                                                            .arg(board_height, 0, 'f', 1)
+                                                            .arg(thickness, 0, 'f', 1)},
+        {"ENVELOPE X", QString("%1 mm").arg(cut_width, 0, 'f', 1)},
+        {"ENVELOPE Y", QString("%1 mm").arg(cut_height, 0, 'f', 1)},
+        {"PROFUNDIDADE MÁX.", QString("%1 mm").arg(deepest_cut.value_or(0.0), 0, 'f', 2)},
+        {"ÁREA DA CHAPA", QString("%1 m²").arg(area_m2, 0, 'f', 3)},
+    }};
+    // The stock dimensions need roughly twice the room of a single measurement.
+    const std::array<double, 5> cell_weights = {2.1, 1.0, 1.0, 1.25, 1.1};
+    const double weight_total = std::accumulate(cell_weights.begin(), cell_weights.end(), 0.0);
+    const double strip_width = legend.width() - 24;
+    double cell_x = legend.left() + 12;
+    for (size_t i = 0; i < cotas.size(); ++i) {
+        const double cell_width = strip_width * cell_weights[i] / weight_total;
+        const double x = cell_x;
+        cell_x += cell_width;
+        if (i > 0) {
+            painter.setPen(QPen(QColor(70, 96, 122, 150), .8));
+            painter.drawLine(QPointF(x - 6, legend.top() + 10),
+                             QPointF(x - 6, legend.bottom() - 10));
+        }
+        painter.setPen(QColor("#8ea4ba"));
+        painter.setFont(QFont("Segoe UI", 7.5, QFont::Bold));
+        painter.drawText(QRectF(x, legend.top() + 8, cell_width - 10, 16),
+                         Qt::AlignLeft | Qt::AlignVCenter, cotas[i].first);
+        painter.setPen(QColor("#f4f8fc"));
+        painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
+        painter.drawText(QRectF(x, legend.top() + 26, cell_width - 10, 26),
+                         Qt::AlignLeft | Qt::AlignVCenter, cotas[i].second);
     }
 
-    // RIGHT CARD: Card 08 Material Setup 3D (padrão de anexo)
-    const QRectF right_card(646, 38, 322, 246);
-    QLinearGradient card_grad(right_card.topLeft(), right_card.bottomLeft());
-    card_grad.setColorAt(0.0, QColor("#1e293b"));
-    card_grad.setColorAt(1.0, QColor("#0f172a"));
-    painter.setBrush(card_grad);
-    painter.setPen(QPen(QColor("#334155"), 1.0));
-    painter.drawRoundedRect(right_card, 6, 6);
-
-    // Card 08 Header Badge
-    const QRectF right_badge(right_card.left() + 6, right_card.top() + 6, 180, 15);
-    painter.setBrush(QColor("#0284c7"));
-    painter.setPen(Qt::NoPen);
-    painter.drawRoundedRect(right_badge, 3, 3);
-    painter.setPen(Qt::white);
-    painter.setFont(QFont("Segoe UI", 6.6, QFont::Bold));
-    painter.drawText(right_badge, Qt::AlignCenter, "08 · SETUP DO MATERIAL (3D ISO)");
-
-    // Render Card 08 via ui::MachiningGuide
-    ui::GuideModel guide_model;
-    if (material) {
-        guide_model.setValue("width", material->width);
-        guide_model.setValue("height", material->height);
-        guide_model.setValue("thickness", material->thickness);
-        guide_model.setValue("clearance", material->clearance_z);
-        const int ox = (material->zero_x == "center" ? 1 : (material->zero_x == "right" ? 2 : 0));
-        const int oy = (material->zero_y == "center" ? 1 : (material->zero_y == "top" ? 2 : 0));
-        guide_model.setValue("originX", ox);
-        guide_model.setValue("originY", oy);
-        guide_model.setValue("zeroZ", material->zero_z == "bottom" ? 1 : 0);
-    } else {
-        guide_model.setValue("width", cut_bounds ? (cut_bounds->x1 - cut_bounds->x0) : 100.0);
-        guide_model.setValue("height", cut_bounds ? (cut_bounds->y1 - cut_bounds->y0) : 100.0);
-        guide_model.setValue("thickness", 15.0);
-        guide_model.setValue("clearance", 10.0);
-        guide_model.setValue("originX", 0);
-        guide_model.setValue("originY", 0);
-        guide_model.setValue("zeroZ", 0);
-    }
-    ui::MachiningGuide guide("08_material", nullptr, &guide_model);
-    guide.resize(640, 440);
-    QImage card_img(640, 440, QImage::Format_ARGB32_Premultiplied);
-    card_img.fill(Qt::transparent);
-    guide.render(&card_img);
-    painter.drawImage(QRectF(right_card.left() + 4, right_card.top() + 24, right_card.width() - 8, right_card.height() - 28),
-                      card_img);
-
-    // Bottom footnote
-    painter.setFont(QFont("Segoe UI", 6.8));
-    painter.setPen(QColor("#64748b"));
-    painter.drawText(QRectF(14, image.height() - 14, image.width() - 28, 12),
-                     Qt::AlignLeft | Qt::AlignVCenter,
-                     "Padrão técnico CNC · Vetores reais, canais com diâmetro de fresa (kerf), setas de avanço e setup 3D de referência. Confirme medidas e fixação antes de usinar.");
-
-    painter.end();
+    painter.setFont(QFont("Segoe UI", 7.6));
+    painter.setPen(QColor("#29d9ef"));
+    painter.drawText(QRectF(16, canvas_h - 17, canvas_w - 32, 13),
+                     Qt::AlignLeft | Qt::AlignVCenter, "Colorido: centro da fresa");
+    painter.setPen(QColor("#9bacbc"));
+    painter.drawText(QRectF(16, canvas_h - 17, canvas_w - 32, 13),
+                     Qt::AlignRight | Qt::AlignVCenter,
+                     "Vista isométrica · percurso de corte e material removido.");
     return image;
+}
+
+std::vector<QImage> make_operation_previews(const std::vector<cam::SetupSheetOperation>& operations,
+                                            const cad::MaterialSetup* material) {
+    std::vector<QImage> previews;
+    previews.reserve(operations.size());
+    for (size_t i = 0; i < operations.size(); ++i) {
+        if (!operations[i].path) continue;
+        JobPreviewOptions options;
+        // This sheet is almost all drawing, so the stock may grow much taller
+        // than it does on the summary page before the frame caps it.
+        options.min_height = 330;
+        options.max_height = 760;
+        options.only_operation = static_cast<int>(i);
+        previews.push_back(make_job_layout_preview(operations, material, options));
+    }
+    return previews;
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(document_, undo_stack_) {
@@ -669,6 +680,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
     view_tabs_->setObjectName("ViewTabs");
     view_tabs_->addTab("Vista 2D");
     view_tabs_->addTab("Vista 3D");
+    view_tabs_->addTab("OS · Setup");
     view_header_layout->addWidget(view_tabs_, 1);
 
     auto* view_3d_controls = new QWidget(view_header);
@@ -740,12 +752,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
                                              central);
     canvas_widget_->canvas->set_document(&document_);
     view_stack_ = new QStackedWidget(central);
+    view_stack_->setObjectName("MainViewStack");
     view_stack_->addWidget(canvas_widget_);
 
     viewport_3d_ = new vp::Viewport3D(central);
     view_stack_->addWidget(viewport_3d_);
+    create_order_service_page();
     layout->addWidget(view_stack_, 1);
     setCentralWidget(central);
+    setDockNestingEnabled(false);
+    setCorner(Qt::TopLeftCorner, Qt::LeftDockWidgetArea);
+    setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
+    setCorner(Qt::TopRightCorner, Qt::RightDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
 
     coordinate_label_ = new QLabel("X: —   Y: —", this);
     statusBar()->addPermanentWidget(coordinate_label_);
@@ -769,7 +788,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
         if (dock->objectName() == "ToolpathPanel") right_dock = dock;
     }
     if (left_dock && right_dock)
-        resizeDocks({left_dock, right_dock}, {286, 326}, Qt::Horizontal);
+        resizeDocks({left_dock, right_dock}, {224, 44}, Qt::Horizontal);
     activate_tool("select");
 
     connect(canvas_widget_, &vp::Canvas2DWidget::mouse_moved, this,
@@ -784,11 +803,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
         if (index == 1 && viewport_3d_) {
             QTimer::singleShot(120, this, [this] { refresh_3d_view(); });
         }
+        if (order_service_nav_button_)
+            order_service_nav_button_->setChecked(index == 2);
+        if (index == 2) {
+            set_right_panel_collapsed(false);
+            show_right_page(1);
+            refresh_order_service_page();
+        }
     });
     connect(canvas_widget_, &vp::Canvas2DWidget::files_dropped, this,
             [this](const QStringList& paths, double, double) { import_files(paths); });
+    selection_preview_timer_ = new QTimer(this);
+    selection_preview_timer_->setSingleShot(true);
+    selection_preview_timer_->setInterval(32);
+    connect(selection_preview_timer_, &QTimer::timeout, this, [this] {
+        refresh_guide_previews();
+        refresh_automatic_cut_panel();
+    });
     connect(canvas_widget_->canvas, &vp::Canvas2D::selection_changed, this,
-            &MainWindow::refresh_guide_previews);
+            &MainWindow::schedule_selection_previews);
     connect(canvas_widget_->canvas, &vp::Canvas2D::manual_tab_clicked, this,
             &MainWindow::add_manual_bridge);
     connect(canvas_widget_->canvas, &vp::Canvas2D::tab_marker_moved, this,
@@ -805,6 +838,524 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
     statusBar()->showMessage(QFile::exists(":/assets/check.svg")
                                  ? "0 objeto(s) selecionado(s)"
                                  : "recursos FALTANDO");
+}
+
+void MainWindow::create_order_service_page() {
+    auto* page = new QWidget(view_stack_);
+    page->setObjectName("OrderServicePage");
+    auto* root = new QVBoxLayout(page);
+    root->setContentsMargins(12, 10, 12, 10);
+    root->setSpacing(8);
+
+    auto* heading = new QHBoxLayout();
+    auto* heading_text = new QVBoxLayout();
+    heading_text->setSpacing(2);
+    auto* title = new QLabel("CENTRAL OS · SETUP EM 5 ETAPAS", page);
+    title->setStyleSheet("font-size: 15pt; font-weight: 700; color: #8cc8ff;");
+    auto* subtitle = new QLabel(
+        "Confira material, origem e ferramentas; o desenho acompanha os percursos calculados.", page);
+    subtitle->setObjectName("MutedText");
+    heading_text->addWidget(title);
+    heading_text->addWidget(subtitle);
+    heading->addLayout(heading_text, 1);
+    order_service_state_label_ = new QLabel(page);
+    order_service_state_label_->setObjectName("MutedText");
+    order_service_state_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    heading->addWidget(order_service_state_label_);
+    root->addLayout(heading);
+
+    order_service_step_tabs_ = new QTabBar(page);
+    order_service_step_tabs_->setObjectName("OSStepTabs");
+    order_service_step_tabs_->setExpanding(true);
+    order_service_step_tabs_->setDrawBase(false);
+    order_service_step_tabs_->setStyleSheet(R"QSS(
+        QTabBar::tab { background:#1a2939; color:#a9bfd6; border:1px solid #344a62;
+            padding:8px 7px; margin-right:3px; font-weight:600; }
+        QTabBar::tab:selected { background:#1d4567; color:#f0f7ff; border-color:#168be0; }
+        QTabBar::tab:hover:!selected { background:#24384d; color:#ffffff; }
+    )QSS");
+    for (const QString& step : {"1 · Material", "2 · Origem", "3 · Ferramentas",
+                                "4 · Percurso", "5 · Identificação / PDF"})
+        order_service_step_tabs_->addTab(step);
+    root->addWidget(order_service_step_tabs_);
+
+    auto* body = new QHBoxLayout();
+    body->setSpacing(10);
+    order_service_steps_ = new QStackedWidget(page);
+    order_service_steps_->setObjectName("OSStepStack");
+    order_service_steps_->setMinimumWidth(250);
+    body->addWidget(order_service_steps_, 4);
+
+    auto* material_page = new QWidget(order_service_steps_);
+    auto* material_layout = new QVBoxLayout(material_page);
+    material_layout->setContentsMargins(12, 10, 12, 10);
+    material_layout->setSpacing(10);
+    auto* material_title = new QLabel("1 · Material da chapa", material_page);
+    material_title->setObjectName("SectionHeader");
+    material_layout->addWidget(material_title);
+    auto* material_form = new QFormLayout();
+    material_form->setSpacing(10);
+    order_service_material_label_ = new QLabel(material_page);
+    order_service_material_dims_label_ = new QLabel(material_page);
+    order_service_material_area_label_ = new QLabel(material_page);
+    order_service_margin_label_ = new QLabel(material_page);
+    for (auto* value : {order_service_material_label_, order_service_material_dims_label_,
+                        order_service_material_area_label_, order_service_margin_label_}) {
+        value->setObjectName("OSValue");
+        value->setWordWrap(true);
+    }
+    material_form->addRow("Material", order_service_material_label_);
+    material_form->addRow("Dimensões X × Y × Z", order_service_material_dims_label_);
+    material_form->addRow("Área", order_service_material_area_label_);
+    material_form->addRow("Margem de segurança", order_service_margin_label_);
+    material_layout->addLayout(material_form);
+    auto* material_hint = new QLabel(
+        "Use a mesma espessura cadastrada para a chapa carregada na máquina.", material_page);
+    material_hint->setObjectName("MutedText");
+    material_hint->setWordWrap(true);
+    material_layout->addWidget(material_hint);
+    auto* edit_material = new QPushButton("Editar material e dimensões…", material_page);
+    material_layout->addWidget(edit_material);
+    connect(edit_material, &QPushButton::clicked, this, &MainWindow::edit_material_setup);
+    material_layout->addStretch();
+    order_service_steps_->addWidget(material_page);
+
+    auto* origin_page = new QWidget(order_service_steps_);
+    auto* origin_layout = new QVBoxLayout(origin_page);
+    origin_layout->setContentsMargins(12, 10, 12, 10);
+    origin_layout->setSpacing(10);
+    auto* origin_title = new QLabel("2 · Origem e segurança", origin_page);
+    origin_title->setObjectName("SectionHeader");
+    origin_layout->addWidget(origin_title);
+    auto* origin_form = new QFormLayout();
+    origin_form->setSpacing(10);
+    order_service_zero_xy_label_ = new QLabel(origin_page);
+    order_service_zero_z_label_ = new QLabel(origin_page);
+    order_service_clearance_label_ = new QLabel(origin_page);
+    order_service_plunge_gap_label_ = new QLabel(origin_page);
+    order_service_offset_label_ = new QLabel(origin_page);
+    for (auto* value : {order_service_zero_xy_label_, order_service_zero_z_label_,
+                        order_service_clearance_label_, order_service_plunge_gap_label_,
+                        order_service_offset_label_}) {
+        value->setObjectName("OSValue");
+        value->setWordWrap(true);
+    }
+    origin_form->addRow("Zero XY", order_service_zero_xy_label_);
+    origin_form->addRow("Zero Z", order_service_zero_z_label_);
+    origin_form->addRow("Altura segura Z", order_service_clearance_label_);
+    origin_form->addRow("Folga de mergulho", order_service_plunge_gap_label_);
+    origin_form->addRow("Deslocamento adicional XY", order_service_offset_label_);
+    origin_layout->addLayout(origin_form);
+    auto* origin_hint = new QLabel(
+        "Confirme o zero físico e a altura segura antes de enviar o programa CNC.", origin_page);
+    origin_hint->setObjectName("MutedText");
+    origin_hint->setWordWrap(true);
+    origin_layout->addWidget(origin_hint);
+    auto* edit_origin = new QPushButton("Revisar origem e segurança…", origin_page);
+    origin_layout->addWidget(edit_origin);
+    connect(edit_origin, &QPushButton::clicked, this, &MainWindow::edit_material_setup);
+    origin_layout->addStretch();
+    order_service_steps_->addWidget(origin_page);
+
+    auto* tools_page = new QWidget(order_service_steps_);
+    auto* tools_layout = new QVBoxLayout(tools_page);
+    tools_layout->setContentsMargins(8, 8, 8, 8);
+    tools_layout->setSpacing(8);
+    auto* tools_title = new QLabel("3 · Ferramentas e operações calculadas", tools_page);
+    tools_title->setObjectName("SectionHeader");
+    tools_layout->addWidget(tools_title);
+    order_service_operations_table_ = new QTableWidget(tools_page);
+    order_service_operations_table_->setObjectName("OSOperationsTable");
+    order_service_operations_table_->setColumnCount(5);
+    order_service_operations_table_->setHorizontalHeaderLabels(
+        {"Operação", "Ferramenta", "RPM", "Avanço", "Tempo"});
+    order_service_operations_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    order_service_operations_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    order_service_operations_table_->verticalHeader()->hide();
+    order_service_operations_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    order_service_operations_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    order_service_operations_table_->setAlternatingRowColors(true);
+    tools_layout->addWidget(order_service_operations_table_, 1);
+    auto* open_toolpaths = new QPushButton("Abrir parâmetros dos percursos…", tools_page);
+    tools_layout->addWidget(open_toolpaths);
+    connect(open_toolpaths, &QPushButton::clicked, this, [this] { show_right_page(1); });
+    order_service_steps_->addWidget(tools_page);
+
+    auto* route_page = new QWidget(order_service_steps_);
+    auto* route_layout = new QVBoxLayout(route_page);
+    route_layout->setContentsMargins(12, 10, 12, 10);
+    route_layout->setSpacing(9);
+    auto* route_title = new QLabel("4 · Conferência do percurso", route_page);
+    route_title->setObjectName("SectionHeader");
+    route_layout->addWidget(route_title);
+    auto* route_text = new QLabel(
+        "A imagem ao lado é renderizada dos movimentos calculados. Verifique o envelope, o sentido, "
+        "a profundidade e as cotas antes de gerar a folha.", route_page);
+    route_text->setObjectName("MutedText");
+    route_text->setWordWrap(true);
+    route_layout->addWidget(route_text);
+    auto* verify_simulation = new QPushButton("Abrir simulação do percurso", route_page);
+    route_layout->addWidget(verify_simulation);
+    connect(verify_simulation, &QPushButton::clicked, this, [this] {
+        show_right_page(2);
+        if (view_tabs_) view_tabs_->setCurrentIndex(1);
+    });
+    route_layout->addStretch();
+    order_service_steps_->addWidget(route_page);
+
+    auto* details_page = new QWidget(order_service_steps_);
+    auto* details_layout = new QVBoxLayout(details_page);
+    details_layout->setContentsMargins(12, 8, 12, 8);
+    details_layout->setSpacing(6);
+    auto* details_title = new QLabel("5 · Identificação da ordem", details_page);
+    details_title->setObjectName("SectionHeader");
+    details_layout->addWidget(details_title);
+    auto* details_form = new QFormLayout();
+    details_form->setSpacing(6);
+    order_service_part_ = new QLineEdit(details_page);
+    order_service_number_ = new QLineEdit(details_page);
+    order_service_customer_ = new QLineEdit(details_page);
+    order_service_contact_ = new QLineEdit(details_page);
+    order_service_revision_ = new QLineEdit(details_page);
+    order_service_operator_ = new QLineEdit(details_page);
+    order_service_notes_ = new QPlainTextEdit(details_page);
+    order_service_notes_->setMaximumHeight(74);
+    details_form->addRow("Peça / projeto", order_service_part_);
+    details_form->addRow("Nº da OS / pedido", order_service_number_);
+    details_form->addRow("Cliente", order_service_customer_);
+    details_form->addRow("Contato", order_service_contact_);
+    details_form->addRow("Revisão", order_service_revision_);
+    details_form->addRow("Operador", order_service_operator_);
+    details_form->addRow("Observações", order_service_notes_);
+    details_layout->addLayout(details_form);
+    order_service_steps_->addWidget(details_page);
+
+    connect(order_service_step_tabs_, &QTabBar::currentChanged,
+            order_service_steps_, &QStackedWidget::setCurrentIndex);
+    connect(order_service_steps_, &QStackedWidget::currentChanged,
+            order_service_step_tabs_, &QTabBar::setCurrentIndex);
+
+    auto* preview_panel = new QFrame(page);
+    preview_panel->setObjectName("OSPreviewPanel");
+    preview_panel->setStyleSheet(
+        "QFrame#OSPreviewPanel { background: #14202d; border: 1px solid #304861; border-radius: 8px; }");
+    auto* preview_layout = new QVBoxLayout(preview_panel);
+    preview_layout->setContentsMargins(10, 9, 10, 9);
+    preview_layout->setSpacing(7);
+    auto* preview_title = new QLabel("DESENHO 3D · PERCURSO REAL", preview_panel);
+    preview_title->setObjectName("SectionHeader");
+    preview_layout->addWidget(preview_title);
+    auto* image_frame = new QFrame(preview_panel);
+    image_frame->setStyleSheet("background: #0b1521; border: 1px solid #344a62; border-radius: 6px;");
+    auto* image_layout = new QVBoxLayout(image_frame);
+    image_layout->setContentsMargins(4, 4, 4, 4);
+    order_service_preview_label_ = new AspectPixmapLabel(image_frame);
+    order_service_preview_label_->setMinimumHeight(260);
+    image_layout->addWidget(order_service_preview_label_);
+    // The drawing takes every pixel the panel can spare: it is what the
+    // operator reads before letting the machine cut.
+    preview_layout->addWidget(image_frame, 1);
+    auto* dimension_card = new QFrame(preview_panel);
+    dimension_card->setObjectName("MaterialCard");
+    auto* dimension_layout = new QVBoxLayout(dimension_card);
+    dimension_layout->setContentsMargins(10, 7, 10, 7);
+    dimension_layout->setSpacing(2);
+    order_service_dimensions_label_ = new QLabel(dimension_card);
+    order_service_dimensions_label_->setObjectName("MaterialInfo");
+    order_service_origin_label_ = new QLabel(dimension_card);
+    order_service_origin_label_->setObjectName("MutedText");
+    dimension_layout->addWidget(order_service_dimensions_label_);
+    dimension_layout->addWidget(order_service_origin_label_);
+    preview_layout->addWidget(dimension_card);
+
+    auto* metrics = new QGridLayout();
+    metrics->setSpacing(6);
+    auto make_metric = [preview_panel](const QString& title_text, const QColor& accent) {
+        auto* card = new QFrame(preview_panel);
+        card->setStyleSheet(QString("background:#202f41; border:1px solid #344a62; border-top:3px solid %1; border-radius:6px;")
+                                .arg(accent.name()));
+        auto* card_layout = new QVBoxLayout(card);
+        card_layout->setContentsMargins(8, 5, 8, 5);
+        card_layout->setSpacing(1);
+        auto* label = new QLabel(title_text.toUpper(), card);
+        label->setStyleSheet("color:#9db0c4; font-size:8pt; font-weight:700; border:none; background:transparent;");
+        auto* value = new QLabel("—", card);
+        value->setStyleSheet("color:#f0f7ff; font-size:12pt; font-weight:700; border:none; background:transparent;");
+        card_layout->addWidget(label);
+        card_layout->addWidget(value);
+        return std::pair{card, value};
+    };
+    const auto [time_card, time_value] = make_metric("Tempo", QColor("#f5a623"));
+    const auto [cut_card, cut_value] = make_metric("Corte", QColor("#9a6bff"));
+    const auto [depth_card, depth_value] = make_metric("Z máx.", QColor("#31c48d"));
+    order_service_time_label_ = time_value;
+    order_service_cut_label_ = cut_value;
+    order_service_depth_label_ = depth_value;
+    metrics->addWidget(time_card, 0, 0);
+    metrics->addWidget(cut_card, 0, 1);
+    metrics->addWidget(depth_card, 0, 2);
+    preview_layout->addLayout(metrics);
+    body->addWidget(preview_panel, 7);
+    root->addLayout(body, 1);
+
+    auto* footer = new QHBoxLayout();
+    auto* step_hint = new QLabel("Confira cotas e fixação antes de usinar.", page);
+    step_hint->setObjectName("MutedText");
+    footer->addWidget(step_hint, 1);
+    auto* previous = new QPushButton("Etapa anterior", page);
+    auto* next = new QPushButton("Próxima etapa", page);
+    auto* save_pdf = new QPushButton("GERAR PDF DA OS", page);
+    save_pdf->setProperty("primary", true);
+    save_pdf->setIcon(ui::get_icon("tp_sheet"));
+    save_pdf->setMinimumHeight(40);
+    connect(previous, &QPushButton::clicked, this, [this] {
+        if (order_service_step_tabs_)
+            order_service_step_tabs_->setCurrentIndex(std::max(0, order_service_step_tabs_->currentIndex() - 1));
+    });
+    connect(next, &QPushButton::clicked, this, [this] {
+        if (order_service_step_tabs_)
+            order_service_step_tabs_->setCurrentIndex(std::min(4, order_service_step_tabs_->currentIndex() + 1));
+    });
+    connect(save_pdf, &QPushButton::clicked, this, &MainWindow::generate_order_service_pdf);
+    footer->addWidget(previous);
+    footer->addWidget(next);
+    footer->addWidget(save_pdf);
+    root->addLayout(footer);
+
+    order_service_page_ = page;
+    view_stack_->addWidget(page);
+    connect(order_service_part_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        QSettings().setValue("jobSheet/partName", text);
+    });
+    connect(order_service_number_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        QSettings().setValue("jobSheet/orderNumber", text);
+    });
+    connect(order_service_customer_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        QSettings().setValue("jobSheet/customer", text);
+    });
+    connect(order_service_contact_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        QSettings().setValue("jobSheet/contact", text);
+    });
+    connect(order_service_revision_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        QSettings().setValue("jobSheet/revision", text);
+    });
+    connect(order_service_operator_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        QSettings().setValue("jobSheet/operator", text);
+    });
+    connect(order_service_notes_, &QPlainTextEdit::textChanged, this, [this] {
+        QSettings().setValue("jobSheet/notes", order_service_notes_->toPlainText());
+    });
+
+    QSettings settings;
+    order_service_customer_->setText(settings.value("jobSheet/customer").toString());
+    order_service_contact_->setText(settings.value("jobSheet/contact").toString());
+    order_service_number_->setText(settings.value("jobSheet/orderNumber").toString());
+    order_service_part_->setText(settings.value("jobSheet/partName").toString());
+    order_service_revision_->setText(settings.value("jobSheet/revision").toString());
+    order_service_operator_->setText(settings.value("jobSheet/operator").toString());
+    order_service_notes_->setPlainText(settings.value("jobSheet/notes").toString());
+}
+
+void MainWindow::open_order_service_page() {
+    if (!view_tabs_) return;
+    set_right_panel_collapsed(false);
+    show_right_page(1);
+    if (order_service_nav_button_) order_service_nav_button_->setChecked(true);
+    const bool already_open = view_tabs_->currentIndex() == 2;
+    view_tabs_->setCurrentIndex(2);
+    if (already_open) refresh_order_service_page();
+}
+
+bool MainWindow::recalculate_order_service_if_geometry_changed() {
+    std::vector<std::pair<std::string, uint64_t>> current_versions;
+    current_versions.reserve(document_.entities.size());
+    for (const auto& entity : document_.entities) {
+        if (entity) current_versions.emplace_back(entity->id, entity->version);
+    }
+    if (order_service_geometry_snapshot_valid_ &&
+        current_versions == order_service_geometry_versions_)
+        return false;
+
+    const std::vector<std::string> errors = document_.recalculate_toolpaths();
+    order_service_geometry_versions_ = std::move(current_versions);
+    order_service_geometry_snapshot_valid_ = true;
+    if (!errors.empty())
+        statusBar()->showMessage(QString("OS atualizada; %1 percurso(s) precisam de revisÃ£o.")
+                                     .arg(errors.size()));
+    return true;
+}
+
+void MainWindow::refresh_order_service_page() {
+    if (!order_service_page_ && view_stack_ && view_stack_->count() >= 3)
+        order_service_page_ = view_stack_->widget(2);
+    if (!order_service_preview_label_ || !view_stack_ ||
+        view_stack_->currentWidget() != order_service_page_) return;
+    // Rebuild calculated cuts only after the 2D geometry changes. The OS view
+    // then follows the current drawing while profile guide illustrations stay
+    // on their original interactive MachiningGuide renderer.
+    if (recalculate_order_service_if_geometry_changed()) {
+        refresh_toolpaths();
+        return;
+    }
+
+    std::vector<cam::SetupSheetOperation> operations;
+    double seconds = 0.0;
+    double cut_length = 0.0;
+    double deepest_z = 0.0;
+    int operation_count = 0;
+    for (const auto& job : document_.toolpaths) {
+        if (!job || !job->visible) continue;
+        for (const auto& path : job->results) {
+            if (!path.visible) continue;
+            operations.push_back({&path, job.get()});
+            ++operation_count;
+            seconds += path.estimated_seconds();
+            cut_length += path.lengths().first;
+            deepest_z = std::min(deepest_z, path.depth_range().first);
+        }
+    }
+    const auto& material = document_.material;
+    const auto origin = material.origin_xy();
+    const auto axis_label = [](const std::string& value, bool x_axis) {
+        if (value == "center") return QString("Centro");
+        if (x_axis) return value == "right" ? QString("Direita") : QString("Esquerda");
+        return value == "top" ? QString("Superior") : QString("Inferior");
+    };
+    if (order_service_material_label_)
+        order_service_material_label_->setText(QString::fromStdString(
+            material.material_profile.empty() ? "Não informado" : material.material_profile));
+    if (order_service_material_dims_label_)
+        order_service_material_dims_label_->setText(
+            QString("%1 × %2 × %3 mm").arg(material.width, 0, 'g', 8)
+                .arg(material.height, 0, 'g', 8).arg(material.thickness, 0, 'g', 8));
+    if (order_service_material_area_label_)
+        order_service_material_area_label_->setText(
+            QString::number(material.width * material.height / 1000000.0, 'f', 3) + " m²");
+    if (order_service_margin_label_)
+        order_service_margin_label_->setText(QString::number(material.margin, 'g', 8) + " mm");
+    if (order_service_zero_xy_label_)
+        order_service_zero_xy_label_->setText(QString("%1 · %2 · X%3 / Y%4 mm")
+            .arg(axis_label(material.zero_x, true), axis_label(material.zero_y, false))
+            .arg(origin.x, 0, 'g', 8).arg(origin.y, 0, 'g', 8));
+    if (order_service_zero_z_label_)
+        order_service_zero_z_label_->setText(material.zero_z == "top" ? "Face superior" : "Face inferior");
+    if (order_service_clearance_label_)
+        order_service_clearance_label_->setText(QString::number(material.clearance_z, 'g', 8) + " mm");
+    if (order_service_plunge_gap_label_)
+        order_service_plunge_gap_label_->setText(QString::number(material.plunge_gap, 'g', 8) + " mm");
+    if (order_service_offset_label_)
+        order_service_offset_label_->setText(material.use_origin_offset
+            ? QString("X %1 · Y %2 mm").arg(material.origin_offset_x, 0, 'g', 8)
+                .arg(material.origin_offset_y, 0, 'g', 8)
+            : "Desativado");
+    if (order_service_state_label_) {
+        order_service_state_label_->setText(operation_count > 0
+            ? QString("%1 operação(ões) calculada(s)").arg(operation_count)
+            : "Aguardando percursos calculados");
+    }
+    if (order_service_dimensions_label_)
+        order_service_dimensions_label_->setText(
+            QString("%1  ·  %2 × %3 × %4 mm  ·  %5 m²")
+                .arg(QString::fromStdString(material.material_profile.empty() ? "Material" : material.material_profile))
+                .arg(material.width, 0, 'g', 8).arg(material.height, 0, 'g', 8)
+                .arg(material.thickness, 0, 'g', 8)
+                .arg(material.width * material.height / 1000000.0, 0, 'f', 3));
+    if (order_service_origin_label_)
+        order_service_origin_label_->setText(
+            QString("Origem X %1 · Y %2 · Z na face %3 · Seguro %4 mm")
+                .arg(origin.x, 0, 'g', 8).arg(origin.y, 0, 'g', 8)
+                .arg(material.zero_z == "top" ? "superior" : "inferior")
+                .arg(material.clearance_z, 0, 'g', 8));
+    if (order_service_time_label_)
+        order_service_time_label_->setText(QString("%1 min %2 s")
+            .arg(static_cast<int>(seconds / 60.0))
+            .arg(static_cast<int>(seconds) % 60, 2, 10, QChar('0')));
+    if (order_service_cut_label_)
+        order_service_cut_label_->setText(QString::number(cut_length / 1000.0, 'f', 2) + " m");
+    if (order_service_depth_label_)
+        order_service_depth_label_->setText(operation_count > 0
+            ? QString::number(std::abs(deepest_z), 'f', 2) + " mm"
+            : "—");
+
+    const QImage preview = make_job_layout_preview(operations, &material);
+    static_cast<AspectPixmapLabel*>(order_service_preview_label_)->set_source_image(preview);
+
+    if (order_service_operations_table_) {
+        order_service_operations_table_->setRowCount(operation_count);
+        for (int row = 0; row < operation_count; ++row) {
+            const auto& operation = operations[static_cast<size_t>(row)];
+            const auto* path = operation.path;
+            const cam::Tool* tool = operation.job ? &operation.job->tool : nullptr;
+            const auto time_seconds = static_cast<int>(path->estimated_seconds());
+            const std::array<QString, 5> cells = {
+                QString::fromStdString(path->name),
+                QString("T%1 · %2 · Ø %3 mm").arg(path->tool_number)
+                    .arg(QString::fromStdString(path->tool_name))
+                    .arg(tool ? tool->diameter : 0.0, 0, 'f', 2),
+                QString::number(path->spindle_speed),
+                QString::number(path->feed_rate, 'f', 0) + " mm/min",
+                QString("%1:%2").arg(time_seconds / 60).arg(time_seconds % 60, 2, 10, QChar('0'))};
+            for (int col = 0; col < static_cast<int>(cells.size()); ++col)
+                order_service_operations_table_->setItem(row, col, new QTableWidgetItem(cells[static_cast<size_t>(col)]));
+        }
+        order_service_operations_table_->resizeRowsToContents();
+    }
+
+    if (order_service_part_ && order_service_part_->text().isEmpty())
+        order_service_part_->setText(QString::fromStdString(document_.title()));
+}
+
+void MainWindow::generate_order_service_pdf() {
+    if (recalculate_order_service_if_geometry_changed()) refresh_toolpaths();
+    std::vector<cam::SetupSheetOperation> operations;
+    for (const auto& job : document_.toolpaths) {
+        if (!job || !job->visible) continue;
+        for (const auto& path : job->results)
+            if (path.visible) operations.push_back({&path, job.get()});
+    }
+    if (operations.empty()) {
+        QMessageBox::information(this, "Sem percurso calculado",
+                                 "Calcule ao menos um percurso antes de gerar a Ordem de Serviço.");
+        return;
+    }
+
+    cam::SetupSheetInfo info;
+    info.customer = order_service_customer_->text().toStdString();
+    info.contact = order_service_contact_->text().toStdString();
+    info.order_number = order_service_number_->text().toStdString();
+    info.part_name = order_service_part_->text().toStdString();
+    info.revision = order_service_revision_->text().toStdString();
+    info.operator_name = order_service_operator_->text().toStdString();
+    info.notes = order_service_notes_->toPlainText().toStdString();
+    info.material_type = document_.material.material_profile;
+    info.area_m2 = std::format("{:.3f}", document_.material.width * document_.material.height / 1000000.0);
+
+    QSettings settings;
+    QImage logo;
+    const QString logo_path = settings.value("jobSheet/logoPath").toString();
+    if (!logo_path.isEmpty()) {
+        QImageReader reader(logo_path);
+        logo = reader.read();
+        if (!logo.isNull()) info.logo_source = "job-logo";
+    }
+    const QString base = order_service_part_->text().trimmed().isEmpty()
+        ? "Ordem_de_Servico" : order_service_part_->text().trimmed();
+    QString path = QFileDialog::getSaveFileName(this, "Salvar Ordem de Serviço em PDF",
+                                                 base + "_OS.pdf", "PDF (*.pdf)");
+    if (path.isEmpty()) return;
+    if (QFileInfo(path).suffix().isEmpty()) path += ".pdf";
+
+    const QImage preview = make_job_layout_preview(operations, &document_.material);
+    QString error;
+    if (!cam::write_job_setup_sheet_pdf(path, operations, document_.material,
+                                        document_.title(), info, preview, logo,
+                                        {}, &error)) {
+        QMessageBox::critical(this, "Erro ao gerar PDF", error);
+        return;
+    }
+    statusBar()->showMessage(QString("Ordem de Serviço salva: %1").arg(path));
+    QMessageBox::information(this, "PDF da OS gerado",
+                             QString("A folha de produção foi salva em:\n%1").arg(path));
 }
 
 void MainWindow::show_3d_view() {
@@ -837,10 +1388,10 @@ void MainWindow::create_toolpath_panel() {
     auto* selection_button = new QToolButton(rail);
     selection_button->setObjectName("RightRailButton");
     selection_button->setCheckable(true);
-    selection_button->setChecked(false);
+    selection_button->setChecked(true);
     selection_button->setFixedSize(38, 34);
-    selection_button->setIcon(ui::get_icon("select"));
-    selection_button->setIconSize(QSize(22, 22));
+    selection_button->setIcon(ui::get_icon("rail_selection"));
+    selection_button->setIconSize(QSize(24, 24));
     selection_button->setToolTip("Seleção e Propriedades");
     rail_layout->addWidget(selection_button);
     selection_nav_button_ = selection_button;
@@ -850,22 +1401,43 @@ void MainWindow::create_toolpath_panel() {
     toolpath_button->setObjectName("RightRailButton");
     toolpath_button->setCheckable(true);
     toolpath_button->setFixedSize(38, 34);
-    toolpath_button->setIcon(ui::get_icon("tp_recalc"));
-    toolpath_button->setIconSize(QSize(22, 22));
+    toolpath_button->setIcon(ui::get_icon("rail_toolpaths"));
+    toolpath_button->setIconSize(QSize(24, 24));
     toolpath_button->setToolTip("Percursos CAM");
     rail_layout->addWidget(toolpath_button);
     toolpath_nav_button_ = toolpath_button;
+
+    auto* automatic_button = new QToolButton(rail);
+    automatic_button->setObjectName("RightRailButton");
+    automatic_button->setCheckable(true);
+    automatic_button->setFixedSize(38, 34);
+    automatic_button->setIcon(ui::get_icon("rail_automatic"));
+    automatic_button->setIconSize(QSize(24, 24));
+    automatic_button->setToolTip("Programação automática por material");
+    rail_layout->addWidget(automatic_button);
+    automatic_nav_button_ = automatic_button;
 
     // Aba 3: Simulação
     auto* simulation_button = new QToolButton(rail);
     simulation_button->setObjectName("RightRailButton");
     simulation_button->setCheckable(true);
     simulation_button->setFixedSize(38, 34);
-    simulation_button->setIcon(ui::get_icon("tp_preview"));
-    simulation_button->setIconSize(QSize(22, 22));
+    simulation_button->setIcon(ui::get_icon("rail_simulation"));
+    simulation_button->setIconSize(QSize(24, 24));
     simulation_button->setToolTip(QString::fromUtf8("Simulação do percurso"));
     rail_layout->addWidget(simulation_button);
     simulation_nav_button_ = simulation_button;
+
+    auto* order_button = new QToolButton(rail);
+    order_button->setObjectName("RightRailButton");
+    order_button->setCheckable(true);
+    order_button->setFixedSize(38, 34);
+    order_button->setIcon(ui::get_icon("rail_order"));
+    order_button->setIconSize(QSize(24, 24));
+    order_button->setToolTip("Abrir a Central da Ordem de Serviço e gerar o PDF");
+    rail_layout->addWidget(order_button);
+    order_service_nav_button_ = order_button;
+    connect(order_button, &QToolButton::clicked, this, &MainWindow::open_order_service_page);
 
     rail_layout->addStretch();
 
@@ -1050,7 +1622,7 @@ void MainWindow::create_toolpath_panel() {
                                                .arg(seconds / 60.0, 0, 'f', 1)
                                          : "Recalcule o percurso para estimar o tempo.");
         }},
-        {"tp_sheet", "Folha de trabalho", [this] { export_setup_sheet(); }},
+        {"tp_sheet", "Central da Ordem de Serviço", [this] { open_order_service_page(); }},
     };
     for (int index = 0; index < static_cast<int>(output_actions.size()); ++index) {
         const auto& [icon, tip, action] = output_actions[static_cast<size_t>(index)];
@@ -1090,7 +1662,7 @@ void MainWindow::create_toolpath_panel() {
     work_order_button->setMinimumHeight(38);
     work_order_button->setToolTip("Visualizar detalhes da usinagem, medidas, material e baixar Ordem de Serviço em PDF");
     layout->addWidget(work_order_button);
-    connect(work_order_button, &QPushButton::clicked, this, &MainWindow::export_setup_sheet);
+    connect(work_order_button, &QPushButton::clicked, this, &MainWindow::open_order_service_page);
 
     connect(toolpath_list_, &QListWidget::currentRowChanged, this, [this](int row) {
         if (row >= 0 && row < static_cast<int>(document_.toolpaths.size()))
@@ -1207,6 +1779,8 @@ void MainWindow::create_toolpath_panel() {
         "O botão cria e calcula um perfil externo usando os vetores selecionados.", automatic_page);
     automatic_intro->setObjectName("MutedText");
     automatic_intro->setWordWrap(true);
+    automatic_intro->setText(QString::fromUtf8(
+        "Escolha o preset do material. Sem sele\xC3\xA7\xC3\xA3o, usa todos os contornos edit\xC3\xA1veis vis\xC3\xADveis; textos e linhas de constru\xC3\xA7\xC3\xA3o ficam fora."));
     automatic_layout->addWidget(automatic_intro);
 
     automatic_cut_combo_ = new QComboBox(automatic_page);
@@ -1230,7 +1804,10 @@ void MainWindow::create_toolpath_panel() {
     automatic_layout->addWidget(automatic_create);
     connect(automatic_create, &QPushButton::clicked, this, &MainWindow::create_automatic_cut);
     connect(automatic_cut_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this,
-            [this](int) { refresh_automatic_cut_panel(); });
+            [this](int) {
+                automatic_cut_panel_dirty_ = true;
+                refresh_automatic_cut_panel();
+            });
 
     auto* automatic_note = new QLabel(
         "Segurança: a espessura escolhida deve ser a mesma da chapa do trabalho. "
@@ -1274,12 +1851,11 @@ void MainWindow::create_toolpath_panel() {
 
     connect(selection_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(0); });
     connect(toolpath_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(1); });
+    connect(automatic_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(3); });
     connect(simulation_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(2); });
 
     connect(stack, &QStackedWidget::currentChanged, this, [this](int page) {
-        if (page >= 0 && right_panel_scroll_ && !right_panel_scroll_->isVisible()) {
-            set_right_panel_collapsed(false);
-        }
+        if (page >= 0) set_right_panel_collapsed(false);
     });
 
     stack->setCurrentIndex(1);
@@ -1414,6 +1990,7 @@ void MainWindow::refresh_toolpaths() {
     canvas_widget_->canvas->refresh_toolpaths(visible);
     refresh_bridge_markers();
     refresh_3d_view();
+    refresh_order_service_page();
 }
 
 void MainWindow::refresh_bridge_markers() {
@@ -1601,7 +2178,7 @@ void MainWindow::stop_manual_bridge_mode() {
 }
 
 void MainWindow::refresh_3d_view() {
-    if (!viewport_3d_) return;
+    if (!viewport_3d_ || (view_stack_ && view_stack_->currentWidget() != viewport_3d_)) return;
 #if !defined(CNC_HAVE_VTK)
     if (!viewport_3d_->isValid()) return;
 #endif
@@ -3407,7 +3984,7 @@ void MainWindow::add_toolpath_from_panel() {
     refresh_toolpaths();
     if (errors.empty()) {
         statusBar()->showMessage(QString("Percurso criado: %1").arg(QString::fromStdString(job->name)));
-        export_setup_sheet();
+        open_order_service_page();
     } else {
         statusBar()->showMessage(QString::fromStdString(errors.front()));
     }
@@ -3716,34 +4293,56 @@ void MainWindow::set_right_panel_collapsed(bool collapsed) {
         if (selection_nav_button_) selection_nav_button_->setChecked(false);
         if (toolpath_nav_button_) toolpath_nav_button_->setChecked(false);
         if (simulation_nav_button_) simulation_nav_button_->setChecked(false);
+        if (automatic_nav_button_) automatic_nav_button_->setChecked(false);
     } else {
-        toolpath_dock_->setMinimumWidth(286);
-        toolpath_dock_->setMaximumWidth(450);
-        resizeDocks({toolpath_dock_}, {300}, Qt::Horizontal);
-        toolpath_dock_->resize(300, toolpath_dock_->height());
+        const int dock_width = std::clamp(width() / 4, 240, 370);
+        toolpath_dock_->setMinimumWidth(246);
+        toolpath_dock_->setMaximumWidth(370);
+        resizeDocks({toolpath_dock_}, {dock_width}, Qt::Horizontal);
+        toolpath_dock_->resize(dock_width, toolpath_dock_->height());
         right_panel_scroll_->setVisible(true);
         const int idx = right_panel_stack_ ? right_panel_stack_->currentIndex() : 0;
         if (selection_nav_button_) selection_nav_button_->setChecked(idx == 0);
         if (toolpath_nav_button_) toolpath_nav_button_->setChecked(idx == 1);
         if (simulation_nav_button_) simulation_nav_button_->setChecked(idx == 2);
+        if (automatic_nav_button_) automatic_nav_button_->setChecked(idx == 3);
+        refresh_guide_previews();
+        refresh_automatic_cut_panel();
     }
 }
 
 void MainWindow::show_right_page(int index) {
     if (!right_panel_stack_ || index < 0 || index >= right_panel_stack_->count()) return;
-    set_right_panel_collapsed(false);
     right_panel_stack_->setCurrentIndex(index);
-    const std::array<QToolButton*, 3> buttons = {
-        selection_nav_button_, toolpath_nav_button_, simulation_nav_button_};
+    set_right_panel_collapsed(false);
+    const std::array<QToolButton*, 4> buttons = {
+        selection_nav_button_, toolpath_nav_button_, simulation_nav_button_, automatic_nav_button_};
     for (int i = 0; i < static_cast<int>(buttons.size()); ++i) {
         if (buttons[static_cast<size_t>(i)]) buttons[static_cast<size_t>(i)]->setChecked(i == index);
     }
 }
 
 void MainWindow::refresh_automatic_cut_panel() {
-    if (!automatic_cut_combo_ || !automatic_cut_info_label_) return;
+    if (!automatic_cut_combo_ || !automatic_cut_info_label_ ||
+        !automatic_cut_combo_->isVisible() || !automatic_cut_panel_dirty_) return;
+    automatic_cut_panel_dirty_ = false;
+    // Selecting the matching preset must not recursively rescan the document.
+    const QSignalBlocker combo_blocker(automatic_cut_combo_);
     const auto& presets = cam::house_presets();
     const double thickness = document_.material.thickness;
+    size_t target_count = 0;
+    for (const auto& entity : document_.entities)
+        if (entity->selected && document_.is_editable(*entity)) ++target_count;
+    if (target_count == 0) {
+        for (const cad::EntityPtr& entity : document_.entities) {
+            if (!cad::is_vector(*entity) || cad::is_a<cad::Text>(*entity) ||
+                cad::is_a<cad::ConstructionLine>(*entity) ||
+                !document_.is_editable(*entity)) continue;
+            const cad::Layer* layer = document_.get_layer(entity->layer);
+            if (layer && !layer->visible) continue;
+            ++target_count;
+        }
+    }
     int matching_count = 0;
     int matching_combo_index = -1;
     for (int index = 0; index < static_cast<int>(presets.size()); ++index) {
@@ -3759,14 +4358,29 @@ void MainWindow::refresh_automatic_cut_panel() {
                            .arg(preset.thickness, 0, 'g', 10)
                            .arg(matches ? "  ← chapa atual" : ""));
     }
-    if (automatic_cut_combo_->currentData().toInt() < 0 && matching_count == 1)
-        automatic_cut_combo_->setCurrentIndex(matching_combo_index);
+    if (automatic_cut_combo_->currentData().toInt() < 0) {
+        const auto exact = cam::find_preset(document_.material.material_profile, thickness);
+        if (exact) {
+            for (int index = 0; index < static_cast<int>(presets.size()); ++index) {
+                const auto& candidate = presets[static_cast<size_t>(index)];
+                if (candidate.material == exact->material &&
+                    std::fabs(candidate.thickness - exact->thickness) < 0.01) {
+                    automatic_cut_combo_->setCurrentIndex(index + 1);
+                    break;
+                }
+            }
+        } else if (matching_count == 1) {
+            automatic_cut_combo_->setCurrentIndex(matching_combo_index);
+        }
+    }
 
     const int preset_index = automatic_cut_combo_->currentData().toInt();
     if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) {
         automatic_cut_info_label_->setText(
             QString("O trabalho está com chapa de %1 mm. Escolha um material cadastrado.")
                 .arg(thickness, 0, 'g', 10));
+        automatic_cut_info_label_->setText(
+            automatic_cut_info_label_->text() + QString("\n\nContornos sem texto encontrados: %1.").arg(target_count));
         if (automatic_create_button_) automatic_create_button_->setEnabled(false);
         return;
     }
@@ -3777,6 +4391,7 @@ void MainWindow::refresh_automatic_cut_panel() {
                            .arg(thickness, 0, 'g', 10)
                            .arg(preset.thickness, 0, 'g', 10);
     }
+    description += QString("\n\nVetores alvo: %1").arg(target_count);
     automatic_cut_info_label_->setText(description);
     if (automatic_create_button_) automatic_create_button_->setEnabled(true);
 }
@@ -3787,7 +4402,17 @@ void MainWindow::create_automatic_cut() {
     const auto& presets = cam::house_presets();
     if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) return;
 
-    const auto selected = document_.selected_entities();
+    std::vector<cad::EntityPtr> selected = document_.selected_entities();
+    if (selected.empty()) {
+        for (const cad::EntityPtr& entity : document_.entities) {
+            if (!cad::is_vector(*entity) || cad::is_a<cad::Text>(*entity) ||
+                cad::is_a<cad::ConstructionLine>(*entity) ||
+                !document_.is_editable(*entity)) continue;
+            const cad::Layer* layer = document_.get_layer(entity->layer);
+            if (layer && !layer->visible) continue;
+            selected.push_back(entity);
+        }
+    }
     if (selected.empty()) {
         QMessageBox::information(this, "Corte automático",
                                  "Selecione os vetores que devem receber o corte.");
@@ -3820,7 +4445,6 @@ void MainWindow::create_automatic_cut() {
     if (errors.empty()) {
         statusBar()->showMessage(
             QString("Corte automático criado e calculado: %1").arg(QString::fromStdString(job->name)));
-        export_setup_sheet();
     } else {
         statusBar()->showMessage(QString::fromStdString(errors.front()));
     }
@@ -3912,6 +4536,7 @@ void MainWindow::export_gcode() {
 }
 
 void MainWindow::export_setup_sheet() {
+    if (recalculate_order_service_if_geometry_changed()) refresh_toolpaths();
     // 1. Build default G-code settings from preferences
     cam::GCodeSettings gcode_settings;
     QSettings preferences;
@@ -4000,8 +4625,10 @@ void MainWindow::export_setup_sheet() {
 
     ui::ResponsiveDialog dialog(this);
     dialog.setWindowTitle("Central de Ordens de Serviço & G-Code — UNY CV");
+    dialog.setObjectName("WorkOrderDialog");
     dialog.resize(960, 700);
     dialog.setMinimumSize(860, 580);
+    dialog.setStyleSheet("QDialog#WorkOrderDialog { background: #101923; }");
     dialog.installEventFilter(new ui::SafeWheelFilter(&dialog));
 
     auto* main_layout = new QVBoxLayout(&dialog);
@@ -4016,7 +4643,7 @@ void MainWindow::export_setup_sheet() {
     auto* title_box = new QVBoxLayout();
     title_box->setSpacing(2);
     auto* title_lbl = new QLabel("📋 CENTRAL DE ORDENS DE SERVIÇO & G-CODE", header_widget);
-    title_lbl->setStyleSheet("font-size: 14pt; font-weight: bold; color: #1682d4;");
+    title_lbl->setStyleSheet("font-size: 16pt; font-weight: 700; color: #8cc8ff;");
     auto* subtitle_lbl = new QLabel(
         QString("Projeto: %1 · %2 percurso(s) acumulados no histórico")
             .arg(QString::fromStdString(document_.title().empty() ? "Sem título" : document_.title()))
@@ -4027,19 +4654,20 @@ void MainWindow::export_setup_sheet() {
     header_layout->addLayout(title_box, 1);
 
     auto* logo_badge = new QLabel(logo_path.isEmpty() ? "UNY CV" : QFileInfo(logo_path).fileName(), header_widget);
-    logo_badge->setStyleSheet("background: #e2e8f0; color: #0f172a; font-weight: bold; padding: 6px 14px; border-radius: 6px;");
+    logo_badge->setStyleSheet("background: #1d2d40; color: #d8eaff; border: 1px solid #385573; font-weight: 700; padding: 8px 14px; border-radius: 7px;");
     header_layout->addWidget(logo_badge);
     main_layout->addWidget(header_widget);
 
     // Job Selector Bar (History Accumulation Bar)
     auto* selector_card = new QFrame(&dialog);
-    selector_card->setStyleSheet("QFrame { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px 8px; }");
+    selector_card->setObjectName("OSSelectorCard");
+    selector_card->setStyleSheet("QFrame#OSSelectorCard { background: #172535; border: 1px solid #304861; border-radius: 8px; }");
     auto* selector_layout = new QHBoxLayout(selector_card);
     selector_layout->setContentsMargins(4, 4, 4, 4);
     selector_layout->setSpacing(8);
 
     auto* sel_lbl = new QLabel("Folha / Percurso Ativo:", selector_card);
-    sel_lbl->setStyleSheet("font-weight: bold; color: #0f172a; font-size: 8.5pt;");
+    sel_lbl->setStyleSheet("font-weight: 700; color: #b9d8f4; font-size: 9pt; padding: 0 8px;");
     auto* job_combo = new ui::SafeComboBox(selector_card);
     job_combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
@@ -4071,16 +4699,17 @@ void MainWindow::export_setup_sheet() {
 
     auto create_card = [&](const QString& label_text, const QString& accent_color) {
         auto* card = new QFrame(metrics_widget);
+        card->setObjectName("OSMetricCard");
         card->setStyleSheet(QString(
-            "QFrame { background: #f8fafc; border: 1px solid #cbd5e1; border-top: 3px solid %1; border-radius: 6px; padding: 4px 8px; }"
+            "QFrame#OSMetricCard { background: #172535; border: 1px solid #304861; border-top: 3px solid %1; border-radius: 8px; padding: 4px 8px; }"
         ).arg(accent_color));
         auto* cl = new QVBoxLayout(card);
         cl->setSpacing(1);
         cl->setContentsMargins(4, 3, 4, 3);
         auto* l = new QLabel(label_text, card);
-        l->setStyleSheet("font-size: 7pt; font-weight: bold; color: #64748b; text-transform: uppercase;");
+        l->setStyleSheet("font-size: 7.5pt; font-weight: 700; color: #9cb4cc; text-transform: uppercase;");
         auto* v = new QLabel("—", card);
-        v->setStyleSheet("font-size: 11.5pt; font-weight: bold; color: #0f172a;");
+        v->setStyleSheet("font-size: 12pt; font-weight: 700; color: #f0f7ff;");
         cl->addWidget(l);
         cl->addWidget(v);
         metrics_layout->addWidget(card);
@@ -4327,6 +4956,7 @@ void MainWindow::export_setup_sheet() {
     tab_info_layout->setContentsMargins(6, 6, 6, 6);
     tab_info_layout->addWidget(info_scroll);
     tabs->addTab(tab_info, "🛠 Material e Identificação");
+    tabs->setCurrentIndex(1);
 
     main_layout->addWidget(tabs, 1);
 
@@ -4541,7 +5171,7 @@ void MainWindow::export_setup_sheet() {
     auto* bottom_layout = new QHBoxLayout(bottom_bar);
     bottom_layout->setContentsMargins(0, 4, 0, 0);
 
-    auto* hint_label = new QLabel("Dica: Você pode fechar a janela para continuar acumulando percursos e gerar tudo no final.", bottom_bar);
+    auto* hint_label = new QLabel("Dica: Você pode continuar acumulando percursos; o PDF de OS é limitado a uma folha.", bottom_bar);
     hint_label->setObjectName("MutedText");
     bottom_layout->addWidget(hint_label, 1);
 
@@ -4563,13 +5193,13 @@ void MainWindow::export_setup_sheet() {
 
     QPushButton* gen_all_pdf_btn = nullptr;
     if (job_history_.size() > 1) {
-        gen_all_pdf_btn = new QPushButton("📚 GERAR TODAS AS FOLHAS (PDF)", bottom_bar);
+        gen_all_pdf_btn = new QPushButton("📚 GERAR 1ª OS (PDF DE 1 FOLHA)", bottom_bar);
         gen_all_pdf_btn->setIcon(ui::get_icon("tp_sheet"));
         gen_all_pdf_btn->setIconSize(QSize(20, 20));
         gen_all_pdf_btn->setMinimumHeight(40);
         gen_all_pdf_btn->setMinimumWidth(230);
         gen_all_pdf_btn->setStyleSheet("font-weight: bold; font-size: 9.5pt; color: #166534; background: #dcfce7; border: 1px solid #86efac;");
-        gen_all_pdf_btn->setToolTip("Gera um único PDF contendo todas as ordens de serviço acumuladas no projeto");
+        gen_all_pdf_btn->setToolTip("Exporta somente a primeira Ordem de Serviço acumulada. O PDF é limitado a uma folha A4 horizontal.");
     }
 
     bottom_layout->addWidget(close_btn);
@@ -4622,17 +5252,18 @@ void MainWindow::export_setup_sheet() {
         QImage layout_img = make_job_layout_preview(active_operations, &sheet_mat);
         QString pdf_error;
         if (!cam::write_job_setup_sheet_pdf(save_path, active_operations, sheet_mat, document_.title(), info,
-                                            layout_img, logo_image, &pdf_error)) {
+                                            layout_img, logo_image, {}, &pdf_error)) {
             QMessageBox::critical(&dialog, "Erro ao gerar PDF", pdf_error);
             return;
         }
         statusBar()->showMessage(QString("Ordem de serviço PDF criada: %1").arg(save_path));
         QMessageBox::information(&dialog, "PDF da OS Gerado",
-            QString("Ordem de Serviço salva com sucesso em 1 folha A4:\n%1").arg(save_path));
+            QString("Ordem de Serviço salva em uma folha A4 horizontal:\n%1")
+                .arg(save_path));
         dialog.accept();
     });
 
-    // Generate All Sheets PDF (Acumulado)
+    // Export only the first accumulated OS; the PDF contract is one page.
     if (gen_all_pdf_btn) {
         connect(gen_all_pdf_btn, &QPushButton::clicked, &dialog, [&] {
             std::vector<cam::MultiJobSheetEntry> entries;
@@ -4653,9 +5284,9 @@ void MainWindow::export_setup_sheet() {
                 entries.push_back(std::move(entry));
             }
 
-            QString default_filename = QString::fromStdString(document_.title().empty() ? "Ordens_de_Servico" : document_.title()) + "_Todas_Folhas.pdf";
+            QString default_filename = QString::fromStdString(document_.title().empty() ? "Ordem_de_Servico" : document_.title()) + "_OS.pdf";
             QString save_path = QFileDialog::getSaveFileName(
-                &dialog, "Salvar Todas as Folhas Acumuladas em PDF",
+                &dialog, "Salvar a Primeira Ordem de Serviço em PDF (1 folha)",
                 default_filename, "PDF (*.pdf)");
             if (save_path.isEmpty()) return;
             if (QFileInfo(save_path).suffix().isEmpty()) save_path += ".pdf";
@@ -4665,9 +5296,10 @@ void MainWindow::export_setup_sheet() {
                 QMessageBox::critical(&dialog, "Erro ao gerar PDF", pdf_error);
                 return;
             }
-            statusBar()->showMessage(QString("Todas as Ordens de Serviço foram salvas: %1").arg(save_path));
-            QMessageBox::information(&dialog, "PDF Acumulado Gerado",
-                QString("Todas as %1 folhas foram geradas com sucesso em:\n%2").arg(entries.size()).arg(save_path));
+            statusBar()->showMessage(QString("PDF de uma folha salvo: %1").arg(save_path));
+            QMessageBox::information(&dialog, "PDF da Primeira OS Gerado",
+                QString("A primeira Ordem de Serviço foi salva em uma única folha A4 horizontal:\n%1")
+                    .arg(save_path));
             dialog.accept();
         });
     }
@@ -4809,7 +5441,7 @@ void MainWindow::create_tool_panel() {
     dock->setAllowedAreas(Qt::LeftDockWidgetArea);
     dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
     dock->setTitleBarWidget(new QWidget(dock));
-    dock->setMinimumWidth(250);
+    dock->setMinimumWidth(212);
 
     auto* panel = new QWidget(dock);
     panel->setMinimumWidth(0);
@@ -4966,11 +5598,14 @@ void MainWindow::create_tool_panel() {
         layout->addLayout(grid);
     };
 
-    add_section("ARQUIVO E VISTA 2D", {
-        {"import", "Importar"}, {"export", "Exportar"}, {"guide_gallery", "Guias"},
-        {"preview_3d", "Previa 3D"},
-        {"measure", "Medir"}, {"grid", "Grade"}, {"workspace_setup", "Area de trabalho"},
-        {"select", "Selecao"}}, 6);
+    add_section("ARQUIVO", {
+        {"import", "Importar"}, {"export", "Exportar"},
+        {"workspace_setup", "Area de trabalho"}}, 4);
+    add_separator();
+    add_section("CONTROLE DE VISTA 2D", {
+        {"pan", "Mover vista"}, {"measure", "Medir"}, {"grid", "Grade"},
+        {"select", "Selecao"}, {"preview_3d", "Vista 3D"},
+        {"guide_gallery", "Guias"}}, 6);
     add_separator();
 
     auto* layer_row = new QVBoxLayout();
@@ -5041,20 +5676,21 @@ void MainWindow::create_tool_panel() {
         {"dimension", "Cotas"}, {"trace_bitmap", "Vetorizar"}}, 6);
     add_separator();
     add_section("TRANSFORMAR OBJETOS", {
-        {"move", ""}, {"distort", "Distorcer"}, {"mirror", "Espelhar"}, {"scale", ""},
-        {"array_copy", "Copia array"}, {"circular_copy", ""}, {"rotate", ""}}, 7);
+        {"move", ""}, {"distort", "Distorcer"}, {"mirror", "Espelhar"},
+        {"scale", ""}, {"rotate", ""}}, 5);
     add_separator();
     add_section("EDITAR OBJETOS", {
         {"node_edit", "Nos"}, {"fillet", "Filete"}, {"trim", "Aparar"},
         {"interactive_trim", "Aparar interativo"}, {"extend", ""}, {"fit_curves", "Ajustar curvas"},
         {"weld", "Soldar"}, {"subtract", ""}, {"intersect", ""},
-        {"join", "Unir"}, {"group", "Agrupar"}, {"ungroup", ""}, {"offset", "Offset"}, {"boundary", ""},
-        {"convert_text", "Texto"}}, 7);
+        {"join", "Unir"}, {"group", "Agrupar"}, {"ungroup", ""},
+        {"convert_text", "Texto"}}, 6);
     add_separator();
-    add_section("ALINHAR E POSICIONAR", {
+    add_section("OFFSET E LAYOUT", {
+        {"offset", "Offset"}, {"boundary", "Contorno"}, {"array_copy", "Copia array"},
+        {"circular_copy", "Copia circular"}, {"layout_optimizer", "Organizar"},
         {"align_left", ""}, {"align_center_h", ""}, {"align_right", ""},
-        {"align_top", ""}, {"align_center_v", ""}, {"align_bottom", ""},
-        {"layout_optimizer", "Organizar"}}, 7);
+        {"align_top", ""}, {"align_center_v", ""}, {"align_bottom", ""}}, 6);
     layout->addStretch();
 
     dock->setWidget(panel);
@@ -5886,7 +6522,7 @@ void MainWindow::create_actions() {
     const std::vector<std::pair<QString, cam::ToolpathType>> operations = {
         {"Percurso de perfil", cam::ToolpathType::Profile},
         {"Percurso de bolso", cam::ToolpathType::Pocket},
-        {"Percurso de furação", cam::ToolpathType::Drill},
+        {"Percurso de fura\xC3\xA7\xC3\xA3o", cam::ToolpathType::Drill},
         {"Entalhe V", cam::ToolpathType::VCarve},
         {"Canais (Fluting)", cam::ToolpathType::Fluting},
         {"Textura", cam::ToolpathType::Texture},
@@ -5911,7 +6547,8 @@ void MainWindow::create_actions() {
                         &MainWindow::recalculate_toolpaths);
     cam_menu->addAction("Simular percursos", QKeySequence(), this, &MainWindow::toggle_simulation);
     cam_menu->addSeparator();
-    cam_menu->addAction("Ordem de Serviço (PDF)...", QKeySequence(), this, &MainWindow::export_setup_sheet);
+    cam_menu->addAction("Central da Ordem de Serviço...", QKeySequence(), this,
+                        &MainWindow::open_order_service_page);
     cam_menu->addAction("Salvar G-Code", QKeySequence("Ctrl+Shift+G"), this,
                         &MainWindow::export_gcode);
 
@@ -5921,48 +6558,90 @@ void MainWindow::create_actions() {
     });
 }
 
+void MainWindow::schedule_selection_previews() {
+    selection_guide_dirty_ = true;
+    material_guide_dirty_ = true;
+    automatic_cut_panel_dirty_ = true;
+    // Keep geometry editing synchronous. Secondary previews consume only the
+    // latest state, at most once per frame, and do no work while collapsed.
+    if (selection_preview_timer_ && right_panel_scroll_ && right_panel_scroll_->isVisible() &&
+        !selection_preview_timer_->isActive())
+        selection_preview_timer_->start();
+}
+
 void MainWindow::refresh_guide_previews() {
-    QPainterPath contour;
-    contour.setFillRule(Qt::OddEvenFill);
-    bool all_closed = true;
-    for (const auto& entity : document_.selected_entities()) {
-        const auto points = entity->to_points(160);
-        if (points.size() < 2) continue;
-        contour.moveTo(points.front().x, points.front().y);
-        for (size_t i = 1; i < points.size(); ++i) contour.lineTo(points[i].x, points[i].y);
-        if (entity->closed()) contour.closeSubpath(); else all_closed = false;
-    }
+    const auto* tool = canvas_widget_ && canvas_widget_->canvas ? canvas_widget_->canvas->tool() : nullptr;
+    const std::string mode = tool ? tool->active_mode() : std::string{};
+    const bool manipulating = mode == "move" || mode == "handle-scale" ||
+                              mode == "handle-rotate" || mode == "rubber";
     for (const QString name : {QString("SelectionGuide"), QString("MaterialGuideThumbnail")}) {
         auto* guide = findChild<ui::MachiningGuide*>(name);
-        if (!guide) continue;
+        const bool selection = name == "SelectionGuide";
+        bool& dirty = selection ? selection_guide_dirty_ : material_guide_dirty_;
+        if (!guide || !guide->isVisible() || !dirty) continue;
+        // Drawing a large 3D guide competes with the direct manipulation of the
+        // same geometry. Keep it dirty until release/cancel schedules the final
+        // state; the material thumbnail has no selection geometry and can update.
+        if (selection && manipulating) continue;
+        dirty = false;
+        QPainterPath contour;
+        contour.setFillRule(Qt::OddEvenFill);
+        bool all_closed = true;
+        // The material thumbnail does not use selection geometry. In particular,
+        // do not tessellate thousands of vectors for an invisible selection guide.
+        if (selection) {
+            for (const auto& entity : document_.entities) {
+                if (!entity->selected || !document_.is_editable(*entity)) continue;
+                const auto points = entity->to_points(160);
+                if (points.size() < 2) continue;
+                contour.moveTo(points.front().x, points.front().y);
+                for (size_t i = 1; i < points.size(); ++i) contour.lineTo(points[i].x, points[i].y);
+                if (entity->closed()) contour.closeSubpath(); else all_closed = false;
+            }
+        }
         auto* model = guide->model();
+        bool changed = false;
         // Batch document updates: rebuild the preview once, not once per field.
         {
             QSignalBlocker block(model);
-            model->setValue("width", document_.material.width);
-            model->setValue("height", document_.material.height);
-            model->setValue("thickness", document_.material.thickness);
-            model->setValue("clearance", document_.material.clearance_z);
-            model->setValue("originX", QStringList{"left", "center", "right"}.indexOf(QString::fromStdString(document_.material.zero_x)));
-            model->setValue("originY", QStringList{"bottom", "center", "top"}.indexOf(QString::fromStdString(document_.material.zero_y)));
-            model->setValue("zeroZ", document_.material.zero_z == "bottom" ? 1 : 0);
-            if (name == "SelectionGuide") {
-                model->setContour(contour, all_closed);
-                model->setValue("side", 2);
-                model->setValue("openSide", 2);
+            const auto set_value = [model, &changed](const QString& key, const QVariant& value) {
+                if (model->value(key) == value) return;
+                model->setValue(key, value);
+                changed = true;
+            };
+            set_value("width", document_.material.width);
+            set_value("height", document_.material.height);
+            set_value("thickness", document_.material.thickness);
+            set_value("clearance", document_.material.clearance_z);
+            set_value("originX", QStringList{"left", "center", "right"}.indexOf(QString::fromStdString(document_.material.zero_x)));
+            set_value("originY", QStringList{"bottom", "center", "top"}.indexOf(QString::fromStdString(document_.material.zero_y)));
+            set_value("zeroZ", document_.material.zero_z == "bottom" ? 1 : 0);
+            if (selection) {
+                if (model->contour() != contour || model->closed() != all_closed) {
+                    model->setContour(contour, all_closed);
+                    changed = true;
+                }
+                set_value("side", 2);
+                set_value("openSide", 2);
             }
         }
-        if (name == "SelectionGuide") guide->set_kind(contour.isEmpty() ? "08_material" : "01_usinar_vetores");
-        emit model->changed();
+        const QString kind = selection && !contour.isEmpty() ? "01_usinar_vetores" : "08_material";
+        // Changing topic already rebuilds with the new model. Avoid doing the
+        // same geometry calculation again through GuideModel::changed.
+        if (guide->kind() != kind) guide->set_kind(kind);
+        else if (changed) emit model->changed();
     }
 }
 
 void MainWindow::refresh_document_view() {
+    selection_guide_dirty_ = true;
+    material_guide_dirty_ = true;
+    automatic_cut_panel_dirty_ = true;
+    order_service_geometry_snapshot_valid_ = false;
     if (simulation_timer_ && simulation_timer_->isActive()) simulation_timer_->stop();
     simulation_.reset();
     refresh_simulation_status();
-    canvas_widget_->set_material(document_.material.width, document_.material.height);
-    canvas_widget_->canvas->set_document(&document_);
+    canvas_widget_->set_document(&document_);
     refresh_layers();
     // QOpenGLWidget ainda nao possui contexto durante a construcao da janela.
     // A limpeza dos buffers so pode ocorrer depois que a viewport foi mostrada.
@@ -5983,6 +6662,7 @@ bool MainWindow::open_file(const QString& path) {
     try {
         document_.load(std::filesystem::path(path.toStdWString()));
         refresh_document_view();
+        canvas_widget_->canvas->fit_view();
         statusBar()->showMessage(QString("Projeto aberto: %1").arg(path));
         return true;
     } catch (const std::exception& error) {

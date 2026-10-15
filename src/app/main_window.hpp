@@ -3,8 +3,10 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include <QDateTime>
@@ -31,11 +33,15 @@ class QListWidget;
 class QProgressBar;
 class QPushButton;
 class QDockWidget;
+class QDialog;
 class QScrollArea;
 class QSlider;
 class QTimer;
 class QToolButton;
+class QTableWidget;
 class QWidget;
+class QLineEdit;
+class QPlainTextEdit;
 
 namespace cnc::vp {
 class Canvas2DWidget;
@@ -44,8 +50,27 @@ class Viewport3D;
 
 namespace cnc::app {
 
+// Layout of the job-sheet drawing, in logical units.  The image comes back
+// `supersample` times larger so the dimensions and callouts stay sharp once the
+// PDF stretches the drawing across a landscape page.
+struct JobPreviewOptions {
+    int width = 980;           // logical canvas width
+    // The height follows the projected stock so the drawing fills the frame
+    // instead of being padded with empty space, within these bounds.
+    int min_height = 300;
+    int max_height = 540;
+    double supersample = 3.0;  // device pixels per logical unit
+    int only_operation = -1;   // -1 draws every toolpath
+};
+
 QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& operations,
-                               const cad::MaterialSetup* material = nullptr);
+                               const cad::MaterialSetup* material = nullptr,
+                               const JobPreviewOptions& options = {});
+
+// One drawing per toolpath, each isolated on a taller canvas, for the sheets
+// that follow the summary page of the job sheet.
+std::vector<QImage> make_operation_previews(const std::vector<cam::SetupSheetOperation>& operations,
+                                            const cad::MaterialSetup* material = nullptr);
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -60,10 +85,16 @@ private:
     void create_tool_panel();
     void create_legacy_tool_panel();
     void create_toolpath_panel();
+    void create_order_service_page();
+    void open_order_service_page();
+    void refresh_order_service_page();
+    bool recalculate_order_service_if_geometry_changed();
+    void generate_order_service_pdf();
     void create_legacy_toolpath_panel();
     void activate_tool(const QString& name);
     void activate_dimension(const QString& mode);
     void refresh_document_view();
+    void schedule_selection_previews();
     void refresh_guide_previews();
     void refresh_3d_view();
     void edit_material_setup();
@@ -128,6 +159,8 @@ private:
         cam::SetupSheetInfo info;
     };
     std::vector<RegisteredJobRecord> job_history_;
+    std::vector<std::pair<std::string, uint64_t>> order_service_geometry_versions_;
+    bool order_service_geometry_snapshot_valid_ = false;
 
     cad::Document document_;
     std::vector<cad::EntityPtr> clipboard_entities_;
@@ -136,10 +169,37 @@ private:
     std::unique_ptr<tools::BaseTool> active_tool_;
     QTabBar* view_tabs_ = nullptr;
     QWidget* view_3d_controls_ = nullptr;
+    QWidget* order_service_page_ = nullptr;
     QToolButton* projection_3d_button_ = nullptr;
     std::optional<std::array<double, 4>> view_3d_scene_bounds_;
     QStackedWidget* view_stack_ = nullptr;
     QStackedWidget* right_panel_stack_ = nullptr;
+    QStackedWidget* order_service_steps_ = nullptr;
+    QTabBar* order_service_step_tabs_ = nullptr;
+    QLabel* order_service_preview_label_ = nullptr;
+    QLabel* order_service_state_label_ = nullptr;
+    QLabel* order_service_dimensions_label_ = nullptr;
+    QLabel* order_service_origin_label_ = nullptr;
+    QLabel* order_service_time_label_ = nullptr;
+    QLabel* order_service_cut_label_ = nullptr;
+    QLabel* order_service_depth_label_ = nullptr;
+    QLabel* order_service_material_label_ = nullptr;
+    QLabel* order_service_material_dims_label_ = nullptr;
+    QLabel* order_service_material_area_label_ = nullptr;
+    QLabel* order_service_margin_label_ = nullptr;
+    QLabel* order_service_zero_xy_label_ = nullptr;
+    QLabel* order_service_zero_z_label_ = nullptr;
+    QLabel* order_service_clearance_label_ = nullptr;
+    QLabel* order_service_plunge_gap_label_ = nullptr;
+    QLabel* order_service_offset_label_ = nullptr;
+    QTableWidget* order_service_operations_table_ = nullptr;
+    QLineEdit* order_service_customer_ = nullptr;
+    QLineEdit* order_service_contact_ = nullptr;
+    QLineEdit* order_service_number_ = nullptr;
+    QLineEdit* order_service_part_ = nullptr;
+    QLineEdit* order_service_revision_ = nullptr;
+    QLineEdit* order_service_operator_ = nullptr;
+    QPlainTextEdit* order_service_notes_ = nullptr;
     cnc::vp::Canvas2DWidget* canvas_widget_ = nullptr;
     cnc::vp::Viewport3D* viewport_3d_ = nullptr;
     QLabel* coordinate_label_ = nullptr;
@@ -169,10 +229,15 @@ private:
     QToolButton* selection_nav_button_ = nullptr;
     QToolButton* toolpath_nav_button_ = nullptr;
     QToolButton* simulation_nav_button_ = nullptr;
+    QToolButton* order_service_nav_button_ = nullptr;
     QToolButton* automatic_nav_button_ = nullptr;
     QComboBox* automatic_cut_combo_ = nullptr;
     QLabel* automatic_cut_info_label_ = nullptr;
     QPushButton* automatic_create_button_ = nullptr;
+    QTimer* selection_preview_timer_ = nullptr;
+    bool selection_guide_dirty_ = true;
+    bool material_guide_dirty_ = true;
+    bool automatic_cut_panel_dirty_ = true;
     QTimer* simulation_timer_ = nullptr;
     std::unique_ptr<sim::ToolpathSimulation> simulation_;
     std::string bridge_target_job_id_;

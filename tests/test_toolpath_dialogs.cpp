@@ -1,5 +1,6 @@
 #include <doctest.h>
 
+#include <cmath>
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
@@ -9,6 +10,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QScrollArea>
+#include <QScreen>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -44,10 +46,24 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
         bool depth_seen = false;
         bool tool_seen = false;
         bool guide_image_loaded = false;
+        bool workspace_interactive = false;
         QTimer::singleShot(0, &window, [&] {
-            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            QDialog* dialog = nullptr;
+            for (auto* candidate : window.findChildren<QDialog*>()) {
+                if (candidate->isVisible() && candidate->windowTitle().startsWith("Percurso de ")) {
+                    dialog = candidate;
+                    break;
+                }
+            }
             if (!dialog) return;
             dialog_seen = dialog->windowTitle().startsWith("Percurso de ");
+            workspace_interactive = window.isEnabled();
+            CHECK(dialog->width() <= 420);
+            const int app_right = window.mapToGlobal(QPoint(window.width() - 1, 0)).x();
+            CHECK(std::abs(dialog->geometry().right() - app_right) <= 3);
+            const QString capture_dir = QString::fromUtf8(qgetenv("CNC_GUIDE_CAPTURE_DIR"));
+            if (kind == "Percurso de perfil" && !capture_dir.isEmpty())
+                dialog->screen()->grabWindow(0).save(capture_dir + "/percurso-right-edge.png");
             auto* scroll = dialog->findChild<QScrollArea*>();
             if (scroll && scroll->widget() && scroll->widget()->layout()) {
                 auto* layout = qobject_cast<QVBoxLayout*>(scroll->widget()->layout());
@@ -73,6 +89,7 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
         CHECK(depth_seen);
         CHECK(tool_seen);
         CHECK(guide_image_loaded);
+        CHECK(workspace_interactive);
     }
 
     const QStringList profile_sections = {

@@ -40,6 +40,9 @@ public:
     // So existem em cotas: o rotulo com o valor e as linhas de extensao.
     QGraphicsSimpleTextItem* dimension_label() const { return dimension_label_; }
     QGraphicsPathItem* extension_item() const { return extension_item_; }
+    void update_context(double mh, double unit_factor, const std::string& units, const Rgb& layer_color);
+    BBox world_bounds() const;
+    bool hit_test_world(double x, double y, double tolerance) const;
     void refresh();
     void apply_style();
 
@@ -53,6 +56,13 @@ private:
     Rgb layer_color_;
     uint64_t cached_version_ = 0;
     double cached_mh_ = -1.0;
+    bool context_dirty_ = true;
+    bool style_dirty_ = true;
+    bool cached_selected_ = false;
+    mutable std::optional<BBox> cached_bounds_;
+    mutable uint64_t bounds_version_ = 0;
+    mutable std::optional<QPainterPath> cached_hit_path_;
+    mutable double hit_tolerance_ = -1.0;
     QGraphicsSimpleTextItem* dimension_label_ = nullptr;
     QGraphicsPathItem* extension_item_ = nullptr;
 };

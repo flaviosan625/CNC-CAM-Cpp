@@ -93,6 +93,11 @@ public:
                            const std::optional<Pt>& anchor = std::nullopt) const;
 
 private:
+    struct GeometryCache;
+    // Entidades avisam alteracoes por version/touch(), como o cache de desenho.
+    // O mouse consulta a mesma geometria muitas vezes entre duas edicoes.
+    mutable std::shared_ptr<GeometryCache> geometry_cache_;
+    GeometryCache& geometry_cache() const;
     bool wants(SnapKind k) const;
     std::vector<Pt> material_points() const;
 };

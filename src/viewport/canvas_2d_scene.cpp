@@ -21,6 +21,7 @@ void Canvas2D::refresh_entities() {
     if (!document_) {
         for (EntityItem* item : ent_items_) remove_item(item);
         ent_items_.clear();
+        ent_item_index_.clear();
         return;
     }
     document_->sync_dimensions();
@@ -44,6 +45,10 @@ void Canvas2D::refresh_entities() {
         }
         if (match) {
             for (EntityItem* item : ent_items_) {
+                const auto& entity = item->entity();
+                const cad::Layer* layer = document_->get_layer(entity->layer);
+                item->update_context(material_height, document_->material.unit_factor(),
+                                     document_->material.units, layer ? layer->color : entity->color);
                 item->refresh();
             }
             rebuild_fit_warning_items();
@@ -52,7 +57,11 @@ void Canvas2D::refresh_entities() {
         }
     }
 
-    for (EntityItem* item : ent_items_) remove_item(item);
+    // Keep existing paths and scene items when only one piece is added/deleted.
+    // Recreating every item also discarded the cached text outlines and shapes.
+    auto reusable = std::move(ent_item_index_);
+    ent_item_index_.clear();
+    ent_item_index_.reserve(visible.size());
     ent_items_.clear();
     ent_items_.reserve(visible.size());
 
@@ -61,10 +70,23 @@ void Canvas2D::refresh_entities() {
     for (const cad::EntityPtr& e : visible) {
         const cad::Layer* lay = document_->get_layer(e->layer);
         const Rgb layer_color = lay ? lay->color : e->color;
-        auto* item = new EntityItem(e, mh, mat.unit_factor(), mat.units, layer_color);
-        scene_->addItem(item);
+        EntityItem* item = nullptr;
+        if (const auto found = reusable.find(e.get()); found != reusable.end()) {
+            item = found->second;
+            reusable.erase(found);
+            item->update_context(mh, mat.unit_factor(), mat.units, layer_color);
+            item->refresh();
+        } else {
+            item = new EntityItem(e, mh, mat.unit_factor(), mat.units, layer_color);
+            scene_->addItem(item);
+        }
         ent_items_.push_back(item);
+        ent_item_index_.emplace(e.get(), item);
     }
+    for (const auto& [entity, item] : reusable) remove_item(item);
+    // Preserve document stacking order even after an undo inserts an earlier item.
+    for (size_t i = ent_items_.size(); i > 1; --i)
+        ent_items_[i - 2]->stackBefore(ent_items_[i - 1]);
     rebuild_fit_warning_items();
     refresh_selection_handles();
 }
@@ -131,7 +153,12 @@ cad::EntityPtr Canvas2D::entity_at(double wx, double wy) const {
     const double tol = pick_tolerance() * kPickPx;
     for (auto it = document_->entities.rbegin(); it != document_->entities.rend(); ++it) {
         if (!document_->is_editable(**it)) continue;
-        if (hit_test(**it, wx, wy, tol)) return *it;
+        const auto cached = ent_item_index_.find(it->get());
+        if (cached != ent_item_index_.end()) {
+            if (cached->second->hit_test_world(wx, wy, tol)) return *it;
+        } else if (hit_test(**it, wx, wy, tol)) {
+            return *it;
+        }
     }
     return nullptr;
 }
@@ -146,11 +173,18 @@ QPoint Canvas2D::entity_anchor(const cad::Entity& entity) const {
 
 std::optional<BBox> Canvas2D::selection_bbox() const {
     if (!document_) return std::nullopt;
-    const auto sel = document_->selected_entities();
+    return selection_bbox_for(document_->selected_entities());
+}
+
+std::optional<BBox> Canvas2D::selection_bbox_for(const std::vector<cad::EntityPtr>& sel) const {
     if (sel.empty()) return std::nullopt;
-    BBox out = sel.front()->bounding_box();
+    const auto bounds = [this](const cad::EntityPtr& entity) {
+        const auto item = ent_item_index_.find(entity.get());
+        return item != ent_item_index_.end() ? item->second->world_bounds() : entity->bounding_box();
+    };
+    BBox out = bounds(sel.front());
     for (size_t i = 1; i < sel.size(); ++i) {
-        const BBox c = sel[i]->bounding_box();
+        const BBox c = bounds(sel[i]);
         out.x0 = std::min(out.x0, c.x0);
         out.y0 = std::min(out.y0, c.y0);
         out.x1 = std::max(out.x1, c.x1);
@@ -162,22 +196,22 @@ std::optional<BBox> Canvas2D::selection_bbox() const {
 // Mostra as alcas ao redor da selecao, ou apaga se nao houver. Chamado apos qualquer mudanca de
 // selecao, de ferramenta ativa ou de geometria. As alcas so aparecem com a ferramenta de selecao -
 // em qualquer outra, atrapalhariam o desenho em andamento.
-void Canvas2D::refresh_selection_handles() {
-    const std::optional<BBox> bbox = selection_bbox();
+void Canvas2D::refresh_selection_handles(bool notify) {
     const std::string tool_name = tool_ ? tool_->name() : std::string();
     std::vector<cad::EntityPtr> selected;
     if (document_) selected = document_->selected_entities();
+    const std::optional<BBox> bbox = selection_bbox_for(selected);
     const bool all_drill = !selected.empty() && std::all_of(selected.begin(), selected.end(), [](const cad::EntityPtr& e) {
         return cad::is_a<cad::DrillPoint>(*e);
     });
     if (!bbox || tool_name != "select" || all_drill) {
         handles.clear();
-        emit selection_changed();
+        if (notify) emit selection_changed();
         return;
     }
     handles.show(*bbox);
     // Also notify previews after edits, undo and programmatic selection changes.
-    emit selection_changed();
+    if (notify) emit selection_changed();
 }
 
 // Rotulo com o angulo atual, flutuando perto do cursor. Em pixels locais, com

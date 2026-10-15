@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
+#include <numeric>
+#include <unordered_map>
 
 namespace cnc::vp {
 
@@ -232,32 +235,191 @@ BBox bbox_of(const std::vector<Pt>& pts) {
     return b;
 }
 
-}  // namespace
+bool boxes_overlap(const BBox& a, const BBox& b) {
+    return a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0;
+}
 
-std::vector<Pt> segment_intersections(const cad::Entity& a, const cad::Entity& b, int segments) {
-    const Points pa = a.to_points(segments), pb = b.to_points(segments);
-    if (pa.size() < 2 || pb.size() < 2) return {};
+BBox merged_box(const BBox& a, const BBox& b) {
+    return {std::min(a.x0, b.x0), std::min(a.y0, b.y0), std::max(a.x1, b.x1), std::max(a.y1, b.y1)};
+}
+
+// Consulta apenas segmentos cujas caixas podem tocar o cursor/outro segmento.
+// Os indices voltam na ordem original: empates e o limite de 33 intersecoes
+// continuam iguais aos da varredura completa.
+struct SegmentIndex {
+    struct Node {
+        BBox bounds;
+        size_t begin = 0, end = 0;
+        size_t left = 0, right = 0;
+    };
+    Points points;
+    std::vector<BBox> bounds;
+    std::vector<size_t> order;
+    std::vector<Node> nodes;
+
+    SegmentIndex(Points pts, bool closed) : points(std::move(pts)) {
+        if (points.size() < 2) return;
+        const size_t count = closed ? points.size() : points.size() - 1;
+        bounds.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            const Pt& a = points[i];
+            const Pt& b = points[(i + 1) % points.size()];
+            bounds.push_back({std::min(a.x, b.x), std::min(a.y, b.y), std::max(a.x, b.x), std::max(a.y, b.y)});
+        }
+        order.resize(count);
+        std::iota(order.begin(), order.end(), size_t{0});
+        nodes.reserve(count * 2);
+        build(0, count);
+    }
+
+    size_t build(size_t begin, size_t end) {
+        BBox box = bounds[order[begin]];
+        for (size_t i = begin + 1; i < end; ++i) box = merged_box(box, bounds[order[i]]);
+        const size_t index = nodes.size();
+        nodes.push_back({box, begin, end, 0, 0});
+        if (end - begin <= 8) return index;
+        const bool x_axis = box.x1 - box.x0 >= box.y1 - box.y0;
+        const size_t middle = begin + (end - begin) / 2;
+        std::nth_element(order.begin() + begin, order.begin() + middle, order.begin() + end,
+                         [&](size_t a, size_t b) {
+            const BBox& aa = bounds[a];
+            const BBox& bb = bounds[b];
+            return x_axis ? aa.x0 + aa.x1 < bb.x0 + bb.x1 : aa.y0 + aa.y1 < bb.y0 + bb.y1;
+        });
+        const size_t left = build(begin, middle);
+        const size_t right = build(middle, end);
+        nodes[index].left = left;
+        nodes[index].right = right;
+        return index;
+    }
+
+    void query_node(size_t index, const BBox& box, std::vector<size_t>& out) const {
+        const Node& node = nodes[index];
+        if (!boxes_overlap(node.bounds, box)) return;
+        if (node.left != 0) {
+            query_node(node.left, box, out);
+            query_node(node.right, box, out);
+        } else {
+            for (size_t i = node.begin; i < node.end; ++i) {
+                if (boxes_overlap(bounds[order[i]], box)) out.push_back(order[i]);
+            }
+        }
+    }
+
+    void query(const BBox& box, std::vector<size_t>& out) const {
+        out.clear();
+        if (!nodes.empty()) query_node(0, box, out);
+        std::sort(out.begin(), out.end());
+    }
+};
+
+std::vector<Pt> indexed_intersections(const SegmentIndex& a, const SegmentIndex& b) {
     std::vector<Pt> out;
-    const size_t na = a.closed() ? pa.size() : pa.size() - 1;
-    const size_t nb = b.closed() ? pb.size() : pb.size() - 1;
-    for (size_t i = 0; i < na; ++i) {
-        const Pt& p1 = pa[i];
-        const Pt& p2 = pa[(i + 1) % pa.size()];
-        for (size_t j = 0; j < nb; ++j) {
-            const Pt& p3 = pb[j];
-            const Pt& p4 = pb[(j + 1) % pb.size()];
-            if (auto ponto = cross(p1, p2, p3, p4)) {
-                out.push_back(*ponto);
-                if (out.size() > 32) return out;  // mais que isso nao ajuda ninguem
+    std::vector<size_t> nearby;
+    for (size_t i = 0; i < a.bounds.size(); ++i) {
+        b.query(a.bounds[i], nearby);
+        for (const size_t j : nearby) {
+            if (auto point = cross(a.points[i], a.points[(i + 1) % a.points.size()],
+                                   b.points[j], b.points[(j + 1) % b.points.size()])) {
+                out.push_back(*point);
+                if (out.size() > 32) return out;
             }
         }
     }
     return out;
 }
 
+std::optional<std::pair<Pt, double>> indexed_closest(const SegmentIndex& path, double x, double y, double radius) {
+    std::vector<size_t> nearby;
+    path.query({x - radius, y - radius, x + radius, y + radius}, nearby);
+    std::optional<Pt> best;
+    double best_distance = std::numeric_limits<double>::infinity();
+    for (const size_t i : nearby) {
+        const Pt& a = path.points[i];
+        const Pt& b = path.points[(i + 1) % path.points.size()];
+        const double dx = b.x - a.x, dy = b.y - a.y;
+        const double length_squared = dx * dx + dy * dy;
+        if (length_squared < 1e-12) continue;
+        const double t = std::max(0.0, std::min(1.0, ((x - a.x) * dx + (y - a.y) * dy) / length_squared));
+        const Pt point{a.x + t * dx, a.y + t * dy};
+        const double distance = hypot(x - point.x, y - point.y);
+        if (distance < best_distance) {
+            best = point;
+            best_distance = distance;
+        }
+    }
+    if (!best) return std::nullopt;
+    return std::make_pair(*best, best_distance);
+}
+
+}  // namespace
+
+std::vector<Pt> segment_intersections(const cad::Entity& a, const cad::Entity& b, int segments) {
+    return indexed_intersections(SegmentIndex(a.to_points(segments), a.closed()),
+                                 SegmentIndex(b.to_points(segments), b.closed()));
+}
+
 // ======================================================================
 // Motor
 // ======================================================================
+
+struct SnapEngine::GeometryCache {
+    struct Entry {
+        cad::EntityPtr entity;
+        uint64_t version = 0;
+        BBox bounds;
+        std::optional<std::vector<NotablePoint>> notable;
+        std::optional<SegmentIndex> segments64;
+        std::optional<SegmentIndex> segments96;
+
+        const std::vector<NotablePoint>& points() {
+            if (!notable) notable = entity_points(*entity);
+            return *notable;
+        }
+        const SegmentIndex& path(int segments) {
+            // Polilinhas usam os vertices originais em ambas as resolucoes.
+            auto& cached = segments == 64 || cad::as<cad::Polyline>(*entity) ? segments64 : segments96;
+            if (!cached) cached.emplace(entity->to_points(segments), entity->closed());
+            return *cached;
+        }
+    };
+    const cad::Document* document = nullptr;
+    std::vector<Entry> entries;
+    std::unordered_map<const cad::Entity*, size_t> by_entity;
+    struct IntersectionEntry {
+        uint64_t first_version = 0, second_version = 0;
+        Points points;
+    };
+    std::map<std::pair<size_t, size_t>, IntersectionEntry> intersections;
+};
+
+SnapEngine::GeometryCache& SnapEngine::geometry_cache() const {
+    if (!geometry_cache_) geometry_cache_ = std::make_shared<GeometryCache>();
+    GeometryCache& cache = *geometry_cache_;
+    if (cache.document != document) {
+        cache = {};
+        cache.document = document;
+    }
+    const size_t count = document ? document->entities.size() : 0;
+    bool structure_changed = cache.entries.size() != count;
+    cache.entries.resize(count);
+    for (size_t i = 0; i < count; ++i) {
+        const auto& entity = document->entities[i];
+        auto& entry = cache.entries[i];
+        if (entry.entity == entity && entry.version == entity->version) continue;
+        if (entry.entity != entity) structure_changed = true;
+        entry = {};
+        entry.entity = entity;
+        entry.version = entity->version;
+        entry.bounds = entity->bounding_box();
+    }
+    if (structure_changed) {
+        cache.intersections.clear();
+        cache.by_entity.clear();
+        for (size_t i = 0; i < cache.entries.size(); ++i) cache.by_entity.emplace(cache.entries[i].entity.get(), i);
+    }
+    return cache;
+}
 
 std::vector<cad::EntityPtr> SnapEngine::visible_entities(const std::set<std::string>& exclude) const {
     std::vector<cad::EntityPtr> out;
@@ -309,30 +471,47 @@ std::optional<SnapResult> SnapEngine::snap(double wx, double wy, double px_per_m
     if (raio <= 0) return std::nullopt;
 
     std::vector<SnapResult> candidatos;
-    std::vector<cad::EntityPtr> perto;
+    std::vector<size_t> perto;
 
     if (s.geometry && document) {
-        for (const cad::EntityPtr& e : document->entities) {
-            const BBox b = e->bounding_box();
+        auto& cache = geometry_cache();
+        for (size_t i = 0; i < cache.entries.size(); ++i) {
+            auto& entry = cache.entries[i];
+            const auto& e = entry.entity;
+            const BBox& b = entry.bounds;
             if (wx < b.x0 - raio || wx > b.x1 + raio || wy < b.y0 - raio || wy > b.y1 + raio) continue;
             if (!exclude.empty() && exclude.count(e->id)) continue;
             const cad::Layer* camada = document->get_layer(e->layer);
             if (camada && !camada->visible) continue;
 
-            perto.push_back(e);
-            for (const auto& [ponto, tipo] : entity_points(*e)) {
+            perto.push_back(i);
+            for (const auto& [ponto, tipo] : entry.points()) {
                 if (!wants(tipo)) continue;
                 const double d = dist(ponto, {wx, wy});
                 if (d <= raio) candidatos.push_back({ponto.x, ponto.y, tipo, d, e});
             }
         }
 
-        if (s.intersections && perto.size() > 1) {
+        const bool has_node = std::any_of(candidatos.begin(), candidatos.end(), [](const SnapResult& candidate) {
+            return candidate.kind == SnapKind::Node;
+        });
+        if (s.intersections && !has_node && perto.size() > 1) {
             for (size_t i = 0; i < perto.size(); ++i) {
                 for (size_t j = i + 1; j < perto.size(); ++j) {
-                    for (const Pt& ponto : segment_intersections(*perto[i], *perto[j])) {
+                    auto& a = cache.entries[perto[i]];
+                    auto& b = cache.entries[perto[j]];
+                    if (!boxes_overlap(a.bounds, b.bounds)) continue;
+                    const auto key = std::make_pair(perto[i], perto[j]);
+                    auto [found, inserted] = cache.intersections.try_emplace(key);
+                    auto& intersections = found->second;
+                    if (inserted || intersections.first_version != a.version || intersections.second_version != b.version) {
+                        intersections.points = indexed_intersections(a.path(64), b.path(64));
+                        intersections.first_version = a.version;
+                        intersections.second_version = b.version;
+                    }
+                    for (const Pt& ponto : intersections.points) {
                         const double d = dist(ponto, {wx, wy});
-                        if (d <= raio) candidatos.push_back({ponto.x, ponto.y, SnapKind::Intersection, d, perto[i]});
+                        if (d <= raio) candidatos.push_back({ponto.x, ponto.y, SnapKind::Intersection, d, a.entity});
                     }
                 }
             }
@@ -355,9 +534,11 @@ std::optional<SnapResult> SnapEngine::snap(double wx, double wy, double px_per_m
 
     // Ultimo recurso: um ponto qualquer sobre o contorno.
     if (s.geometry && s.on_span && candidatos.empty()) {
-        for (const cad::EntityPtr& e : perto) {
-            if (auto achado = closest_on_entity(*e, wx, wy); achado && achado->second <= raio) {
-                candidatos.push_back({achado->first.x, achado->first.y, SnapKind::OnSpan, achado->second, e});
+        auto& cache = geometry_cache();
+        for (const size_t i : perto) {
+            auto& entry = cache.entries[i];
+            if (auto achado = indexed_closest(entry.path(96), wx, wy, raio); achado && achado->second <= raio) {
+                candidatos.push_back({achado->first.x, achado->first.y, SnapKind::OnSpan, achado->second, entry.entity});
             }
         }
     }
@@ -380,14 +561,18 @@ MovingSnap SnapEngine::snap_moving(const std::vector<cad::EntityPtr>& moving, do
 
     std::set<std::string> ids;
     for (const cad::EntityPtr& e : moving) ids.insert(e->id);
-    const std::vector<cad::EntityPtr> alvos = visible_entities(ids);
-    if (alvos.empty()) return {dx, dy, std::nullopt};
+    auto& cache = geometry_cache();
 
     std::vector<NotablePoint> todos;
     for (const cad::EntityPtr& e : moving) {
-        for (const auto& [ponto, tipo] : entity_points(*e)) {
-            if (wants(tipo)) todos.push_back({{ponto.x + dx, ponto.y + dy}, tipo});
-        }
+        auto append = [&](const auto& points) {
+            for (const auto& [ponto, tipo] : points) {
+                if (wants(tipo)) todos.push_back({{ponto.x + dx, ponto.y + dy}, tipo});
+            }
+        };
+        const auto found = cache.by_entity.find(e.get());
+        if (found != cache.by_entity.end()) append(cache.entries[found->second].points());
+        else append(entity_points(*e));
     }
     if (todos.empty()) return {dx, dy, std::nullopt};
 
@@ -395,34 +580,51 @@ MovingSnap SnapEngine::snap_moving(const std::vector<cad::EntityPtr>& moving, do
     for (const auto& [p, t] : todos) only_points.push_back(p);
     const BBox caixa = bbox_of(only_points);
     std::vector<NotablePoint> fixos;
-    for (const cad::EntityPtr& e : alvos) {
-        const BBox b = e->bounding_box();
+    bool has_targets = false;
+    for (auto& entry : cache.entries) {
+        const auto& e = entry.entity;
+        if (ids.count(e->id)) continue;
+        const auto* layer = document->get_layer(e->layer);
+        if (layer && !layer->visible) continue;
+        has_targets = true;
+        const BBox& b = entry.bounds;
         if (b.x1 + raio < caixa.x0 || b.x0 - raio > caixa.x1 || b.y1 + raio < caixa.y0 || b.y0 - raio > caixa.y1) continue;
-        for (const auto& np : entity_points(*e)) {
+        for (const auto& np : entry.points()) {
             if (wants(np.second)) fixos.push_back(np);
         }
     }
+    if (!has_targets) return {dx, dy, std::nullopt};
     if (s.material && document) {
         for (const Pt& p : material_points()) fixos.push_back({p, SnapKind::Material});
     }
     if (fixos.empty()) return {dx, dy, std::nullopt};
 
-    std::vector<std::vector<NotablePoint>> tentativas;
-    if (anchor) tentativas.push_back({{{anchor->x + dx, anchor->y + dy}, SnapKind::Node}});
-    tentativas.push_back(todos);
+    // Uma busca por faixa de X evita comparar todos os vertices moveis com
+    // todos os fixos (milhoes de hypot a cada evento em chapas detalhadas).
+    std::vector<size_t> order(fixos.size());
+    std::iota(order.begin(), order.end(), size_t{0});
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return fixos[a].first.x < fixos[b].first.x; });
 
-    for (const auto& moveis : tentativas) {
+    auto search = [&](const auto& moveis) -> std::optional<MovingSnap> {
         struct Best {
-            std::pair<int, double> key;
+            std::tuple<int, double, size_t, size_t> key;
             double corr_x, corr_y, fx, fy;
             SnapKind tipo;
         };
         std::optional<Best> melhor;
-        for (const auto& [m, tipo_m] : moveis) {
-            for (const auto& [f, tipo_f] : fixos) {
+        for (size_t mi = 0; mi < moveis.size(); ++mi) {
+            const auto& [m, tipo_m] = moveis[mi];
+            auto first = std::lower_bound(order.begin(), order.end(), m.x - raio,
+                                         [&](size_t i, double x) { return fixos[i].first.x < x; });
+            for (auto it = first; it != order.end(); ++it) {
+                const size_t fi = *it;
+                const auto& [f, tipo_f] = fixos[fi];
+                if (f.x > m.x + raio) break;
+                if (std::fabs(f.y - m.y) > raio) continue;
                 const double d = hypot(f.x - m.x, f.y - m.y);
                 if (d > raio) continue;
-                const std::pair<int, double> chave{std::min(snap_priority(tipo_m), snap_priority(tipo_f)), d};
+                const std::tuple<int, double, size_t, size_t> chave{
+                    std::min(snap_priority(tipo_m), snap_priority(tipo_f)), d, mi, fi};
                 if (!melhor || chave < melhor->key) {
                     melhor = Best{chave, f.x - m.x, f.y - m.y, f.x, f.y,
                                   snap_priority(tipo_f) <= snap_priority(tipo_m) ? tipo_f : tipo_m};
@@ -430,10 +632,16 @@ MovingSnap SnapEngine::snap_moving(const std::vector<cad::EntityPtr>& moving, do
             }
         }
         if (melhor) {
-            return {dx + melhor->corr_x, dy + melhor->corr_y,
-                    SnapResult{melhor->fx, melhor->fy, melhor->tipo, 0.0, nullptr}};
+            return MovingSnap{dx + melhor->corr_x, dy + melhor->corr_y,
+                              SnapResult{melhor->fx, melhor->fy, melhor->tipo, 0.0, nullptr}};
         }
+        return std::nullopt;
+    };
+    if (anchor) {
+        const std::array<NotablePoint, 1> anchor_points{{{{anchor->x + dx, anchor->y + dy}, SnapKind::Node}}};
+        if (auto found = search(anchor_points)) return *found;
     }
+    if (auto found = search(todos)) return *found;
     return {dx, dy, std::nullopt};
 }
 
