@@ -275,18 +275,23 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     const double thickness = has_material ? material->thickness : 15.0;
     const double z_top = has_material ? material->surface_z() : 0.0;
     const double z_bottom = z_top - thickness;
+    // Paths and stock use drawing coordinates. The configured work zero is a
+    // point *on* that stock; it must not shift the stock geometry itself.
+    const double mat_x0 = has_material ? 0.0 : cut_bounds->x0 - 10.0;
+    const double mat_y0 = has_material ? 0.0 : cut_bounds->y0 - 10.0;
+    const double mat_x1 = mat_x0 + board_width;
+    const double mat_y1 = mat_y0 + board_height;
     const double origin_x = has_material ? material->origin_xy().x : 0.0;
     const double origin_y = has_material ? material->origin_xy().y : 0.0;
-    const double mat_x0 = origin_x;
-    const double mat_y0 = origin_y;
-    const double mat_x1 = origin_x + board_width;
-    const double mat_y1 = origin_y + board_height;
+    const double origin_z = has_material && material->zero_z == "bottom" ? z_bottom : z_top;
     const double cut_width = cut_bounds ? cut_bounds->x1 - cut_bounds->x0 : 0.0;
     const double cut_height = cut_bounds ? cut_bounds->y1 - cut_bounds->y0 : 0.0;
     const double area_m2 = board_width * board_height / 1000000.0;
 
     constexpr double x_axis_x = .92, x_axis_y = .28;
-    constexpr double y_axis_x = -.92, y_axis_y = .28;
+    // In this view the sheet's (0, 0) corner is the left vertex. X advances
+    // down/right and Y advances up/right, matching the 2D sheet orientation.
+    constexpr double y_axis_x = .92, y_axis_y = -.28;
     constexpr double z_scale = .9;
     const auto raw_project = [&](double x, double y, double z) {
         const double dx = x - mat_x0;
@@ -312,6 +317,9 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
         include_raw(raw_project(corner.x(), corner.y(), z_top));
         include_raw(raw_project(corner.x(), corner.y(), z_bottom));
     }
+    // Offsets can intentionally place work zero just beyond the board edge.
+    // Keep the marker in frame without changing the board or cutting paths.
+    include_raw(raw_project(origin_x, origin_y, origin_z));
     for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
         const auto& operation = operations[op_index];
         if (!operation.path || !included(op_index)) continue;
@@ -476,6 +484,7 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     struct DirectionMark { QPointF tip; QPointF direction; QColor color; };
     std::vector<DirectionMark> direction_marks;
     std::optional<QPointF> first_cut_point;
+    std::optional<QPointF> first_cut_xy;
     std::optional<double> deepest_cut;
     for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
         const auto* path = operations[op_index].path;
@@ -490,7 +499,12 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
         for (const cam::Move& move : path->moves) {
             const QPointF point = project(move.x, move.y, move.z);
             if (move.cutting()) {
-                if (!first_cut_point) first_cut_point = point;
+                if (!first_cut_point) {
+                    // Keep the XY of the first actual feed move, while pinning
+                    // its label to the stock surface where it stays visible.
+                    first_cut_point = project(move.x, move.y, z_top);
+                    first_cut_xy = QPointF(move.x, move.y);
+                }
                 if (previous_cutting) {
                     cut_path.lineTo(point);
                     const double segment = QLineF(previous_point, point).length();
@@ -561,8 +575,8 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
                          cutter_body.right(), cutter_body.top() + 5);
     }
 
-    // Origin tripod follows the same projected X/Y/Z basis as the stock.
-    const QPointF origin = project(mat_x0, mat_y0, z_top);
+    // Origin tripod follows the configured work zero, including bottom Z.
+    const QPointF origin = project(origin_x, origin_y, origin_z);
     const auto arrow = [&](QPointF from, QPointF to, QColor color, const QString& label) {
         const QPointF delta = to - from;
         const double length = std::max(1.0, QLineF(from, to).length());
@@ -584,6 +598,106 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     painter.setBrush(QColor("#ffae55"));
     painter.setPen(QPen(Qt::white, .8));
     painter.drawEllipse(origin, 3.3, 3.3);
+
+    // Keep both production references readable on the OS screen and PDF. The
+    // boxes stay inside the drawing area and avoid each other when P0 and the
+    // first cut happen at the same XY.
+    QPainterPath stock_silhouette;
+    stock_silhouette.setFillRule(Qt::WindingFill);
+    stock_silhouette.addPolygon(top_polygon);
+    stock_silhouette.addPolygon(front_face);
+    stock_silhouette.addPolygon(right_face);
+    std::vector<QRectF> placed_callouts;
+    const auto draw_callout = [&](const QPointF& point, const QString& title,
+                                  const QString& detail, const QColor& color) {
+        const double box_w = std::min(214.0, drawing_area.width() - 8.0);
+        constexpr double box_h = 46.0;
+        const QRectF limits = drawing_area.adjusted(4.0, 4.0, -4.0, -4.0);
+        // Reserve two adjacent cards in the dark strip above the sheet. This
+        // is predictable for the operator and keeps labels off the cut lines.
+        QRectF box(limits.left() + placed_callouts.size() * (box_w + 10.0),
+                   limits.top(), box_w, box_h);
+        bool preferred_clear = box.right() <= limits.right() &&
+                               !stock_silhouette.intersects(box.adjusted(-3, -3, 3, 3)) &&
+                               !box.contains(point);
+        for (const QRectF& placed : placed_callouts)
+            preferred_clear = preferred_clear && !box.intersects(placed);
+        if (!preferred_clear) {
+            // For unusually shaped or offset sheets, use an unobstructed edge.
+            const std::array<QPointF, 8> positions = {
+                QPointF(limits.left(), limits.top()),
+                QPointF(limits.right() - box_w, limits.top()),
+                QPointF(limits.left(), limits.bottom() - box_h),
+                QPointF(limits.right() - box_w, limits.bottom() - box_h),
+                QPointF(limits.center().x() - box_w / 2.0, limits.top()),
+                QPointF(limits.center().x() - box_w / 2.0, limits.bottom() - box_h),
+                QPointF(limits.left(), limits.center().y() - box_h / 2.0),
+                QPointF(limits.right() - box_w, limits.center().y() - box_h / 2.0)};
+            double best = std::numeric_limits<double>::max();
+            for (const QPointF& position : positions) {
+                const QRectF candidate(position, QSizeF(box_w, box_h));
+                double score = QLineF(point, candidate.center()).length() * .1;
+                if (candidate.contains(point)) score += 10000.0;
+                if (stock_silhouette.intersects(candidate)) {
+                    score += 10000.0;
+                    for (int y = 0; y < 5; ++y)
+                        for (int x = 0; x < 14; ++x) {
+                            const QPointF sample(candidate.left() + (x + .5) * box_w / 14.0,
+                                                 candidate.top() + (y + .5) * box_h / 5.0);
+                            if (stock_silhouette.contains(sample)) score += 180.0;
+                        }
+                }
+                for (const QRectF& placed : placed_callouts)
+                    score += candidate.intersected(placed).width() *
+                             candidate.intersected(placed).height() * 30.0;
+                if (score < best) { best = score; box = candidate; }
+            }
+        }
+        placed_callouts.push_back(box);
+        const QPointF edge(std::clamp(point.x(), box.left(), box.right()),
+                           std::clamp(point.y(), box.top(), box.bottom()));
+        painter.setPen(QPen(color, 1.6, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(point, edge);
+        painter.setBrush(QColor(7, 18, 30, 238));
+        painter.setPen(QPen(color, 1.25));
+        painter.drawRoundedRect(box, 5, 5);
+        painter.setPen(color);
+        painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
+        painter.drawText(box.adjusted(9, 5, -7, -23), Qt::AlignLeft | Qt::AlignVCenter,
+                         title);
+        painter.setPen(QColor("#f4f8fc"));
+        painter.setFont(QFont("Segoe UI", 8.8, QFont::DemiBold));
+        painter.drawText(box.adjusted(9, 23, -7, -4), Qt::AlignLeft | Qt::AlignVCenter,
+                         detail);
+    };
+
+    const bool zero_is_cut_start = first_cut_point &&
+        QLineF(origin, *first_cut_point).length() < 14.0;
+    painter.setBrush(QColor(7, 18, 30, 235));
+    painter.setPen(QPen(QColor("#ffbd69"), 2.0));
+    painter.drawEllipse(origin, zero_is_cut_start ? 12.0 : 7.0,
+                        zero_is_cut_start ? 12.0 : 7.0);
+    painter.setBrush(QColor("#ffbd69"));
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(origin, 2.5, 2.5);
+    draw_callout(origin, "PONTO 0 · ORIGEM",
+                 QString("X %1 · Y %2 mm · Z %3")
+                     .arg(origin_x, 0, 'f', 1).arg(origin_y, 0, 'f', 1)
+                     .arg(has_material && material->zero_z == "bottom" ? "base" : "topo"),
+                 QColor("#ffbd69"));
+    if (first_cut_point && first_cut_xy) {
+        painter.setBrush(QColor(8, 30, 24, 235));
+        painter.setPen(QPen(QColor("#47ec9c"), 2.0));
+        painter.drawEllipse(*first_cut_point, zero_is_cut_start ? 6.0 : 8.0,
+                            zero_is_cut_start ? 6.0 : 8.0);
+        painter.setBrush(QColor("#47ec9c"));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(*first_cut_point, 3.0, 3.0);
+        draw_callout(*first_cut_point, "INÍCIO DO CORTE",
+                     QString("Na chapa: X %1 · Y %2 mm")
+                         .arg(first_cut_xy->x(), 0, 'f', 1)
+                         .arg(first_cut_xy->y(), 0, 'f', 1), QColor("#47ec9c"));
+    }
 
     // The cotas run as a strip under the stock: spreading them across the width
     // leaves room for type the operator can read from the machine.
@@ -2801,19 +2915,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     top_bar_layout->addWidget(selection);
     top_bar_layout->addStretch();
 
-    auto* collapse_all_btn = new QPushButton("Minimizar tudo", top_bar);
-    collapse_all_btn->setToolTip("Recolher todas as seções para visualização compacta");
-    auto* expand_all_btn = new QPushButton("Expandir tudo", top_bar);
-    expand_all_btn->setToolTip("Expandir todas as seções");
-    top_bar_layout->addWidget(collapse_all_btn);
-    top_bar_layout->addWidget(expand_all_btn);
     root->addWidget(top_bar);
-
-    auto* nav_bar = new QWidget(&dialog);
-    auto* nav_layout = new ui::FlowLayout(4);
-    nav_layout->setContentsMargins(16, 0, 16, 8);
-    nav_bar->setLayout(nav_layout);
-    root->addWidget(nav_bar);
 
     auto* scroll = new QScrollArea(&dialog);
     scroll->setWidgetResizable(true);
@@ -2887,21 +2989,8 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     guide_model->setValue("stepover", job.tool.stepover);
     guide_model->setValue("toolStepover", job.tool.stepover);
     guide_model->setValue("toolType", static_cast<int>(job.tool.tool_type));
-    QPainterPath selected_contour;
-    selected_contour.setFillRule(Qt::OddEvenFill);
-    bool all_closed = true;
-    for (const auto& id : job.entity_ids) {
-        const auto entity = document_.find_entity(id);
-        if (!entity) continue;
-        const auto points = entity->to_points(160);
-        if (points.size() < 2) continue;
-        selected_contour.moveTo(points.front().x, points.front().y);
-        for (size_t i = 1; i < points.size(); ++i)
-            selected_contour.lineTo(points[i].x, points[i].y);
-        if (entity->closed()) selected_contour.closeSubpath();
-        else all_closed = false;
-    }
-    if (!selected_contour.isEmpty()) guide_model->setContour(selected_contour, all_closed);
+    // Profile illustrations stay as didactic examples (inside/outside, lead-in,
+    // ramps, etc.). Only the main 3D viewport and OS preview use live geometry.
 
     const QMap<QString, QString> guide_keys = {
         {"Cota inicial (D)", "start"}, {"Cota inicial", "start"}, {"Profundidade (C)", "depth"}, {"Profundidade de corte", "depth"},
@@ -2925,7 +3014,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                     break;
                 }
             }
-            if (section && section->title() == "Rampas") key = "rampAngle";
+            if (section && section->property("sectionTitle").toString() == "Rampas") key = "rampAngle";
         }
         if (key.isEmpty()) return;
         field->setObjectName("CamParameter_" + key);
@@ -3018,40 +3107,37 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         return nullptr;
     };
 
-    struct SectionGroup {
-        QGroupBox* box = nullptr;
-        QWidget* content = nullptr;
-        QToolButton* toggle_btn = nullptr;
-        QString title;
-    };
-    std::vector<SectionGroup> section_groups;
-
-    auto add_group = [&](const QString& title, GuideTopics guides = {}) {
+    auto add_group = [&](const QString& title, GuideTopics guides = {}, bool collapsible = true) {
         auto* box = new QGroupBox(title, body);
         box->setObjectName("CamConfigGroup");
+        box->setProperty("sectionTitle", title);
         auto* box_layout = new QVBoxLayout(box);
         box_layout->setContentsMargins(10, 4, 10, 8);
         box_layout->setSpacing(4);
 
-        auto* header_bar = new QWidget(box);
-        auto* header_layout = new QHBoxLayout(header_bar);
-        header_layout->setContentsMargins(0, 0, 0, 0);
-        header_layout->setSpacing(6);
-        header_layout->addStretch();
-
-        auto* toggle_btn = new QToolButton(header_bar);
-        toggle_btn->setObjectName("GroupCollapseBtn");
-        toggle_btn->setText("Minimizar");
-        toggle_btn->setCursor(Qt::PointingHandCursor);
-        toggle_btn->setToolTip("Recolher ou expandir esta seção");
-        header_layout->addWidget(toggle_btn);
-        box_layout->addWidget(header_bar);
+        QToolButton* toggle_btn = nullptr;
+        if (collapsible) {
+            auto* header_bar = new QWidget(box);
+            auto* header_layout = new QHBoxLayout(header_bar);
+            header_layout->setContentsMargins(0, 0, 0, 0);
+            header_layout->setSpacing(6);
+            header_layout->addStretch();
+            toggle_btn = new QToolButton(header_bar);
+            toggle_btn->setObjectName("GroupCollapseBtn");
+            toggle_btn->setText("Minimizar");
+            toggle_btn->setCursor(Qt::PointingHandCursor);
+            toggle_btn->setToolTip("Recolher ou expandir esta seção");
+            header_layout->addWidget(toggle_btn);
+            box_layout->addWidget(header_bar);
+        }
 
         auto* content = new QWidget(box);
         auto* section = new QHBoxLayout(content);
         section->setContentsMargins(0, 0, 0, 0);
         section->setSpacing(14);
-        new ui::AdaptiveSection(box, section, 600);
+        // The scroll viewport is the actual available width. A section can
+        // otherwise keep its wide minimum size and never switch to one column.
+        new ui::AdaptiveSection(scroll->viewport(), section, 600);
 
         auto* fields = new QWidget(content);
         auto* form = new QFormLayout(fields);
@@ -3073,48 +3159,27 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             choice->setMinimumContentsLength(10);
             for (const auto& [label, key] : guides) choice->addItem(label, key);
             auto* image = new InteractiveGuideWidget(guides.front().second, card, guide_model);
+            image->setPlaying(true);
             image->setMinimumHeight(160);
             image->setMaximumHeight(260);
             interactive_guides.push_back(image);
-            guide_layout->addWidget(choice);
+            if (guides.size() > 1) guide_layout->addWidget(choice);
+            else choice->hide();
             guide_layout->addWidget(image, 1);
-            guide_layout->addWidget(ui::guidePlayback(image, card));
-            auto* enlarge = new QPushButton("Ampliar desenho e animação", card);
-            enlarge->setObjectName("EnlargeGuide");
-            guide_layout->addWidget(enlarge);
             connect(choice, &QComboBox::currentIndexChanged, image,
                 [choice, image] { image->set_kind(choice->currentData().toString()); });
-            connect(enlarge, &QPushButton::clicked, box, [image, guide_model] {
-                ui::ResponsiveDialog preview(image);
-                preview.setObjectName("EnlargedGuide");
-                preview.setWindowTitle(ui::MachiningGuide::title(image->kind()));
-                auto* layout = new QVBoxLayout(&preview);
-                auto* enlarged = new InteractiveGuideWidget(image->kind(), &preview, guide_model);
-                enlarged->setProgress(image->progress());
-                layout->addWidget(enlarged, 1);
-                layout->addWidget(ui::guidePlayback(enlarged, &preview));
-                auto* hint = new QLabel("Esta vista acompanha os parâmetros do percurso. Feche para continuar editando.", &preview);
-                hint->setWordWrap(true); layout->addWidget(hint);
-                auto* close = new QDialogButtonBox(QDialogButtonBox::Close, &preview);
-                connect(close, &QDialogButtonBox::rejected, &preview, &QDialog::reject);
-                layout->addWidget(close);
-                preview.resize(900, 660);
-                preview.exec();
-            });
             section->addWidget(card, 1);
         }
 
         box_layout->addWidget(content);
         body_layout->addWidget(box);
-
-        SectionGroup sg{box, content, toggle_btn, title};
-        section_groups.push_back(sg);
-
-        QObject::connect(toggle_btn, &QToolButton::clicked, box, [content, toggle_btn] {
-            const bool will_show = !content->isVisible();
-            content->setVisible(will_show);
-            toggle_btn->setText(will_show ? "Minimizar" : "Expandir");
-        });
+        if (toggle_btn) {
+            QObject::connect(toggle_btn, &QToolButton::clicked, box, [content, toggle_btn] {
+                const bool expanded = content->isHidden();
+                content->setVisible(expanded);
+                toggle_btn->setText(expanded ? "Minimizar" : "Expandir");
+            });
+        }
 
         return form;
     };
@@ -3418,7 +3483,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             });
 
             form = add_group("Último passe", {{"Profundidades", "02_profundidades"}});
-            auto* separate_last = add_bool(form, "Fazer último passe em separado",
+            auto* separate_last = add_bool(form, "Passe final separado",
                                            settings.separate_last_pass,
                                            [&settings](bool v) { settings.separate_last_pass = v; });
             auto* last_allowance = add_double(form, "Material deixado",
@@ -3433,7 +3498,57 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                 last_allowance->setEnabled(enabled);
                 reverse_last->setEnabled(enabled);
             });
-            form = add_group("Pontes", {{"Pontes de fixação", "03_pontes"}});
+            auto* profile_tabs = new QTabBar(body);
+            profile_tabs->setObjectName("ProfileOptionTabs");
+            profile_tabs->setExpanding(true);
+            profile_tabs->setDrawBase(false);
+            profile_tabs->setStyleSheet(
+                "QTabBar::tab { background:#182536; color:#a9bfd6; border:1px solid #304861; "
+                "border-bottom:0; border-top-left-radius:6px; border-top-right-radius:6px; "
+                "padding:7px 10px; min-height:20px; }"
+                "QTabBar::tab:selected { background:#1d4567; color:#f3f8ff; border-color:#168be0; }"
+                "QTabBar::tab:hover:!selected { background:#24384d; color:#ffffff; }");
+            body_layout->addWidget(profile_tabs);
+            std::array<QGroupBox*, 4> profile_pages{};
+            int profile_page_count = 0;
+            const auto add_profile_tab = [&](const QString& tab, const QString& title,
+                                             const QString& guide_title, const QString& guide_kind) {
+                auto* page_form = add_group(title, {{guide_title, guide_kind}}, false);
+                QGroupBox* page = nullptr;
+                for (QWidget* parent = page_form->parentWidget(); parent; parent = parent->parentWidget()) {
+                    page = qobject_cast<QGroupBox*>(parent);
+                    if (page) break;
+                }
+                if (page) {
+                    page->setTitle({});
+                    page->setStyleSheet("QGroupBox#CamConfigGroup { margin-top:0; padding-top:0; "
+                                        "border-top-left-radius:0; border-top-right-radius:0; }");
+                    profile_pages[profile_page_count] = page;
+                    if (profile_page_count > 0) page->hide();
+                }
+                ++profile_page_count;
+                profile_tabs->addTab(tab);
+                return page_form;
+            };
+            form = add_profile_tab("Pontes", "Pontes", "Pontes de fixação", "03_pontes");
+            // Keep the manual bridge controls at the top of the tab. The
+            // parameter list can grow beyond the visible part of the dialog.
+            auto* bridge_actions = new QWidget(body);
+            bridge_actions->setObjectName("ProfileBridgeActions");
+            auto* bridge_actions_layout = new QGridLayout(bridge_actions);
+            bridge_actions_layout->setContentsMargins(0, 0, 0, 0);
+            bridge_actions_layout->setSpacing(6);
+            auto* mark_bridges = new QPushButton("Marcar no desenho", bridge_actions);
+            mark_bridges->setProperty("primary", true);
+            mark_bridges->setToolTip("Adicionar pontes diretamente no desenho");
+            auto* undo_manual_bridge = new QPushButton("Desfazer última", bridge_actions);
+            auto* clear_manual_bridges = new QPushButton("Limpar manuais", bridge_actions);
+            auto* restore_auto_bridges = new QPushButton("Redistribuir", bridge_actions);
+            bridge_actions_layout->addWidget(mark_bridges, 0, 0);
+            bridge_actions_layout->addWidget(undo_manual_bridge, 0, 1);
+            bridge_actions_layout->addWidget(clear_manual_bridges, 1, 0);
+            bridge_actions_layout->addWidget(restore_auto_bridges, 1, 1);
+            form->addRow(bridge_actions);
             auto* bridge_enabled = add_bool(form, "Pontes de fixação", settings.tabs,
                                             [&settings](bool v) { settings.tabs = v; });
             auto* bridge_length = add_double(form, "Comprimento da ponte", settings.tab_length, 0, 1000, " mm",
@@ -3473,18 +3588,6 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             bridge_help->setWordWrap(true);
             bridge_help->setObjectName("MutedText");
             form->addRow(bridge_help);
-            auto* bridge_actions = new QWidget(body);
-            auto* bridge_actions_layout = new QGridLayout(bridge_actions);
-            bridge_actions_layout->setContentsMargins(0, 0, 0, 0);
-            auto* mark_bridges = new QPushButton("Marcar no desenho", bridge_actions);
-            auto* undo_manual_bridge = new QPushButton("Desfazer última", bridge_actions);
-            auto* clear_manual_bridges = new QPushButton("Limpar manuais", bridge_actions);
-            auto* restore_auto_bridges = new QPushButton("Redistribuir", bridge_actions);
-            bridge_actions_layout->addWidget(mark_bridges, 0, 0);
-            bridge_actions_layout->addWidget(undo_manual_bridge, 0, 1);
-            bridge_actions_layout->addWidget(clear_manual_bridges, 1, 0);
-            bridge_actions_layout->addWidget(restore_auto_bridges, 1, 1);
-            form->addRow(bridge_actions);
             // These flags outlive std::visit; callbacks run during dialog.exec().
             apply.push_back([&settings, &clear_manuals_on_accept, &undo_last_manual_on_accept] {
                 if (clear_manuals_on_accept) {
@@ -3532,7 +3635,9 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
                 first_bridge_at_start->setEnabled(enabled && !spacing_mode);
                 bridges_3d->setEnabled(enabled);
                 manual_only->setEnabled(enabled);
-                mark_bridges->setEnabled(enabled);
+                // Clicking this action also enables bridges, so it must be
+                // available when the checkbox is initially off.
+                mark_bridges->setEnabled(true);
                 undo_manual_bridge->setEnabled(!clear_manuals_on_accept &&
                                                !undo_last_manual_on_accept &&
                                                !settings.manual_tabs.empty());
@@ -3574,7 +3679,7 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
             connect(undo_manual_bridge, &QPushButton::clicked, &dialog, update_bridge_controls);
             update_bridge_controls();
 
-            form = add_group("Entradas e saídas", {{"Entradas e saídas", "04_entradas_saidas"}});
+            form = add_profile_tab("Entradas", "Entradas e saídas", "Entradas e saídas", "04_entradas_saidas");
             auto* lead_type = add_enum(form, "Tipo de entrada", static_cast<int>(settings.lead),
                      {{"Nenhuma", static_cast<int>(cam::LeadType::None)},
                       {"Linear", static_cast<int>(cam::LeadType::Linear)},
@@ -3609,7 +3714,7 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
                     [update_lead_fields](int) { update_lead_fields(); });
             update_lead_fields();
 
-            form = add_group("Rampas", {{"Rampas", "05_rampas"}});
+            form = add_profile_tab("Rampas", "Rampas", "Rampas", "05_rampas");
             auto* ramp_type = add_enum(form, "Tipo de rampa", static_cast<int>(settings.ramp), ramps,
                      [&settings](int v) { settings.ramp = static_cast<cam::RampType>(v); });
             connect(ramp_type, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
@@ -3627,11 +3732,15 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
             register_advanced_field(form, ramp_angle);
             register_advanced_field(form, ramp_on_lead);
 
-            form = add_group("Ordem", {{"Ordem de usinagem", "01_usinar_vetores"}});
+            form = add_profile_tab("Ordem", "Ordem", "Ordem de usinagem", "01_usinar_vetores");
             add_enum(form, "Ordenar por", static_cast<int>(settings.order), orders,
                      [&settings](int v) { settings.order = static_cast<cam::MachineOrder>(v); });
             add_bool(form, "Separar interiores", settings.separate_interior,
                      [&settings](bool v) { settings.separate_interior = v; });
+            connect(profile_tabs, &QTabBar::currentChanged, &dialog, [profile_pages](int index) {
+                for (size_t i = 0; i < profile_pages.size(); ++i)
+                    if (profile_pages[i]) profile_pages[i]->setVisible(static_cast<int>(i) == index);
+            });
         } else if constexpr (std::is_same_v<S, cam::PocketSettings>) {
             auto* depth_form = add_group("Profundidades de corte",
                                          {{"Profundidades", "02_profundidades"}});
@@ -3846,60 +3955,6 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
         }
     }, job.settings);
     body_layout->addStretch();
-
-    connect(collapse_all_btn, &QPushButton::clicked, &dialog, [&section_groups] {
-        for (const auto& sg : section_groups) {
-            if (sg.content) sg.content->setVisible(false);
-            if (sg.toggle_btn) sg.toggle_btn->setText("Expandir");
-        }
-    });
-    connect(expand_all_btn, &QPushButton::clicked, &dialog, [&section_groups] {
-        for (const auto& sg : section_groups) {
-            if (sg.content) sg.content->setVisible(true);
-            if (sg.toggle_btn) sg.toggle_btn->setText("Minimizar");
-        }
-    });
-
-    for (int i = 0; i < body_layout->count(); ++i) {
-        auto* box = qobject_cast<QGroupBox*>(body_layout->itemAt(i)->widget());
-        if (!box || !box->isVisible()) continue;
-        auto it = std::find_if(section_groups.begin(), section_groups.end(),
-                               [box](const SectionGroup& sg) { return sg.box == box; });
-        if (it != section_groups.end()) {
-            const auto sg = *it;
-            auto* pill = new QToolButton(nav_bar);
-            pill->setObjectName("SectionNavPill");
-            pill->setText(sg.title);
-            pill->setCursor(Qt::PointingHandCursor);
-            pill->setToolTip(QString("Ir para %1").arg(sg.title));
-            QObject::connect(pill, &QToolButton::clicked, &dialog, [scroll, sg] {
-                if (sg.content && !sg.content->isVisible()) {
-                    sg.content->setVisible(true);
-                    if (sg.toggle_btn) sg.toggle_btn->setText("Minimizar");
-                }
-                if (sg.box) {
-                    scroll->ensureWidgetVisible(sg.box, 0, 15);
-                }
-            });
-            nav_layout->addWidget(pill);
-        } else if (box->title() == "Passagens") {
-            auto* pill = new QToolButton(nav_bar);
-            pill->setObjectName("SectionNavPill");
-            pill->setText(box->title());
-            pill->setCursor(Qt::PointingHandCursor);
-            pill->setToolTip(QString("Ir para %1").arg(box->title()));
-            QObject::connect(pill, &QToolButton::clicked, &dialog, [scroll, box] {
-                scroll->ensureWidgetVisible(box, 0, 15);
-            });
-            nav_layout->addWidget(pill);
-        }
-    }
-
-    if (nav_layout->count() <= 1) {
-        nav_bar->setVisible(false);
-        collapse_all_btn->setVisible(false);
-        expand_all_btn->setVisible(false);
-    }
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
     auto* calculate_button = buttons->button(QDialogButtonBox::Save);
@@ -6444,7 +6499,9 @@ void MainWindow::create_actions() {
     selection_fit_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Home));
     connect(selection_fit_action, &QAction::triggered, canvas_widget_->canvas, &vp::Canvas2D::zoom_selection);
     QAction* zoom_in_action = view_menu->addAction("Zoom +");
-    zoom_in_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Plus));
+    // On several keyboard layouts the '+' key is reported as '=' with Shift.
+    zoom_in_action->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_Plus),
+                                  QKeySequence(Qt::CTRL | Qt::Key_Equal)});
     connect(zoom_in_action, &QAction::triggered, canvas_widget_->canvas, [this] {
         canvas_widget_->canvas->zoom_by(1.25);
     });

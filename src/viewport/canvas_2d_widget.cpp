@@ -40,6 +40,8 @@ Canvas2DWidget::Canvas2DWidget(double mat_w, double mat_h, QWidget* parent) : QW
     canvas->setup_material(mat_w, mat_h);
 
     fit_button = build_fit_button();
+    zoom_in_button = build_zoom_button("zoom_in", "Aproximar (Ctrl++)", 1.25);
+    zoom_out_button = build_zoom_button("zoom_out", "Afastar (Ctrl+-)", 1.0 / 1.25);
     canvas->installEventFilter(this);
     position_button();
 }
@@ -63,10 +65,33 @@ QToolButton* Canvas2DWidget::build_fit_button() {
     return botao;
 }
 
+QToolButton* Canvas2DWidget::build_zoom_button(const char* icon_name, const QString& tooltip, double factor) {
+    auto* button = new QToolButton(canvas);
+    button->setObjectName(QString::fromLatin1(icon_name) + "_canvas_button");
+    button->setIcon(ui::get_icon(icon_name));
+    button->setIconSize(QSize(18, 18));
+    button->setFixedSize(32, 32);
+    button->setCursor(Qt::ArrowCursor);
+    button->setToolTip(tooltip);
+    button->setAutoRaise(true);
+    button->setStyleSheet(QString("QToolButton { background-color: %1; border: 1px solid rgba(0,0,0,70); "
+                                  "border-radius: 6px; }"
+                                  "QToolButton:hover { border-color: rgba(0,0,0,140); }")
+                              .arg(ui::color("panel")));
+    connect(button, &QToolButton::clicked, canvas, [this, factor] { canvas->zoom_by(factor); });
+    return button;
+}
+
 void Canvas2DWidget::position_button() {
     const int margem = 12;
-    fit_button->move(std::max(margem, canvas->width() - fit_button->width() - margem),
-                     std::max(margem, canvas->height() - fit_button->height() - margem));
+    const int espacamento = 4;
+    const int x_fit = std::max(margem, canvas->width() - fit_button->width() - margem);
+    const int y = std::max(margem, canvas->height() - fit_button->height() - margem);
+    fit_button->move(x_fit, y);
+    zoom_in_button->move(x_fit - espacamento - zoom_in_button->width(), y);
+    zoom_out_button->move(x_fit - 2 * espacamento - zoom_in_button->width() - zoom_out_button->width(), y);
+    zoom_out_button->raise();
+    zoom_in_button->raise();
     fit_button->raise();
 }
 

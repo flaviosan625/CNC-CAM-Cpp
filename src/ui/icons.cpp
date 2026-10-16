@@ -130,9 +130,10 @@ QIcon icon_for(const QString& name) {
         });
     }
     if (name == "zoom_in" || name == "zoom_out") {
-        return make_icon([name](QPainter& p, int s) {
-            const int cx = s / 2, cy = s / 2, r = s / 2 - kMargin - 2;
-            p.drawEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r));
+        return make_icon([name](QPainter& p, int) {
+            constexpr int cx = 14, cy = 14, r = 7;
+            p.drawEllipse(QPointF(cx, cy), r, r);
+            p.drawLine(cx + 5, cy + 5, 27, 27);
             p.drawLine(cx - 3, cy, cx + 3, cy);
             if (name == "zoom_in") p.drawLine(cx, cy - 3, cx, cy + 3);
         });

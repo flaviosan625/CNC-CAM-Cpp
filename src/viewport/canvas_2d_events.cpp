@@ -1,13 +1,19 @@
 // Porte de src/viewport/canvas_2d.py: eventos de mouse, teclado e arrastar-e-soltar.
+#include <QAbstractSpinBox>
+#include <QApplication>
+#include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPlainTextEdit>
 #include <QScrollBar>
+#include <QTextEdit>
 #include <QUrl>
 #include <QWheelEvent>
 
@@ -16,6 +22,29 @@
 #include "viewport/canvas_2d.hpp"
 
 namespace cnc::vp {
+
+namespace {
+
+int zoom_direction(const QKeyEvent* event) {
+    const auto modifiers = event->modifiers();
+    if (!(modifiers & Qt::ControlModifier) || (modifiers & (Qt::AltModifier | Qt::MetaModifier))) return 0;
+    if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal) return 1;
+    if (event->key() == Qt::Key_Minus) return -1;
+    return 0;
+}
+
+bool text_input_has_focus() {
+    QWidget* focus = QApplication::focusWidget();
+    for (QWidget* widget = focus; widget; widget = widget->parentWidget()) {
+        if (qobject_cast<QLineEdit*>(widget) || qobject_cast<QTextEdit*>(widget) ||
+            qobject_cast<QPlainTextEdit*>(widget) || qobject_cast<QAbstractSpinBox*>(widget))
+            return true;
+        if (auto* combo = qobject_cast<QComboBox*>(widget); combo && combo->isEditable()) return true;
+    }
+    return false;
+}
+
+}  // namespace
 
 // -- arrastar e soltar arquivos --
 
@@ -248,6 +277,15 @@ void Canvas2D::contextMenuEvent(QContextMenuEvent* event) {
 // -- teclado --
 
 bool Canvas2D::event(QEvent* ev) {
+    // Enquanto o desenho esta ativo, reservar Ctrl+mais/menos antes dos atalhos do menu.
+    // Campos de entrada conservam as proprias teclas quando recebem o foco.
+    if (ev->type() == QEvent::ShortcutOverride) {
+        auto* key = static_cast<QKeyEvent*>(ev);
+        if (zoom_direction(key) != 0 && !text_input_has_focus()) {
+            ev->accept();
+            return true;
+        }
+    }
     if (ev->type() == QEvent::KeyPress) {
         auto* key = static_cast<QKeyEvent*>(ev);
         if (key->key() == Qt::Key_Tab && key->modifiers() == Qt::NoModifier && tool_ && tool_->name() == "polyline") {
@@ -259,6 +297,12 @@ bool Canvas2D::event(QEvent* ev) {
 }
 
 void Canvas2D::keyPressEvent(QKeyEvent* event) {
+    const int zoom = zoom_direction(event);
+    if (zoom != 0 && !text_input_has_focus()) {
+        zoom_by(zoom > 0 ? 1.25 : 1.0 / 1.25);
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Escape) {
         // Esc tem um significado unico no aplicativo: abandonar a operacao inteira. Nao deixamos
         // cada ferramenta interpretar a tecla como apenas "limpar o passo atual" e continuar ativa.

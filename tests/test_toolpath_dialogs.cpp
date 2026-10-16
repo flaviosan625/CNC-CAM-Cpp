@@ -9,8 +9,10 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QScreen>
+#include <QTabBar>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -77,6 +79,23 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
                     }
                 }
             }
+            if (kind == "Percurso de perfil") {
+                auto* tabs = dialog->findChild<QTabBar*>("ProfileOptionTabs");
+                REQUIRE(tabs != nullptr);
+                CHECK(tabs->count() == 4);
+                CHECK(tabs->tabText(0) == "Pontes");
+                CHECK(tabs->tabText(1) == "Entradas");
+                CHECK(tabs->tabText(2) == "Rampas");
+                CHECK(tabs->tabText(3) == "Ordem");
+                auto* actions = dialog->findChild<QWidget*>("ProfileBridgeActions");
+                REQUIRE(actions != nullptr);
+                CHECK(actions->isVisible());
+                const auto bridge_buttons = actions->findChildren<QPushButton*>();
+                CHECK(bridge_buttons.size() == 4);
+                for (auto* button : bridge_buttons) CHECK(button->isVisible());
+                for (auto* button : bridge_buttons)
+                    if (button->text() == "Marcar no desenho") CHECK(button->isEnabled());
+            }
             for (QComboBox* topic : dialog->findChildren<QComboBox*>("CamGuideTopic")) {
                 if (topic->count() == 0) continue;
                 for (auto* image : dialog->findChildren<cnc::ui::MachiningGuide*>("CamGuideImage"))
@@ -94,7 +113,7 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
 
     const QStringList profile_sections = {
         "Profundidades de corte", "Ferramenta", "Passagens", "Usinar vetores...",
-        "Último passe", "Pontes", "Entradas e saídas", "Rampas", "Ordem",
+        "Último passe",
     };
     int previous = -1;
     for (const QString& expected : profile_sections) {

@@ -321,8 +321,12 @@ protected:
 
 private:
     QToolButton* build_fit_button();
+    QToolButton* build_zoom_button(const char* icon_name, const QString& tooltip, double factor);
     void position_button();
     void on_mouse(double wx, double wy);
+
+    QToolButton* zoom_in_button = nullptr;
+    QToolButton* zoom_out_button = nullptr;
 };
 
 }  // namespace cnc::vp

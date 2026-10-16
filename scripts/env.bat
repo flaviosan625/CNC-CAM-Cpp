@@ -7,7 +7,7 @@ rem ------------------------------------------------------------------
 if "%CNC_VS%"==""    set "CNC_VS=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools"
 if "%CNC_QT%"==""    set "CNC_QT=%USERPROFILE%\toolchains\Qt\6.12.0\msvc2022_64"
 if "%CNC_DEPS%"==""  set "CNC_DEPS=%USERPROFILE%\toolchains\deps"
-if "%CNC_BUILD%"=="" set "CNC_BUILD=%USERPROFILE%\toolchains\build"
+if "%CNC_BUILD%"=="" set "CNC_BUILD=%USERPROFILE%\toolchains\build\cnccam-os-final"
 if "%CNC_VTK%"==""  set "CNC_VTK=%USERPROFILE%\toolchains\vtk-9.7.1\vtk-wheel-sdk-9.7.1-cp314-cp314-win_amd64\vtk-9.7.1.data\headers\cmake"
 
 rem Compila fora da pasta do projeto: sem espacos nem "+" no caminho do build.

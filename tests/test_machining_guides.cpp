@@ -9,6 +9,7 @@
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QFormLayout>
+#include <QGroupBox>
 #include <QImage>
 #include <QLabel>
 #include <QMenuBar>
@@ -153,6 +154,44 @@ TEST_CASE("guides: operation fields and rendered previews use the same draft") {
             }
         }
         REQUIRE(dialog != nullptr);
+        auto* profile_tabs = dialog->findChild<QTabBar*>("ProfileOptionTabs");
+        REQUIRE(profile_tabs != nullptr);
+        CHECK(profile_tabs->count() == 4);
+        CHECK(profile_tabs->tabText(0) == "Pontes");
+        CHECK(profile_tabs->tabText(1) == "Entradas");
+        CHECK(profile_tabs->tabText(2) == "Rampas");
+        CHECK(profile_tabs->tabText(3) == "Ordem");
+        const auto group_for = [dialog](const QString& title) -> QGroupBox* {
+            for (auto* group : dialog->findChildren<QGroupBox*>("CamConfigGroup"))
+                if (group->property("sectionTitle").toString() == title) return group;
+            return nullptr;
+        };
+        auto* depth_group = group_for("Profundidades de corte");
+        auto* bridges_group = group_for("Pontes");
+        auto* ramps_group = group_for("Rampas");
+        REQUIRE(depth_group != nullptr);
+        REQUIRE(bridges_group != nullptr);
+        REQUIRE(ramps_group != nullptr);
+        CHECK(depth_group->isVisible());
+        CHECK(bridges_group->isVisible());
+        CHECK_FALSE(ramps_group->isVisible());
+        profile_tabs->setCurrentIndex(2);
+        QApplication::processEvents();
+        CHECK(depth_group->isVisible());
+        CHECK_FALSE(bridges_group->isVisible());
+        CHECK(ramps_group->isVisible());
+        auto* ramp_guide = ramps_group->findChild<cnc::ui::MachiningGuide*>();
+        auto* ramp_type = dialog->findChild<QComboBox*>("CamParameter_ramp");
+        REQUIRE(ramp_guide != nullptr);
+        REQUIRE(ramp_type != nullptr);
+        CHECK(ramp_guide->playing());
+        ramp_type->setCurrentIndex(1);
+        const auto smooth_route = ramp_guide->trajectory();
+        ramp_type->setCurrentIndex(2);
+        CHECK(ramp_guide->mode() == 2);
+        CHECK(ramp_guide->trajectory() != smooth_route);
+        CHECK(dialog->findChildren<QPushButton*>("GuidePlay").isEmpty());
+        CHECK(dialog->findChildren<QPushButton*>("EnlargeGuide").isEmpty());
         auto* side = dialog->findChild<QComboBox*>("CamParameter_side");
         auto* depth = dialog->findChild<QDoubleSpinBox*>("CamParameter_depth");
         REQUIRE(side != nullptr); REQUIRE(depth != nullptr);
@@ -170,10 +209,25 @@ TEST_CASE("guides: operation fields and rendered previews use the same draft") {
         CHECK(lead_angle->value() == 38); CHECK(model->number("rampAngle") == 7);
         dialog->resize(440, 540); QApplication::processEvents();
         CHECK(dialog->width() <= 480);
+        std::string width_details;
+        for (auto* group : dialog->findChildren<QGroupBox*>("CamConfigGroup")) {
+            if (!group->isVisible()) continue;
+            width_details += group->property("sectionTitle").toString().toStdString() + "=" +
+                std::to_string(group->minimumSizeHint().width()) + " ";
+        }
+        width_details += "tabs=" + std::to_string(profile_tabs->minimumSizeHint().width());
+        INFO(width_details);
         for (auto* scroll : dialog->findChildren<QScrollArea*>())
             if (scroll->parentWidget() == dialog) CHECK(scroll->widget()->width() <= scroll->viewport()->width());
         const QString output = QString::fromUtf8(qgetenv("CNC_GUIDE_CAPTURE_DIR"));
-        if (!output.isEmpty()) dialog->grab().save(output + "/ficha-responsiva.png");
+        if (!output.isEmpty()) {
+            dialog->grab().save(output + "/ficha-responsiva.png");
+            for (auto* scroll : dialog->findChildren<QScrollArea*>())
+                if (scroll->parentWidget() == dialog)
+                    scroll->verticalScrollBar()->setValue(std::max(0, profile_tabs->y() - 10));
+            QApplication::processEvents();
+            dialog->grab().save(output + "/ficha-4-abas.png");
+        }
         inspected = true; dialog->reject();
     });
     open->trigger(); CHECK(inspected);
