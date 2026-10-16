@@ -82,6 +82,7 @@ void Canvas2D::dropEvent(QDropEvent* event) {
         event->ignore();
         return;
     }
+    finish_navigation_preview();
     event->acceptProposedAction();
     setFocus();
     const Pt w = to_world(event->position());
@@ -91,6 +92,7 @@ void Canvas2D::dropEvent(QDropEvent* event) {
 // -- mouse --
 
 void Canvas2D::wheelEvent(QWheelEvent* event) {
+    begin_navigation_preview();
     const double f = event->angleDelta().y() > 0 ? 1.15 : 1 / 1.15;
     scale(f, f);
     emit view_changed();
@@ -105,11 +107,13 @@ std::set<std::string> Canvas2D::dragging_ids() const {
 
 void Canvas2D::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton) {
+        begin_navigation_preview();
         panning_ = true;
         last_pan_ = event->position();
         setCursor(Qt::ClosedHandCursor);
         return;
     }
+    finish_navigation_preview();
     if (event->button() == Qt::LeftButton && dynamic_cast<TabMarker*>(itemAt(event->position().toPoint()))) {
         dragging_tab_marker_ = true;
         QGraphicsView::mousePressEvent(event);
@@ -242,6 +246,7 @@ void Canvas2D::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void Canvas2D::mouseDoubleClickEvent(QMouseEvent* event) {
+    finish_navigation_preview();
     const Pt w = to_world(event->position());
     // A ferramenta tem prioridade: dois cliques fecham a polilinha e inserem no na edicao de nos, e
     // isso nao pode virar caixa de edicao.
@@ -303,6 +308,7 @@ void Canvas2D::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
+    finish_navigation_preview();
     if (event->key() == Qt::Key_Escape) {
         // Esc tem um significado unico no aplicativo: abandonar a operacao inteira. Nao deixamos
         // cada ferramenta interpretar a tecla como apenas "limpar o passo atual" e continuar ativa.

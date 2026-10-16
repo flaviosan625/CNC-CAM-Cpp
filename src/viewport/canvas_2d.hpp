@@ -19,10 +19,14 @@
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
+#include <QImage>
 #include <QMimeData>
+#include <QPainter>
 #include <QPointF>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
+#include <QTransform>
 #include <QToolButton>
 #include <QWidget>
 
@@ -260,6 +264,10 @@ private:
     void clear_items(std::vector<QGraphicsItem*>& items);
     void retire_items(std::vector<QGraphicsItem*>& items);
     void clear_bulk_selection_proxy();
+    void begin_navigation_preview();
+    void finish_navigation_preview();
+    void update_navigation_preview_transform();
+    void drawForeground(QPainter* painter, const QRectF& rect) override;
     std::optional<BBox> selection_bbox() const;
     void update_hover_cursor(double wx, double wy);
     std::optional<int> cursor_code_for(const std::optional<HandleKind>& kind) const;
@@ -294,6 +302,13 @@ private:
     bool translation_preview_reusing_persistent_proxy_ = false;
     QPointF translation_preview_offset_;
     bool translation_preview_proxy_active_ = false;
+    QTimer* navigation_preview_timer_ = nullptr;
+    QImage navigation_preview_image_;
+    QSize navigation_preview_viewport_size_;
+    QTransform navigation_preview_transform_;
+    QTransform navigation_preview_previous_viewport_transform_;
+    std::vector<EntityItem*> navigation_preview_hidden_items_;
+    bool navigation_preview_active_ = false;
     std::set<std::string> fit_warning_ids_;
     std::vector<QGraphicsItem*> fit_warning_items_;
     std::vector<QGraphicsItem*> layout_preview_items_;

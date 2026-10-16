@@ -194,6 +194,7 @@ void Canvas2D::clear_bulk_selection_proxy() {
 }
 
 void Canvas2D::refresh_entities() {
+    finish_navigation_preview();
     clear_translation_preview();
     if (preserve_bulk_selection_proxy_on_refresh_)
         preserve_bulk_selection_proxy_on_refresh_ = false;

@@ -30,15 +30,27 @@ Canvas2D::Canvas2D(QWidget* parent) : QGraphicsView(parent) {
     setFocusPolicy(Qt::StrongFocus);
     scene_->setBackgroundBrush(QBrush(QColor(ui::color("canvas"))));
 
+    navigation_preview_timer_ = new QTimer(this);
+    navigation_preview_timer_->setSingleShot(true);
+    connect(navigation_preview_timer_, &QTimer::timeout, this, &Canvas2D::finish_navigation_preview);
+
     shortcut_table = shortcuts::load();
     // O ponto azul fica a X pixels do canto: muda com o zoom.
     connect(this, &Canvas2D::view_changed, this, [this] {
+        if (navigation_preview_active_) {
+            if (navigation_preview_viewport_size_ != viewport()->size()) {
+                finish_navigation_preview();
+            } else {
+                update_navigation_preview_transform();
+                navigation_preview_timer_->start(500);
+            }
+        }
         const qreal scale = transform().m11();
-        if (translation_preview_origins_.empty() && bulk_selection_proxy_persistent_ &&
+        if (!navigation_preview_active_ && translation_preview_origins_.empty() && bulk_selection_proxy_persistent_ &&
             std::fabs(scale - bulk_selection_proxy_scale_) > 1e-6) {
             clear_bulk_selection_proxy();
         }
-        refresh_selection_handles(false);
+        if (!navigation_preview_active_) refresh_selection_handles(false);
     });
 
     setMouseTracking(true);
@@ -99,11 +111,13 @@ void Canvas2D::setup_material(double width, double height) {
 
 void Canvas2D::fit_view() {
     const double m = std::max(material_width, material_height) * 0.08;
+    begin_navigation_preview();
     fitInView(-m, -m, material_width + 2 * m, material_height + 2 * m, Qt::KeepAspectRatio);
     emit view_changed();
 }
 
 void Canvas2D::zoom_by(double factor) {
+    begin_navigation_preview();
     scale(factor, factor);
     emit view_changed();
 }
@@ -129,8 +143,81 @@ void Canvas2D::zoom_selection() {
     }
     const double pad = std::max(x1 - x0, y1 - y0) * 0.15 + 1.0;
     const double mh = material_height;
+    begin_navigation_preview();
     fitInView(QRectF(x0 - pad, mh - y1 - pad, (x1 - x0) + 2 * pad, (y1 - y0) + 2 * pad), Qt::KeepAspectRatio);
     emit view_changed();
+}
+
+void Canvas2D::begin_navigation_preview() {
+    if (navigation_preview_active_ || ent_items_.size() < 128 || !viewport()->isVisible()) return;
+    QImage image = viewport()->grab().toImage();
+    if (image.isNull()) return;
+
+    navigation_preview_image_ = std::move(image);
+    navigation_preview_viewport_size_ = viewport()->size();
+    navigation_preview_previous_viewport_transform_ = viewportTransform();
+    navigation_preview_transform_.reset();
+    navigation_preview_hidden_items_.clear();
+    navigation_preview_hidden_items_.reserve(ent_items_.size());
+    for (EntityItem* item : ent_items_) {
+        if (item && item->isVisible()) {
+            navigation_preview_hidden_items_.push_back(item);
+            item->setVisible(false);
+        }
+    }
+    navigation_preview_active_ = true;
+    navigation_preview_timer_->start(500);
+    viewport()->update();
+}
+
+void Canvas2D::finish_navigation_preview() {
+    if (navigation_preview_timer_) navigation_preview_timer_->stop();
+    if (!navigation_preview_active_) return;
+
+    const bool zoom_changed = bulk_selection_proxy_persistent_ &&
+                              std::fabs(transform().m11() - bulk_selection_proxy_scale_) > 1e-6;
+    if (zoom_changed) clear_bulk_selection_proxy();
+    for (EntityItem* item : navigation_preview_hidden_items_) {
+        if (item && item->scene() == scene_) item->setVisible(true);
+    }
+    navigation_preview_hidden_items_.clear();
+    navigation_preview_image_ = {};
+    navigation_preview_active_ = false;
+    viewport()->update();
+}
+
+void Canvas2D::update_navigation_preview_transform() {
+    bool invertible = false;
+    const QTransform screen_to_scene = navigation_preview_previous_viewport_transform_.inverted(&invertible);
+    if (!invertible) return;
+
+    const QSize size = navigation_preview_viewport_size_;
+    const QPolygonF source{QPointF(0, 0), QPointF(size.width(), 0),
+                           QPointF(size.width(), size.height()), QPointF(0, size.height())};
+    QPolygonF destination;
+    destination.reserve(source.size());
+    const QTransform current = viewportTransform();
+    for (const QPointF& point : source)
+        destination.push_back(current.map(screen_to_scene.map(point)));
+
+    QTransform mapped;
+    if (QTransform::quadToQuad(source, destination, mapped)) navigation_preview_transform_ = mapped;
+    navigation_preview_previous_viewport_transform_ = current;
+}
+
+void Canvas2D::drawForeground(QPainter* painter, const QRectF& rect) {
+    if (!navigation_preview_active_) {
+        QGraphicsView::drawForeground(painter, rect);
+        return;
+    }
+
+    painter->save();
+    painter->resetTransform();
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, false);
+    painter->setWorldTransform(navigation_preview_transform_);
+    painter->drawImage(QRectF(QPointF(0, 0), QSizeF(navigation_preview_viewport_size_)),
+                       navigation_preview_image_, QRectF(navigation_preview_image_.rect()));
+    painter->restore();
 }
 
 double Canvas2D::pick_tolerance() const {

@@ -510,6 +510,7 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         CHECK(moved_item->opacity() == doctest::Approx(0.0));
         CHECK(moved_item->world_bounds().x0 == doctest::Approx(moving->bounding_box().x0));
         canvas.zoom_by(1.05);
+        QTest::qWait(600);
         CHECK(moved_item->opacity() == doctest::Approx(1.0));
         CHECK(moved_item->pos().isNull());
         CHECK(moved_item->hit_test_world(moved_polyline->points.front().x,
