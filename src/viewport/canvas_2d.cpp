@@ -32,7 +32,14 @@ Canvas2D::Canvas2D(QWidget* parent) : QGraphicsView(parent) {
 
     shortcut_table = shortcuts::load();
     // O ponto azul fica a X pixels do canto: muda com o zoom.
-    connect(this, &Canvas2D::view_changed, this, [this] { refresh_selection_handles(false); });
+    connect(this, &Canvas2D::view_changed, this, [this] {
+        const qreal scale = transform().m11();
+        if (translation_preview_origins_.empty() && bulk_selection_proxy_persistent_ &&
+            std::fabs(scale - bulk_selection_proxy_scale_) > 1e-6) {
+            clear_bulk_selection_proxy();
+        }
+        refresh_selection_handles(false);
+    });
 
     setMouseTracking(true);
     setAcceptDrops(true);

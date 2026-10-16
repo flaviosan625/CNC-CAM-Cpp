@@ -93,12 +93,13 @@ bool SelectTool::on_press(double wx, double wy, Qt::MouseButton button, Qt::Keyb
     const bool all_selected = std::all_of(group.begin(), group.end(), [](const cad::EntityPtr& e) { return e->selected; });
     if (add) {
         for (const cad::EntityPtr& e : group) ctx->document->set_selected(e, !all_selected);
+        ctx->refresh();
     } else if (!all_selected) {
         ctx->document->clear_selection();
         for (const cad::EntityPtr& e : group) ctx->document->set_selected(e, true);
+        ctx->refresh();
     }
 
-    ctx->refresh();
     return press_move(wx, wy, mods, std::nullopt);
 }
 
@@ -295,7 +296,7 @@ bool SelectTool::on_release(double wx, double wy, Qt::MouseButton button, Qt::Ke
             for (const cad::EntityPtr& c : copias) c->translate(tx, ty);
             ctx->add(copias, "Arrastar cópia", true);
         } else if (moveu) {
-            ctx->transform(targets, [tx, ty](cad::Entity& e) { e.translate(tx, ty); }, "Mover", false);
+            ctx->translate(targets, tx, ty, "Mover", false);
             if (ctx->canvas) ctx->canvas->commit_translation_preview();
             ctx->refresh();
         } else {

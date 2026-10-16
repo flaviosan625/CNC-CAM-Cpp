@@ -15,6 +15,7 @@
 
 #include <QGraphicsEllipseItem>
 #include <QGraphicsPathItem>
+#include <QGraphicsPixmapItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
@@ -258,6 +259,7 @@ private:
     void remove_item(QGraphicsItem* item);
     void clear_items(std::vector<QGraphicsItem*>& items);
     void retire_items(std::vector<QGraphicsItem*>& items);
+    void clear_bulk_selection_proxy();
     std::optional<BBox> selection_bbox() const;
     void update_hover_cursor(double wx, double wy);
     std::optional<int> cursor_code_for(const std::optional<HandleKind>& kind) const;
@@ -282,7 +284,16 @@ private:
     std::vector<QGraphicsItem*> bg_items_;
     std::vector<EntityItem*> ent_items_;
     std::unordered_map<const cad::Entity*, EntityItem*> ent_item_index_;
-    std::vector<std::pair<EntityItem*, QPointF>> translation_preview_items_;
+    std::vector<std::pair<EntityItem*, QPointF>> translation_preview_origins_;
+    QGraphicsPixmapItem* translation_preview_pixmap_ = nullptr;
+    QPointF translation_preview_pixmap_origin_;
+    std::vector<EntityItem*> bulk_selection_proxy_items_;
+    qreal bulk_selection_proxy_scale_ = 0.0;
+    bool bulk_selection_proxy_persistent_ = false;
+    bool preserve_bulk_selection_proxy_on_refresh_ = false;
+    bool translation_preview_reusing_persistent_proxy_ = false;
+    QPointF translation_preview_offset_;
+    bool translation_preview_proxy_active_ = false;
     std::set<std::string> fit_warning_ids_;
     std::vector<QGraphicsItem*> fit_warning_items_;
     std::vector<QGraphicsItem*> layout_preview_items_;

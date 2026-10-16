@@ -67,7 +67,7 @@ public:
     bool visible() const { return !items_.empty(); }
     const std::optional<BBox>& bbox() const { return bbox_; }
     void clear();
-    void show(const BBox& bbox);
+    void show(const BBox& bbox, bool bulk_selection = false);
 
     // Alca clicavel sob o cursor (so escala e rotacao respondem).
     std::optional<HandleHit> hit(double wx, double wy) const;

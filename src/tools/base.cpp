@@ -136,6 +136,27 @@ void TransformCommand::restore(const std::vector<cad::EntityPtr>& states) {
     for (size_t i = 0; i < ents_.size() && i < states.size(); ++i) ents_[i]->restore_from(*states[i]);
 }
 
+TranslateCommand::TranslateCommand(cad::Document& doc, std::vector<cad::EntityPtr> entities,
+                                   double dx, double dy, std::string label)
+    : doc_(doc), ents_(std::move(entities)), dx_(dx), dy_(dy), label_(std::move(label)) {
+    before_.reserve(ents_.size());
+    for (const cad::EntityPtr& entity : ents_) before_.push_back(entity->copy());
+}
+
+void TranslateCommand::execute() {
+    for (const cad::EntityPtr& entity : ents_) {
+        const uint64_t version = entity->version;
+        entity->translate(dx_, dy_);
+        if (entity->version == version) entity->touch();
+    }
+    doc_.modified = true;
+}
+
+void TranslateCommand::undo() {
+    for (size_t i = 0; i < ents_.size() && i < before_.size(); ++i) ents_[i]->restore_from(*before_[i]);
+    doc_.modified = true;
+}
+
 // ----------------------------------------------------------------------
 // Contexto
 // ----------------------------------------------------------------------
@@ -181,6 +202,16 @@ void ToolContext::transform(const std::vector<cad::EntityPtr>& entities, Transfo
         return;
     }
     undo_stack->push(std::make_shared<TransformCommand>(*document, entities, std::move(fn), label));
+    if (refresh) this->refresh();
+}
+
+void ToolContext::translate(const std::vector<cad::EntityPtr>& entities, double dx, double dy,
+                            const std::string& label, bool refresh) {
+    if (entities.empty()) {
+        status("Nenhum objeto selecionado");
+        return;
+    }
+    undo_stack->push(std::make_shared<TranslateCommand>(*document, entities, dx, dy, label));
     if (refresh) this->refresh();
 }
 

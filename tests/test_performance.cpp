@@ -323,24 +323,79 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         });
 
         QImage image(canvas.viewport()->size(), QImage::Format_ARGB32_Premultiplied);
+        std::vector<double> whole_sheet_frame_ms;
+        whole_sheet_frame_ms.reserve(3 * iterations);
         measure(measurements, "render_whole_sheet", 3 * iterations, [&] {
             for (int i = 0; i < 3 * iterations; ++i) {
+                QElapsedTimer frame_timer;
+                frame_timer.start();
                 image.fill(Qt::transparent);
                 QPainter painter(&image);
                 canvas.viewport()->render(&painter);
+                whole_sheet_frame_ms.push_back(frame_timer.nsecsElapsed() / 1.e6);
             }
         });
         CHECK_FALSE(image.isNull());
 
+        const auto render_subset = [&](const std::string& stage, const auto& include) {
+            for (const auto& entity : document.entities) {
+                if (auto* item = item_for(canvas, entity)) item->setVisible(include(*entity));
+            }
+            measure(measurements, stage.c_str(), 2, [&] {
+                for (int i = 0; i < 2; ++i) {
+                    image.fill(Qt::transparent);
+                    QPainter painter(&image);
+                    canvas.viewport()->render(&painter);
+                }
+            });
+            for (const auto& entity : document.entities) {
+                if (auto* item = item_for(canvas, entity)) item->setVisible(true);
+            }
+        };
+        render_subset("render_polylines_only", [](const cnc::cad::Entity& entity) {
+            return cnc::cad::is_a<cnc::cad::Polyline>(entity);
+        });
+        render_subset("render_text_only", [](const cnc::cad::Entity& entity) {
+            return cnc::cad::is_a<cnc::cad::Text>(entity);
+        });
+        std::vector<double> widget_repaint_frame_ms;
+        widget_repaint_frame_ms.reserve(3);
+        measure(measurements, "widget_repaint", 3, [&] {
+            for (int frame = 0; frame < 3; ++frame) {
+                QElapsedTimer frame_timer;
+                frame_timer.start();
+                canvas.viewport()->repaint();
+                QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+                widget_repaint_frame_ms.push_back(frame_timer.nsecsElapsed() / 1.e6);
+            }
+        });
         // Zoom invalida caches em pixels. Medir somente quadros parados poderia
         // esconder uma pausa grande ao aproximar/afastar muitos vetores e textos.
+        std::vector<double> zoom_repaint_frame_ms;
+        zoom_repaint_frame_ms.reserve(6 * iterations);
         measure(measurements, "zoom_repaint", 6 * iterations, [&] {
             for (int pair = 0; pair < 3 * iterations; ++pair) {
                 for (const double factor : {1.15, 1.0 / 1.15}) {
+                    QElapsedTimer frame_timer;
+                    frame_timer.start();
                     canvas.zoom_by(factor);
                     image.fill(Qt::transparent);
                     QPainter painter(&image);
                     canvas.viewport()->render(&painter);
+                    zoom_repaint_frame_ms.push_back(frame_timer.nsecsElapsed() / 1.e6);
+                }
+            }
+        });
+        std::vector<double> widget_zoom_repaint_frame_ms;
+        measure(measurements, "widget_zoom_repaint", 6 * iterations, [&] {
+            for (int pair = 0; pair < 3 * iterations; ++pair) {
+                for (const double factor : {1.15, 1.0 / 1.15}) {
+                    QElapsedTimer frame_timer;
+                    frame_timer.start();
+                    canvas.zoom_by(factor);
+                    canvas.viewport()->repaint();
+                    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+                    widget_zoom_repaint_frame_ms.push_back(frame_timer.nsecsElapsed() / 1.e6);
                 }
             }
         });
@@ -389,19 +444,29 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         // Mede o percurso otimizado de pre-visualizacao e confirma que soltar continua desfazivel.
         for (size_t i = 0; i < originals; ++i) document.set_selected(document.entities[i], true);
         canvas.refresh_entities();
+        std::vector<double> selected_group_frame_ms;
+        selected_group_frame_ms.reserve(3);
         measure(measurements, "render_selected_group", 3, [&] {
             for (int frame = 0; frame < 3; ++frame) {
+                QElapsedTimer frame_timer;
+                frame_timer.start();
                 image.fill(Qt::transparent);
                 QPainter painter(&image);
                 canvas.viewport()->render(&painter);
+                selected_group_frame_ms.push_back(frame_timer.nsecsElapsed() / 1.e6);
             }
         });
         const auto before_group_drag = document.to_json().at("entities");
+        std::vector<double> group_frame_ms;
+        group_frame_ms.reserve(8);
         measure(measurements, "interactive_group_move_8_frames", 8, [&] {
             QTest::mousePress(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, start, 0);
             for (int frame = 1; frame <= 8; ++frame) {
+                QElapsedTimer frame_timer;
+                frame_timer.start();
                 send_move(canvas.viewport(), start + QPoint(frame * 4, frame * -2), Qt::LeftButton);
                 QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+                group_frame_ms.push_back(frame_timer.nsecsElapsed() / 1.e6);
             }
         });
         measure(measurements, "interactive_group_release", 1, [&] {
@@ -417,6 +482,40 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         REQUIRE(moved_item != nullptr);
         CHECK(moved_item->pos().x() == doctest::Approx(moved_polyline->points.front().x - original_polyline->points.front().x));
         CHECK(moved_item->pos().y() == doctest::Approx(-(moved_polyline->points.front().y - original_polyline->points.front().y)));
+
+        // Repetir o movimento sem alterar a selecao deve reutilizar a mesma pre-visualizacao.
+        const QPoint second_start = start + QPoint(32, -16);
+        std::vector<double> repeated_group_frame_ms;
+        repeated_group_frame_ms.reserve(8);
+        measure(measurements, "interactive_group_move_again_8_frames", 8, [&] {
+            QTest::mousePress(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, second_start, 0);
+            for (int frame = 1; frame <= 8; ++frame) {
+                QElapsedTimer frame_timer;
+                frame_timer.start();
+                send_move(canvas.viewport(), second_start + QPoint(frame * 2, frame * -1), Qt::LeftButton);
+                QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+                repeated_group_frame_ms.push_back(frame_timer.nsecsElapsed() / 1.e6);
+            }
+        });
+        measure(measurements, "interactive_group_release_again", 1, [&] {
+            QTest::mouseRelease(canvas.viewport(), Qt::LeftButton, Qt::NoModifier,
+                                second_start + QPoint(16, -8), 0);
+            QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        });
+        REQUIRE_MESSAGE(undo.can_undo(), "segundo arrasto em grupo deve criar um comando reversivel");
+        moved_polyline = cnc::cad::as<cnc::cad::Polyline>(*moving);
+        REQUIRE(moved_polyline != nullptr);
+        moved_item = item_for(canvas, moving);
+        REQUIRE(moved_item != nullptr);
+        CHECK(moved_item->opacity() == doctest::Approx(0.0));
+        CHECK(moved_item->world_bounds().x0 == doctest::Approx(moving->bounding_box().x0));
+        canvas.zoom_by(1.05);
+        CHECK(moved_item->opacity() == doctest::Approx(1.0));
+        CHECK(moved_item->pos().isNull());
+        CHECK(moved_item->hit_test_world(moved_polyline->points.front().x,
+                                        moved_polyline->points.front().y, 1.0));
+        canvas.zoom_by(1.0 / 1.05);
+        undo.undo();
         undo.undo();
         canvas.refresh_entities();
         document.clear_selection();
@@ -426,6 +525,13 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
                             {"polyline_points", points}, {"texts", texts},
                             {"iterations", iterations}, {"viewport", {1280, 800}},
                             {"snap_hits", snap_hits}, {"moving_snap_hits", moving_hits},
+                            {"interactive_group_move_frame_ms", group_frame_ms},
+                            {"interactive_group_move_again_frame_ms", repeated_group_frame_ms},
+                            {"render_whole_sheet_frame_ms", whole_sheet_frame_ms},
+                            {"zoom_repaint_frame_ms", zoom_repaint_frame_ms},
+                            {"widget_zoom_repaint_frame_ms", widget_zoom_repaint_frame_ms},
+                            {"render_selected_group_frame_ms", selected_group_frame_ms},
+                            {"widget_repaint_frame_ms", widget_repaint_frame_ms},
                             {"stages", measurements}};
         std::cout << "CNC_PERF " << report.dump() << '\n' << std::flush;
         canvas.set_tool(nullptr);

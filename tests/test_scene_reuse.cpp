@@ -1,10 +1,14 @@
 #include <doctest.h>
 
+#include <cmath>
+
 #include <QSignalSpy>
+#include <QPainterPath>
 
 #include "cad/document.hpp"
 #include "tools/draw_tools.hpp"
 #include "viewport/canvas_2d.hpp"
+#include "viewport/entity_items.hpp"
 
 TEST_CASE("canvas: cache de clique acompanha edicao e cor de camada sem recriar a peca") {
     cnc::cad::Document document;
@@ -129,4 +133,35 @@ TEST_CASE("performance: mover etiquetas preserva os contornos ja calculados") {
     label.translate(50, 0);
     label.restore_from(*snapshot);
     CHECK(label.outline_polygons().front() == expected);
+}
+
+TEST_CASE("viewport: texto desenhado com curvas mantem a caixa dos contornos CAM") {
+    cnc::cad::Text label;
+    label.x = 35.0;
+    label.y = 62.0;
+    label.height = 18.0;
+    label.content = "CNC CAM 2500";
+    label.font_family = "Arial";
+    label.align = "center";
+    label.rotation = 17.0;
+
+    QPainterPath polygon_path;
+    for (const cnc::Points& polygon : label.outline_polygons()) {
+        if (polygon.size() < 2) continue;
+        polygon_path.moveTo(polygon.front().x, 120.0 - polygon.front().y);
+        for (size_t i = 1; i < polygon.size(); ++i)
+            polygon_path.lineTo(polygon[i].x, 120.0 - polygon[i].y);
+        polygon_path.closeSubpath();
+    }
+    const QPainterPath display_path = cnc::vp::build_path(label, 120.0);
+    REQUIRE_FALSE(polygon_path.isEmpty());
+    REQUIRE_FALSE(display_path.isEmpty());
+    CHECK(display_path.elementCount() < polygon_path.elementCount());
+
+    const QRectF expected = polygon_path.boundingRect();
+    const QRectF actual = display_path.boundingRect();
+    CHECK(std::fabs(actual.left() - expected.left()) < 0.1);
+    CHECK(std::fabs(actual.right() - expected.right()) < 0.1);
+    CHECK(std::fabs(actual.top() - expected.top()) < 0.1);
+    CHECK(std::fabs(actual.bottom() - expected.bottom()) < 0.1);
 }

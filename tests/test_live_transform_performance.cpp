@@ -76,7 +76,7 @@ TEST_CASE("performance: arrastar atualiza pre-visualizacao e confirma uma vez ao
     REQUIRE(undo.can_undo());
     CHECK(polyline->version > preview_version);
     CHECK(polyline->points.front().x == doctest::Approx(80));
-    CHECK(copies == 2); // Apenas os snapshots anterior e posterior do comando de desfazer.
+    CHECK(copies == 1); // A translacao guarda apenas o estado anterior para desfazer/refazer.
     const auto committed_version = polyline->version;
     REQUIRE(undo.undo());
     canvas.refresh_entities();

@@ -115,7 +115,7 @@ bool MoveTool::on_release(double wx, double wy, Qt::MouseButton button, Qt::Keyb
     }
     const auto targets = targets_;
     restore_live_transform();
-    ctx->transform(targets, [tx, ty](cad::Entity& e) { e.translate(tx, ty); }, "Mover");
+    ctx->translate(targets, tx, ty, "Mover");
     return true;
 }
 
@@ -142,7 +142,7 @@ void MoveTool::apply_form() {
         for (const cad::EntityPtr& c : copies) c->translate(ddx, ddy);
         ctx->add(copies, "Mover cópia", true);
     } else {
-        ctx->transform(sel, [ddx, ddy](cad::Entity& e) { e.translate(ddx, ddy); }, "Mover");
+        ctx->translate(sel, ddx, ddy, "Mover");
     }
     ctx->status(std::format("Movido ΔX {:.2f} · ΔY {:.2f}", ddx, ddy));
 }

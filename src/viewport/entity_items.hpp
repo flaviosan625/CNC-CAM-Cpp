@@ -43,6 +43,7 @@ public:
     void update_context(double mh, double unit_factor, const std::string& units, const Rgb& layer_color);
     BBox world_bounds() const;
     bool hit_test_world(double x, double y, double tolerance) const;
+    void set_selection_highlight(bool enabled);
     void refresh();
     void adopt_preview_translation();
     void apply_style();
@@ -59,6 +60,7 @@ private:
     double cached_mh_ = -1.0;
     bool context_dirty_ = true;
     bool style_dirty_ = true;
+    bool selection_highlight_ = true;
     bool cached_selected_ = false;
     mutable std::optional<BBox> cached_bounds_;
     mutable uint64_t bounds_version_ = 0;

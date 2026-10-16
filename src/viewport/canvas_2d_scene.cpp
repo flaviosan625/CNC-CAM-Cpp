@@ -1,51 +1,204 @@
 // Porte de src/viewport/canvas_2d.py: entidades, avisos de encaixe, snap e alcas.
 #include <algorithm>
+#include <cmath>
 #include <format>
 
-#include <QBrush>
 #include <QColor>
-#include <QGraphicsDropShadowEffect>
-#include <QPainterPath>
+#include <QImage>
+#include <QPainter>
 #include <QPen>
+#include <QTransform>
+#include <QGraphicsDropShadowEffect>
 
 #include "viewport/canvas_2d.hpp"
 
 namespace cnc::vp {
 
+namespace {
+
+}  // namespace
+
 // -- entidades --
 
 void Canvas2D::preview_translation(const std::vector<cad::EntityPtr>& entities, double dx, double dy) {
-    if (translation_preview_items_.empty()) {
-        translation_preview_items_.reserve(entities.size());
+    if (translation_preview_origins_.empty()) {
+        translation_preview_reusing_persistent_proxy_ = false;
+        translation_preview_origins_.reserve(entities.size());
         for (const auto& entity : entities) {
             const auto found = ent_item_index_.find(entity.get());
-            if (found != ent_item_index_.end())
-                translation_preview_items_.emplace_back(found->second, found->second->pos());
+            if (found == ent_item_index_.end()) continue;
+            translation_preview_origins_.emplace_back(found->second, found->second->pos());
         }
+        if (translation_preview_origins_.empty()) return;
         handles.clear();
+
+        translation_preview_reusing_persistent_proxy_ =
+            bulk_selection_proxy_persistent_ && translation_preview_pixmap_ &&
+            translation_preview_origins_.size() == bulk_selection_proxy_items_.size();
+        if (translation_preview_reusing_persistent_proxy_) {
+            for (const auto& [item, origin] : translation_preview_origins_) {
+                (void)origin;
+                if (std::find(bulk_selection_proxy_items_.begin(), bulk_selection_proxy_items_.end(), item) ==
+                    bulk_selection_proxy_items_.end()) {
+                    translation_preview_reusing_persistent_proxy_ = false;
+                    break;
+                }
+            }
+        }
+        if (bulk_selection_proxy_persistent_ && !translation_preview_reusing_persistent_proxy_)
+            clear_bulk_selection_proxy();
+
+        size_t path_elements = 0;
+        for (const auto& [item, origin] : translation_preview_origins_) {
+            (void)origin;
+            path_elements += static_cast<size_t>(std::max(0, item->path().elementCount()));
+        }
+        // Em selecoes massivas, uma imagem pequena de caixas mantem o arrasto leve. A geometria
+        // vetorial real permanece no documento e volta a aparecer quando a selecao ou o zoom muda.
+        translation_preview_proxy_active_ = translation_preview_reusing_persistent_proxy_ ||
+                                             translation_preview_origins_.size() >= 128 || path_elements >= 24000;
+        if (translation_preview_proxy_active_ && !translation_preview_reusing_persistent_proxy_) {
+            QRectF scene_bounds;
+            bool first = true;
+            for (const auto& [item, origin] : translation_preview_origins_) {
+                (void)origin;
+                const QRectF bounds = item->mapRectToScene(item->boundingRect());
+                scene_bounds = first ? bounds : scene_bounds.united(bounds);
+                first = false;
+            }
+
+            constexpr int kMaxPreviewSide = 512;
+            const double width = std::max(1e-9, scene_bounds.width());
+            const double height = std::max(1e-9, scene_bounds.height());
+            const double extent = std::max(width, height);
+            const int image_width = std::max(1, static_cast<int>(std::lround(kMaxPreviewSide * width / extent)));
+            const int image_height = std::max(1, static_cast<int>(std::lround(kMaxPreviewSide * height / extent)));
+            QImage preview_image(image_width, image_height, QImage::Format_ARGB32_Premultiplied);
+            preview_image.fill(Qt::transparent);
+            QPainter painter(&preview_image);
+            painter.setRenderHint(QPainter::Antialiasing, false);
+            painter.setPen(QPen(QColor(255, 140, 0, 220), 1.0));
+            painter.setBrush(QColor(255, 140, 0, 64));
+            const double scale_x = image_width / width;
+            const double scale_y = image_height / height;
+            for (const auto& [item, origin] : translation_preview_origins_) {
+                (void)origin;
+                const QRectF bounds = item->mapRectToScene(item->boundingRect());
+                const double x = (bounds.left() - scene_bounds.left()) * scale_x;
+                const double y = (bounds.top() - scene_bounds.top()) * scale_y;
+                const double w = std::max(1.0, bounds.width() * scale_x);
+                const double h = std::max(1.0, bounds.height() * scale_y);
+                painter.drawRect(QRectF(x, y, w, h));
+            }
+            painter.end();
+
+            translation_preview_pixmap_ = new QGraphicsPixmapItem(QPixmap::fromImage(preview_image));
+            translation_preview_pixmap_->setTransform(QTransform::fromScale(width / image_width, height / image_height));
+            translation_preview_pixmap_->setZValue(10.5);
+            translation_preview_pixmap_->setAcceptedMouseButtons(Qt::NoButton);
+            translation_preview_pixmap_origin_ = scene_bounds.topLeft();
+            translation_preview_pixmap_->setPos(translation_preview_pixmap_origin_);
+            scene_->addItem(translation_preview_pixmap_);
+            for (const auto& [item, origin] : translation_preview_origins_) {
+                (void)origin;
+                item->setOpacity(0.0);
+            }
+        }
     }
     const QPointF offset(dx, -dy);
-    for (const auto& [item, origin] : translation_preview_items_) item->setPos(origin + offset);
+    translation_preview_offset_ = offset;
+    if (translation_preview_proxy_active_) {
+        if (translation_preview_pixmap_)
+            translation_preview_pixmap_->setPos(translation_preview_pixmap_origin_ + offset);
+    } else {
+        for (const auto& [item, origin] : translation_preview_origins_) item->setPos(origin + offset);
+    }
 }
 
 void Canvas2D::clear_translation_preview() {
-    if (translation_preview_items_.empty()) return;
-    for (const auto& [item, origin] : translation_preview_items_) item->setPos(origin);
-    translation_preview_items_.clear();
+    if (translation_preview_origins_.empty()) return;
+    if (translation_preview_pixmap_ && !translation_preview_reusing_persistent_proxy_) {
+        remove_item(translation_preview_pixmap_);
+        translation_preview_pixmap_ = nullptr;
+    } else if (translation_preview_pixmap_) {
+        translation_preview_pixmap_->setPos(translation_preview_pixmap_origin_);
+    }
+    for (const auto& [item, origin] : translation_preview_origins_) {
+        if (!translation_preview_reusing_persistent_proxy_) item->setOpacity(1.0);
+        item->setPos(origin);
+    }
+    if (!bulk_selection_proxy_persistent_) translation_preview_pixmap_origin_ = {};
+    translation_preview_origins_.clear();
+    translation_preview_offset_ = {};
+    translation_preview_proxy_active_ = false;
+    translation_preview_reusing_persistent_proxy_ = false;
     refresh_selection_handles(false);
 }
 
 void Canvas2D::commit_translation_preview() {
-    if (translation_preview_items_.empty()) return;
-    for (const auto& [item, origin] : translation_preview_items_) {
-        (void)origin;
-        item->adopt_preview_translation();
+    if (translation_preview_origins_.empty()) return;
+    if (translation_preview_proxy_active_) {
+        if (!translation_preview_reusing_persistent_proxy_) {
+            const QGraphicsScene::ItemIndexMethod index_method = scene_->itemIndexMethod();
+            scene_->setItemIndexMethod(QGraphicsScene::NoIndex);
+            for (const auto& [item, origin] : translation_preview_origins_) {
+                item->setOpacity(0.0);
+                item->setPos(origin + translation_preview_offset_);
+            }
+            scene_->setItemIndexMethod(index_method);
+            bulk_selection_proxy_items_.clear();
+            bulk_selection_proxy_items_.reserve(translation_preview_origins_.size());
+            for (const auto& [item, origin] : translation_preview_origins_) {
+                (void)origin;
+                bulk_selection_proxy_items_.push_back(item);
+            }
+        }
+        if (translation_preview_pixmap_) {
+            translation_preview_pixmap_origin_ += translation_preview_offset_;
+            translation_preview_pixmap_->setPos(translation_preview_pixmap_origin_);
+        }
+        bulk_selection_proxy_persistent_ = translation_preview_pixmap_ != nullptr;
+        bulk_selection_proxy_scale_ = bulk_selection_proxy_persistent_ ? transform().m11() : 0.0;
+        preserve_bulk_selection_proxy_on_refresh_ = bulk_selection_proxy_persistent_;
+    } else if (translation_preview_pixmap_) {
+        remove_item(translation_preview_pixmap_);
+        translation_preview_pixmap_ = nullptr;
     }
-    translation_preview_items_.clear();
+    for (const auto& [item, origin] : translation_preview_origins_) {
+        (void)origin;
+        if (!translation_preview_proxy_active_ || !translation_preview_reusing_persistent_proxy_)
+            item->adopt_preview_translation();
+    }
+    if (!bulk_selection_proxy_persistent_) translation_preview_pixmap_origin_ = {};
+    translation_preview_origins_.clear();
+    translation_preview_offset_ = {};
+    translation_preview_proxy_active_ = false;
+    translation_preview_reusing_persistent_proxy_ = false;
+}
+
+void Canvas2D::clear_bulk_selection_proxy() {
+    if (translation_preview_pixmap_) {
+        remove_item(translation_preview_pixmap_);
+        translation_preview_pixmap_ = nullptr;
+    }
+    for (EntityItem* item : bulk_selection_proxy_items_) {
+        if (item && item->scene() == scene_) {
+            item->setOpacity(1.0);
+            item->refresh();
+        }
+    }
+    bulk_selection_proxy_items_.clear();
+    bulk_selection_proxy_scale_ = 0.0;
+    bulk_selection_proxy_persistent_ = false;
+    preserve_bulk_selection_proxy_on_refresh_ = false;
 }
 
 void Canvas2D::refresh_entities() {
     clear_translation_preview();
+    if (preserve_bulk_selection_proxy_on_refresh_)
+        preserve_bulk_selection_proxy_on_refresh_ = false;
+    else
+        clear_bulk_selection_proxy();
     clear_layout_preview();
     clear_fit_warning_items();
     fit_warning_ids_.clear();
@@ -65,6 +218,10 @@ void Canvas2D::refresh_entities() {
         if (lay && !lay->visible) continue;
         visible.push_back(e);
     }
+    const size_t selected_count = static_cast<size_t>(std::count_if(visible.begin(), visible.end(), [](const auto& entity) {
+        return entity->selected;
+    }));
+    const bool highlight_each_selected_item = selected_count < 128;
 
     if (visible.size() == ent_items_.size()) {
         bool match = true;
@@ -86,9 +243,10 @@ void Canvas2D::refresh_entities() {
             for (EntityItem* item : ent_items_) {
                 const auto& entity = item->entity();
                 const cad::Layer* layer = document_->get_layer(entity->layer);
+                item->set_selection_highlight(highlight_each_selected_item);
                 item->update_context(material_height, document_->material.unit_factor(),
                                      document_->material.units, resolve_col(entity, layer));
-                item->refresh();
+                if (item->opacity() > 0.0) item->refresh();
             }
             rebuild_fit_warning_items();
             refresh_selection_handles();
@@ -121,10 +279,13 @@ void Canvas2D::refresh_entities() {
         if (const auto found = reusable.find(e.get()); found != reusable.end()) {
             item = found->second;
             reusable.erase(found);
+            item->set_selection_highlight(highlight_each_selected_item);
             item->update_context(mh, mat.unit_factor(), mat.units, layer_color);
-            item->refresh();
+            if (item->opacity() > 0.0) item->refresh();
         } else {
             item = new EntityItem(e, mh, mat.unit_factor(), mat.units, layer_color);
+            item->set_selection_highlight(highlight_each_selected_item);
+            item->refresh();
             scene_->addItem(item);
         }
         ent_items_.push_back(item);
@@ -256,7 +417,7 @@ void Canvas2D::refresh_selection_handles(bool notify) {
         if (notify) emit selection_changed();
         return;
     }
-    handles.show(*bbox);
+    handles.show(*bbox, selected.size() >= 128);
     // Also notify previews after edits, undo and programmatic selection changes.
     if (notify) emit selection_changed();
 }

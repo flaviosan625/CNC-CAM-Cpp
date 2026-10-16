@@ -114,12 +114,12 @@ void SelectionHandles::clear() {
     bbox_.reset();
 }
 
-void SelectionHandles::show(const BBox& bbox) {
+void SelectionHandles::show(const BBox& bbox, bool bulk_selection) {
     clear();
     bbox_ = bbox;
     const double x0 = bbox.x0, y0 = bbox.y0, x1 = bbox.x1, y1 = bbox.y1;
 
-    QPen caixa_pen(QColor(kBoxColor), 1.0, Qt::DashLine);
+    QPen caixa_pen(QColor(bulk_selection ? "#ff8c00" : kBoxColor), bulk_selection ? 1.5 : 1.0, Qt::DashLine);
     caixa_pen.setCosmetic(true);
     const QPointF canto = canvas_->world_to_scene(x0, y1);
     QGraphicsRectItem* caixa = canvas_->scene()->addRect(0, 0, x1 - x0, y1 - y0, caixa_pen);

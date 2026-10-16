@@ -353,7 +353,7 @@ bool Canvas2D::nudge(QKeyEvent* event) {
         passo = kNudgeCoarseMm;
     }
     const double dx = dir_x * passo, dy = dir_y * passo;
-    tool_->ctx->transform(sel, [dx, dy](cad::Entity& e) { e.translate(dx, dy); }, "Empurrar");
+    tool_->ctx->translate(sel, dx, dy, "Empurrar");
     emit selection_changed();
     return true;
 }

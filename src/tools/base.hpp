@@ -95,6 +95,25 @@ private:
     bool has_after_ = false;
 };
 
+// Translacao pura: guarda uma copia do estado anterior. Ao refazer, reaplica
+// o deslocamento sobre esse estado restaurado sem duplicar o desenho inteiro.
+class TranslateCommand : public Command {
+public:
+    TranslateCommand(cad::Document& doc, std::vector<cad::EntityPtr> entities,
+                     double dx, double dy, std::string label = "Mover");
+    void execute() override;
+    void undo() override;
+    std::string description() const override { return label_; }
+
+private:
+    cad::Document& doc_;
+    std::vector<cad::EntityPtr> ents_;
+    std::vector<cad::EntityPtr> before_;
+    double dx_ = 0.0;
+    double dy_ = 0.0;
+    std::string label_;
+};
+
 // ======================================================================
 // Contexto das ferramentas
 // ======================================================================
@@ -162,6 +181,8 @@ public:
                  const std::string& label);
     void transform(const std::vector<cad::EntityPtr>& entities, TransformCommand::ApplyFn fn,
                    const std::string& label, bool refresh = true);
+    void translate(const std::vector<cad::EntityPtr>& entities, double dx, double dy,
+                   const std::string& label = "Mover", bool refresh = true);
     std::vector<cad::EntityPtr> selection() const { return document->selected_entities(); }
     void refresh() {
         if (canvas) canvas->refresh_entities();

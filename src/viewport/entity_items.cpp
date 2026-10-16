@@ -2,8 +2,10 @@
 #include "viewport/entity_items.hpp"
 
 #include <cmath>
+#include <numbers>
 
 #include <QFont>
+#include <QFontMetricsF>
 #include <QPainterPathStroker>
 #include <QPen>
 #include <QPolygonF>
@@ -29,6 +31,29 @@ void poly_to_path(QPainterPath& p, const Points& pts, double mh, bool close) {
     p.moveTo(pts[0].x, mh - pts[0].y);
     for (size_t i = 1; i < pts.size(); ++i) p.lineTo(pts[i].x, mh - pts[i].y);
     if (close) p.closeSubpath();
+}
+
+QPainterPath text_outline_path(const cad::Text& text, double mh) {
+    QFont font(QString::fromStdString(text.font_family));
+    font.setPixelSize(1000);
+    font.setBold(text.bold);
+    font.setItalic(text.italic);
+
+    QPainterPath glyphs;
+    glyphs.addText(0.0, 0.0, font, QString::fromStdString(text.content));
+    const QFontMetricsF metrics(font);
+    const double scale = text.height / std::max(metrics.ascent(), 1.0);
+    const double width = glyphs.boundingRect().width() * scale;
+    const double align_offset = text.align == "left" ? 0.0 : (text.align == "center" ? -width / 2.0 : -width);
+    const double angle = text.rotation * std::numbers::pi / 180.0;
+    const double cosine = std::cos(angle), sine = std::sin(angle);
+
+    // Mantem as curvas da fonte no caminho de exibicao. A geometria de corte
+    // continua usando Text::outline_polygons(), com os vertices atuais.
+    const QTransform to_scene(scale * cosine, -scale * sine, scale * sine, scale * cosine,
+                              text.x + align_offset * cosine,
+                              mh - text.y - align_offset * sine);
+    return to_scene.map(glyphs);
 }
 
 QPainterPath segments_path(const std::vector<cad::Seg>& segments, double mh) {
@@ -147,7 +172,7 @@ QPainterPath build_path(const cad::Entity& e, double mh) {
         p.arcMoveTo(rect, a->start_angle);
         p.arcTo(rect, a->start_angle, span);
     } else if (auto* t = cad::as<cad::Text>(e)) {
-        for (const Points& poly : t->outline_polygons()) poly_to_path(p, poly, mh, true);
+        return text_outline_path(*t, mh);
     } else if (auto* dim = cad::as<cad::Dimension>(e)) {
         const auto [main_path, extension_path] = build_dimension_paths(*dim, mh);
         p.addPath(main_path);
@@ -219,6 +244,7 @@ bool EntityItem::hit_test_world(double x, double y, double tolerance) const {
     const BBox bounds = world_bounds();
     if (x < bounds.x0 - tolerance || x > bounds.x1 + tolerance ||
         y < bounds.y0 - tolerance || y > bounds.y1 + tolerance) return false;
+    if (cached_version_ != entity_->version) return hit_test(*entity_, x, y, tolerance);
     if (!cached_hit_path_ || hit_tolerance_ != tolerance) {
         QPainterPathStroker stroker;
         stroker.setWidth(2 * tolerance);
@@ -228,6 +254,12 @@ bool EntityItem::hit_test_world(double x, double y, double tolerance) const {
         hit_tolerance_ = tolerance;
     }
     return cached_hit_path_->contains(QPointF(x - pos().x(), mh_ - y - pos().y()));
+}
+
+void EntityItem::set_selection_highlight(bool enabled) {
+    if (selection_highlight_ == enabled) return;
+    selection_highlight_ = enabled;
+    style_dirty_ = true;
 }
 
 void EntityItem::refresh() {
@@ -265,10 +297,11 @@ void EntityItem::refresh() {
             }
         }
     }
-    if (geometry_changed || style_dirty_ || cached_selected_ != entity_->selected) {
+    const bool visual_selected = entity_->selected && selection_highlight_;
+    if (geometry_changed || style_dirty_ || cached_selected_ != visual_selected) {
         apply_style();
         style_dirty_ = false;
-        cached_selected_ = entity_->selected;
+        cached_selected_ = visual_selected;
     }
 }
 
@@ -301,9 +334,10 @@ void EntityItem::apply_style() {
     const cad::Entity& e = *entity_;
     const auto* dim = cad::as<cad::Dimension>(e);
     const bool fast_outline = dense_contour(e);
+    const bool selected = e.selected && selection_highlight_;
     QColor col;
     double width;
-    if (e.selected) {
+    if (selected) {
         col = kSelPen;
         width = 2.0;
     } else if (dim) {
@@ -330,7 +364,7 @@ void EntityItem::apply_style() {
     setPen(pen);
     if (extension_item_ && dim) {
         QColor extension_color;
-        if (e.selected) {
+        if (selected) {
             extension_color = kSelPen;
         } else if (dim->style.extension_color) {
             extension_color = QColor(QString::fromStdString(*dim->style.extension_color));
@@ -351,7 +385,7 @@ void EntityItem::apply_style() {
     }
     if (dimension_label_) {
         QColor label_color;
-        if (e.selected) {
+        if (selected) {
             label_color = kSelPen;
         } else if (dim->style.text_color) {
             label_color = QColor(QString::fromStdString(*dim->style.text_color));
