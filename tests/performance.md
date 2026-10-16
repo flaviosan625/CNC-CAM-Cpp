@@ -5,6 +5,21 @@ Ele abre uma copia em memoria do arquivo fornecido, duplica todos os desenhos em
 grade no mesmo documento e amplia a chapa. Mantem textos, polilinhas detalhadas
 e grupos independentes. O projeto original nao e gravado.
 
+O teste `performance: roda no arquivo real antes de calcular percursos` usa o
+mesmo arquivo e envia eventos reais de roda ao viewport nativo. Ele mede o
+tempo dos dois primeiros passos (`wheel_ms`), o quadro pronto (`resting_ms`)
+e uma espera de 170 ms que processa o retorno da pintura (`settle_ms`). Tambem verifica
+que oito eventos de 15 unidades equivalem a um entalhe de 120 unidades, que
+a roda horizontal nao altera o zoom e que o desenho continua visivel durante
+a pre-visualizacao. Para avaliar uma carga maior:
+
+```powershell
+$env:CNC_PERF_RUN = '1'
+$env:CNC_PERF_COPIES = '1,16,64,256'
+$env:QT_QPA_PLATFORM = 'windows'
+.\cnc_tests.exe '--test-case=performance: roda no arquivo real antes de calcular percursos'
+```
+
 Exemplo em PowerShell, executando a partir da pasta do executavel de testes:
 
 ```powershell

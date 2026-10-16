@@ -1,4 +1,5 @@
 #include "app/main_window.hpp"
+#include "ui/theme.hpp"
 
 #include <algorithm>
 #include <array>
@@ -185,7 +186,7 @@ public:
     }
 
     void set_source_image(const QImage& image) {
-        source_ = image;
+        source_ = QPixmap::fromImage(image);
         update_pixmap();
     }
 
@@ -201,10 +202,9 @@ private:
             clear();
             return;
         }
-        setPixmap(QPixmap::fromImage(source_).scaled(size(), Qt::KeepAspectRatio,
-                                                      Qt::SmoothTransformation));
+        setPixmap(source_.scaled(size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
     }
-    QImage source_;
+    QPixmap source_;
 };
 
 using InteractiveGuideWidget = ui::MachiningGuide;
@@ -217,12 +217,18 @@ struct ThroughProfileContour {
     std::vector<QPointF> points;
     bool explicit_void = false;
     double tool_diameter = 4.0;
+    QRectF bounds;
+    double area = 0.0;
 };
 
 std::vector<ThroughProfileContour> through_profile_contours(
     const std::vector<cam::SetupSheetOperation>& operations, const JobPreviewOptions& options,
     double material_bottom_z) {
     std::vector<ThroughProfileContour> contours;
+    // Passadas em Z repetem os mesmos contornos. Procure duplicatas somente
+    // entre contornos com o mesmo canto, evitando comparar toda a OS entre si.
+    std::map<std::pair<long long, long long>, std::vector<size_t>> contour_cells;
+    constexpr double kContourBucket = 0.05;
     const auto included = [&](size_t index) {
         return options.only_operation < 0 || static_cast<size_t>(options.only_operation) == index;
     };
@@ -252,47 +258,51 @@ std::vector<ThroughProfileContour> through_profile_contours(
                         for (const QPointF& point : current) polygon << point;
                         const QRectF bounds = polygon.boundingRect();
                         const double area = std::fabs(twice_area) * 0.5;
-                        const bool duplicate = std::any_of(contours.begin(), contours.end(),
-                            [&](const ThroughProfileContour& prior) {
-                                if (prior.explicit_void !=
-                                        (operation.path->profile_side == cam::ProfileSide::Inside) ||
-                                    prior.points.size() != current.size() ||
-                                    std::fabs(prior.tool_diameter - tool_diameter) >= 0.05) return false;
-                                QPolygonF prior_polygon;
-                                double prior_twice_area = 0.0;
-                                for (size_t p = 0; p < prior.points.size(); ++p) {
-                                    prior_polygon << prior.points[p];
-                                    const QPointF& a = prior.points[p];
-                                    const QPointF& b = prior.points[(p + 1) % prior.points.size()];
-                                    prior_twice_area += a.x() * b.y() - b.x() * a.y();
-                                }
-                                const QRectF prior_bounds = prior_polygon.boundingRect();
-                                const double prior_area = std::fabs(prior_twice_area) * 0.5;
-                                if (std::fabs(bounds.x() - prior_bounds.x()) >= 0.05 ||
-                                    std::fabs(bounds.y() - prior_bounds.y()) >= 0.05 ||
-                                    std::fabs(bounds.width() - prior_bounds.width()) >= 0.05 ||
-                                    std::fabs(bounds.height() - prior_bounds.height()) >= 0.05 ||
-                                    std::fabs(area - prior_area) >= std::max(0.05, area * 1e-5)) return false;
+                        const auto cell = std::pair{
+                            static_cast<long long>(std::floor(bounds.x() / kContourBucket)),
+                            static_cast<long long>(std::floor(bounds.y() / kContourBucket))};
+                        bool duplicate = false;
+                        for (long long dx = -1; dx <= 1 && !duplicate; ++dx) {
+                            for (long long dy = -1; dy <= 1 && !duplicate; ++dy) {
+                                const auto found = contour_cells.find({cell.first + dx, cell.second + dy});
+                                if (found == contour_cells.end()) continue;
+                                for (size_t prior_index : found->second) {
+                                    const auto& prior = contours[prior_index];
+                                    if (prior.explicit_void !=
+                                            (operation.path->profile_side == cam::ProfileSide::Inside) ||
+                                        prior.points.size() != current.size() ||
+                                        std::fabs(prior.tool_diameter - tool_diameter) >= 0.05 ||
+                                        std::fabs(bounds.x() - prior.bounds.x()) >= 0.05 ||
+                                        std::fabs(bounds.y() - prior.bounds.y()) >= 0.05 ||
+                                        std::fabs(bounds.width() - prior.bounds.width()) >= 0.05 ||
+                                        std::fabs(bounds.height() - prior.bounds.height()) >= 0.05 ||
+                                        std::fabs(area - prior.area) >= std::max(0.05, area * 1e-5))
+                                        continue;
 
-                                for (size_t start = 0; start < prior.points.size(); ++start) {
-                                    if (QLineF(current.front(), prior.points[start]).length() >= 0.05) continue;
-                                    bool same_forward = true, same_reverse = true;
-                                    for (size_t point = 0; point < current.size(); ++point) {
-                                        const size_t forward = (start + point) % current.size();
-                                        const size_t reverse = (start + current.size() - point) % current.size();
-                                        same_forward = same_forward &&
-                                            QLineF(current[point], prior.points[forward]).length() < 0.05;
-                                        same_reverse = same_reverse &&
-                                            QLineF(current[point], prior.points[reverse]).length() < 0.05;
-                                        if (!same_forward && !same_reverse) break;
+                                    for (size_t start = 0; start < prior.points.size(); ++start) {
+                                        if (QLineF(current.front(), prior.points[start]).length() >= 0.05) continue;
+                                        bool same_forward = true, same_reverse = true;
+                                        for (size_t point = 0; point < current.size(); ++point) {
+                                            const size_t forward = (start + point) % current.size();
+                                            const size_t reverse = (start + current.size() - point) % current.size();
+                                            same_forward = same_forward &&
+                                                QLineF(current[point], prior.points[forward]).length() < 0.05;
+                                            same_reverse = same_reverse &&
+                                                QLineF(current[point], prior.points[reverse]).length() < 0.05;
+                                            if (!same_forward && !same_reverse) break;
+                                        }
+                                        if (same_forward || same_reverse) { duplicate = true; break; }
                                     }
-                                    if (same_forward || same_reverse) return true;
+                                    if (duplicate) break;
                                 }
-                                return false;
-                            });
-                        if (!duplicate)
-                            contours.push_back({current,
-                                operation.path->profile_side == cam::ProfileSide::Inside, tool_diameter});
+                            }
+                        }
+                        if (!duplicate) {
+                            contour_cells[cell].push_back(contours.size());
+                            contours.push_back({std::move(current),
+                                operation.path->profile_side == cam::ProfileSide::Inside,
+                                tool_diameter, bounds, area});
+                        }
                     }
                 }
             }
@@ -347,11 +357,13 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     std::optional<BBox> cut_bounds;
     double cut_z_min = 0.0, cut_z_max = 0.0;
     bool has_cut_z = false;
+    std::vector<double> final_cut_z(operations.size(), std::numeric_limits<double>::infinity());
     for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
         const auto& operation = operations[op_index];
         if (!operation.path || !included(op_index)) continue;
         for (const cam::Move& move : operation.path->moves) {
             if (!move.cutting()) continue;
+            final_cut_z[op_index] = std::min(final_cut_z[op_index], move.z);
             if (!cut_bounds) cut_bounds = BBox{move.x, move.y, move.x, move.y};
             else {
                 cut_bounds->x0 = std::min(cut_bounds->x0, move.x);
@@ -666,11 +678,14 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     for (size_t op_index = 0; op_index < operations.size(); ++op_index) {
         const auto* path = operations[op_index].path;
         if (!path || path->moves.empty() || !included(op_index)) continue;
+        const QColor path_color = path->kind == cam::ToolpathType::Pocket
+            ? QColor(ui::color("desbaste"))
+            : operation_colors[op_index % operation_colors.size()];
         const cam::Tool* tool = operations[op_index].job ? &operations[op_index].job->tool : nullptr;
         const double diameter = tool ? tool->diameter : 4.0;
         const double kerf = std::clamp(diameter * projection_scale, 3.0, 12.0);
         QPainterPath cut_path;
-        bool have_previous = false, previous_cutting = false;
+        bool previous_cutting = false;
         QPointF previous_point;
         double distance_since_arrow = 0.0;
         for (const cam::Move& move : path->moves) {
@@ -682,26 +697,33 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
                     first_cut_point = project(move.x, move.y, z_top);
                     first_cut_xy = QPointF(move.x, move.y);
                 }
+                deepest_cut = deepest_cut ? std::max(*deepest_cut, z_top - move.z)
+                                          : z_top - move.z;
+            }
+            // Na OS interessa a geometria final da cavidade. As passadas
+            // superiores repetem o mesmo XY e apenas escurecem a imagem.
+            const bool draw_cut = move.cutting() &&
+                (path->kind != cam::ToolpathType::Pocket ||
+                 move.z <= final_cut_z[op_index] + 0.02);
+            if (draw_cut) {
                 if (previous_cutting) {
                     cut_path.lineTo(point);
                     const double segment = QLineF(previous_point, point).length();
                     distance_since_arrow += segment;
-                    if (segment > 2.0 && distance_since_arrow >= 58.0) {
+                    if (path->kind != cam::ToolpathType::Pocket &&
+                        segment > 2.0 && distance_since_arrow >= 58.0) {
                         direction_marks.push_back({(previous_point + point) / 2.0,
                                                    point - previous_point,
-                                                   operation_colors[op_index % operation_colors.size()]});
+                                                   path_color});
                         distance_since_arrow = 0.0;
                     }
                 } else {
                     cut_path.moveTo(point);
                     distance_since_arrow = 0.0;
                 }
-                deepest_cut = deepest_cut ? std::max(*deepest_cut, z_top - move.z)
-                                          : z_top - move.z;
             }
             previous_point = point;
-            have_previous = true;
-            previous_cutting = move.cutting();
+            previous_cutting = draw_cut;
         }
 
         // The OS illustrates only material removed by the cutter. G0 travel
@@ -709,12 +731,8 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
         // clutter the production drawing with dashed lines between cut shapes.
         painter.setPen(QPen(QColor(37, 27, 19, 190), kerf, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter.drawPath(cut_path);
-        QColor glow = operation_colors[op_index % operation_colors.size()];
-        glow.setAlpha(90);
-        painter.setPen(QPen(glow, std::max(2.0, kerf * .72), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        painter.drawPath(cut_path);
-        painter.setPen(QPen(operation_colors[op_index % operation_colors.size()], 1.45,
-                            Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setPen(QPen(path_color, path->kind == cam::ToolpathType::Pocket ? 1.0 : 1.45,
+                            Qt::SolidLine, Qt::FlatCap, Qt::BevelJoin));
         painter.drawPath(cut_path);
     }
 
@@ -1572,6 +1590,7 @@ void MainWindow::refresh_order_service_page() {
         refresh_toolpaths();
         return;
     }
+    if (!order_service_preview_dirty_) return;
 
     std::vector<cam::SetupSheetOperation> operations;
     double seconds = 0.0;
@@ -1652,8 +1671,13 @@ void MainWindow::refresh_order_service_page() {
             ? QString::number(std::abs(deepest_z), 'f', 2) + " mm"
             : "—");
 
-    const QImage preview = make_job_layout_preview(operations, &material);
-    static_cast<AspectPixmapLabel*>(order_service_preview_label_)->set_source_image(preview);
+    if (order_service_preview_dirty_) {
+        JobPreviewOptions screen_options;
+        screen_options.supersample = 1.25;
+        static_cast<AspectPixmapLabel*>(order_service_preview_label_)->set_source_image(
+            make_job_layout_preview(operations, &material, screen_options));
+        order_service_preview_dirty_ = false;
+    }
 
     if (order_service_operations_table_) {
         order_service_operations_table_->setRowCount(operation_count);
@@ -1905,7 +1929,7 @@ void MainWindow::create_toolpath_panel() {
     auto* operations_grid = new ui::FlowLayout(6);
     const std::vector<std::tuple<QString, QString, cam::ToolpathType>> operations = {
         {"tp_profile", "Perfil", cam::ToolpathType::Profile},
-        {"tp_pocket", "Bolso", cam::ToolpathType::Pocket},
+        {"tp_pocket", "Desbaste", cam::ToolpathType::Pocket},
         {"tp_drill", QString::fromUtf8("Fura\xC3\xA7\xC3\xA3o"), cam::ToolpathType::Drill},
         {"tp_vcarve", "Entalhe V", cam::ToolpathType::VCarve},
         {"tp_fluting", "Canais", cam::ToolpathType::Fluting},
@@ -2174,8 +2198,21 @@ void MainWindow::create_toolpath_panel() {
             &MainWindow::generate_prepared_recesses);
     connect(import_setup_panel_, &ui::ImportSetupPanel::manageLayersRequested, this,
             &MainWindow::manage_layers);
+    connect(import_setup_panel_, &ui::ImportSetupPanel::generateAutomaticCutRequested, this,
+            [this] { create_automatic_cut(); });
     connect(import_setup_panel_, &ui::ImportSetupPanel::openToolpathsRequested, this,
             [this] { if (apply_import_preparation()) show_right_page(1); });
+    connect(import_setup_panel_, &ui::ImportSetupPanel::convertInchesRequested, this, [this] {
+        for (auto& entity : document_.entities) {
+            if (entity && document_.is_editable(*entity)) {
+                entity->scale(25.4, 25.4, 0.0, 0.0);
+            }
+        }
+        document_.modified = true;
+        refresh_document_view();
+        if (canvas_widget_ && canvas_widget_->canvas) canvas_widget_->canvas->zoom_selection();
+        begin_import_preparation();
+    });
 
     auto* automatic_title = new QLabel("CORTE AUTOMÁTICO POR MATERIAL", automatic_page);
     automatic_title->setObjectName("SectionHeader");
@@ -2309,7 +2346,7 @@ void MainWindow::create_legacy_toolpath_panel() {
     layout->addWidget(type_label);
     toolpath_type_combo_ = new QComboBox(panel);
     const std::vector<std::pair<QString, cam::ToolpathType>> kinds = {
-        {"Perfil", cam::ToolpathType::Profile}, {"Bolso", cam::ToolpathType::Pocket},
+        {"Perfil", cam::ToolpathType::Profile}, {"Desbaste", cam::ToolpathType::Pocket},
         {"Furação", cam::ToolpathType::Drill}, {"V-carve", cam::ToolpathType::VCarve},
         {"Fluting", cam::ToolpathType::Fluting}, {"Textura", cam::ToolpathType::Texture},
         {"Keyhole", cam::ToolpathType::Keyhole}, {"Inlay", cam::ToolpathType::Inlay},
@@ -2364,6 +2401,7 @@ void MainWindow::refresh_toolpaths() {
     if (in_refresh) return;
     in_refresh = true;
     struct RefreshGuard { ~RefreshGuard() { *flag = false; } bool* flag; } guard{&in_refresh};
+    order_service_preview_dirty_ = true;
 
     if (import_setup_panel_) {
         std::set<std::string> marked;
@@ -4588,7 +4626,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                                             [&settings](double v) { settings.cut_depth = v; });
             body_layout->addWidget(tool_group_box);
             add_pass_summary(pocket_depth);
-            auto* form = add_group("Bolso", guide_topics);
+            auto* form = add_group("Desbaste", guide_topics);
             auto* fill_type = add_enum(form, "Preenchimento", static_cast<int>(settings.fill),
                      {{"Offset", static_cast<int>(cam::FillType::Offset)},
                       {"Raster", static_cast<int>(cam::FillType::Raster)}},
@@ -4760,7 +4798,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         } else if constexpr (std::is_same_v<S, cam::InlaySettings>) {
             auto* depth_form = add_group("Profundidades de corte",
                                          {{"Profundidades", "02_profundidades"}});
-            auto* inlay_depth = add_double(depth_form, "Profundidade do bolso", settings.pocket_depth,
+            auto* inlay_depth = add_double(depth_form, "Profundidade da cavidade", settings.pocket_depth,
                                            0, 1000, " mm",
                        [&settings](double v) { settings.pocket_depth = v; });
             add_double(depth_form, "Profundidade do plug", settings.plug_depth, 0, 1000, " mm",
@@ -5326,6 +5364,13 @@ void MainWindow::refresh_automatic_cut_panel() {
 
 void MainWindow::create_automatic_cut() {
     if (!automatic_cut_combo_) return;
+    if (import_setup_panel_) {
+        const int setup_preset = import_setup_panel_->selected_preset_index();
+        if (setup_preset >= 0) {
+            const int combo_idx = automatic_cut_combo_->findData(setup_preset);
+            if (combo_idx >= 0) automatic_cut_combo_->setCurrentIndex(combo_idx);
+        }
+    }
     if ((import_preparation_pending_ || (import_setup_panel_ && import_setup_panel_->recess_answered())) &&
         !apply_import_preparation()) return;
     const int preset_index = automatic_cut_combo_->currentData().toInt();
@@ -5865,8 +5910,7 @@ void MainWindow::export_setup_sheet() {
     auto* preview_scroll = new QScrollArea(tab_preview);
     preview_scroll->setWidgetResizable(true);
     preview_scroll->setStyleSheet("QScrollArea { background-color: #181818; border: 1px solid #2b2b2b; border-radius: 8px; }");
-    auto* preview_label = new QLabel(preview_scroll);
-    preview_label->setAlignment(Qt::AlignCenter);
+    auto* preview_label = new AspectPixmapLabel(preview_scroll);
     preview_scroll->setWidget(preview_label);
     preview_layout->addWidget(preview_scroll, 1);
     tabs->addTab(tab_preview, "📐 Desenho Percurso");
@@ -5993,9 +6037,41 @@ void MainWindow::export_setup_sheet() {
     cad::MaterialSetup active_material = document_.material;
     std::string active_gcode;
     QImage current_preview_img;
+    bool screen_preview_dirty = true;
+    bool gcode_preview_dirty = true;
+    const auto update_screen_preview = [&] {
+        if (!screen_preview_dirty || tabs->currentWidget() != tab_preview) return;
+        JobPreviewOptions screen_options;
+        screen_options.supersample = 1.25;
+        current_preview_img = make_job_layout_preview(active_operations, &active_material, screen_options);
+        preview_label->set_source_image(current_preview_img);
+        screen_preview_dirty = false;
+    };
+    const auto update_gcode_preview = [&] {
+        if (!gcode_preview_dirty || tabs->currentWidget() != tab_gcode) return;
+        constexpr size_t kPreviewLimit = 192 * 1024;
+        size_t size = std::min(active_gcode.size(), kPreviewLimit);
+        if (size < active_gcode.size()) {
+            const size_t line_end = active_gcode.rfind('\n', size);
+            if (line_end != std::string::npos && line_end > 0) size = line_end + 1;
+        }
+        QString text = QString::fromUtf8(active_gcode.data(), static_cast<qsizetype>(size));
+        if (size < active_gcode.size())
+            text += "\n\n(Prévia limitada. Copiar e Salvar usam o G-code completo.)";
+        gcode_editor->setPlainText(text);
+        gcode_preview_dirty = false;
+    };
+    connect(tabs, &QTabWidget::currentChanged, &dialog, [&] {
+        update_screen_preview();
+        update_gcode_preview();
+    });
 
     auto populate_active_job = [&](int combo_idx) {
         if (combo_idx < 0) return;
+        const QSignalBlocker block_material(material_combo);
+        const QSignalBlocker block_width(width_spin);
+        const QSignalBlocker block_height(height_spin);
+        const QSignalBlocker block_thickness(thickness_spin);
         active_operations.clear();
 
         if (combo_idx < static_cast<int>(job_history_.size())) {
@@ -6080,12 +6156,11 @@ void MainWindow::export_setup_sheet() {
         }
         table->clearSelection();
 
-        // Render Preview
-        current_preview_img = make_job_layout_preview(active_operations, &active_material);
-        preview_label->setPixmap(QPixmap::fromImage(current_preview_img));
+        screen_preview_dirty = true;
+        update_screen_preview();
 
-        // Update G-Code Viewer
-        gcode_editor->setPlainText(QString::fromStdString(active_gcode));
+        gcode_preview_dirty = true;
+        update_gcode_preview();
         const int line_count = static_cast<int>(std::count(active_gcode.begin(), active_gcode.end(), '\n') + 1);
         gcode_status_lbl->setText(QString("✓ Cópia do G-Code gravada e pronta para uso (%1 linhas geradas)").arg(line_count));
     };
@@ -6115,8 +6190,8 @@ void MainWindow::export_setup_sheet() {
             rec.material = active_material;
         }
 
-        current_preview_img = make_job_layout_preview(active_operations, &active_material);
-        preview_label->setPixmap(QPixmap::fromImage(current_preview_img));
+        screen_preview_dirty = true;
+        update_screen_preview();
     };
 
     QObject::connect(width_spin, &QDoubleSpinBox::valueChanged, &dialog, update_dimensions_and_area);
@@ -6125,19 +6200,19 @@ void MainWindow::export_setup_sheet() {
     QObject::connect(material_combo, &QComboBox::currentTextChanged, &dialog, update_dimensions_and_area);
 
     connect(copy_img_btn, &QPushButton::clicked, &dialog, [&] {
-        if (!current_preview_img.isNull()) {
-            QGuiApplication::clipboard()->setImage(current_preview_img);
+        const QImage export_image = make_job_layout_preview(active_operations, &active_material);
+        if (!export_image.isNull()) {
+            QGuiApplication::clipboard()->setImage(export_image);
             QMessageBox::information(&dialog, "Ilustração Copiada", "Ilustração técnica copiada para a área de transferência com sucesso!");
         }
     });
 
     connect(save_img_btn, &QPushButton::clicked, &dialog, [&] {
-        if (current_preview_img.isNull()) return;
         QString default_filename = QString::fromStdString(document_.title().empty() ? "Ilustracao_Percurso" : document_.title()) + "_Preview.png";
         QString save_path = QFileDialog::getSaveFileName(&dialog, "Salvar Ilustração Técnica em HD", default_filename, "Imagem PNG (*.png)");
         if (!save_path.isEmpty()) {
             if (QFileInfo(save_path).suffix().isEmpty()) save_path += ".png";
-            current_preview_img.save(save_path, "PNG");
+            make_job_layout_preview(active_operations, &active_material).save(save_path, "PNG");
             QMessageBox::information(&dialog, "Ilustração Salva", QString("Ilustração técnica salva com sucesso:\n%1").arg(save_path));
         }
     });
@@ -6382,7 +6457,7 @@ void MainWindow::import_files(const QStringList& paths) {
         classify_imported_entities(all_entities);
         tool_context_.add(all_entities, QString("Importar %1 arquivos").arg(success_count).toStdString(), true);
         refresh_document_view();
-        canvas_widget_->canvas->fit_view();
+        canvas_widget_->canvas->zoom_selection();
     }
     QApplication::restoreOverrideCursor();
 
@@ -6421,7 +6496,7 @@ void MainWindow::import_file(const QString& path) {
         classify_imported_entities(entities);
         tool_context_.add(entities, QString("Importar %1").arg(suffix).toStdString(), true);
         refresh_document_view();
-        canvas_widget_->canvas->fit_view();
+        canvas_widget_->canvas->zoom_selection();
         begin_import_preparation();
         statusBar()->showMessage(QString("%1 vetor(es) importado(s) de %2")
                                      .arg(static_cast<qlonglong>(entities.size()))
@@ -6458,7 +6533,7 @@ void MainWindow::import_folder() {
         classify_imported_entities(entities);
         tool_context_.add(entities, "Importar em lote", true);
         refresh_document_view();
-        canvas_widget_->canvas->fit_view();
+        canvas_widget_->canvas->zoom_selection();
         QString status = QString("Importados %1 arquivo(s) de %2")
                              .arg(static_cast<qlonglong>(result.imported))
                              .arg(static_cast<qlonglong>(result.total_files));
@@ -6529,6 +6604,7 @@ void MainWindow::create_tool_panel() {
         {"measure", "Medir / Inspecionar"},
         {"grid", "Mostrar ou ocultar a grade 2D"},
         {"workspace_setup", "Configurar material e área de trabalho"},
+        {"pan", "Mover vista (Pan / Mão) · arraste com o botão esquerdo, botão do meio ou barra de espaço"},
         {"select", "Seleção"},
         {"circle", "Círculo"}, {"ellipse", "Elipse"}, {"rectangle", "Retângulo"},
         {"polygon", "Polígono"}, {"star", "Estrela"}, {"polyline", "Polilinha"},
@@ -6623,11 +6699,11 @@ void MainWindow::create_tool_panel() {
                 else if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
                 else if (name == "zoom_in") canvas_widget_->canvas->zoom_by(1.25);
                 else if (name == "zoom_out") canvas_widget_->canvas->zoom_by(0.8);
-                else if (name == "pan") {
-                    canvas_widget_->canvas->setCursor(Qt::OpenHandCursor);
-                    statusBar()->showMessage("Arraste com o botão do meio do mouse para mover a vista");
-                }
-                else if (name != "pan") activate_tool(name);
+                // pan ativa a ferramenta normalmente via activate_tool
+
+
+
+                else activate_tool(name);
             });
         }
         layout->addLayout(grid);
@@ -7273,6 +7349,7 @@ void MainWindow::activate_tool(const QString& name) {
     else if (name == "distort") active_tool_ = std::make_unique<tools::DistortTool>(tool_context_);
     else if (name == "array_copy") active_tool_ = std::make_unique<tools::ArrayCopyTool>(tool_context_);
     else if (name == "circular_copy") active_tool_ = std::make_unique<tools::CircularCopyTool>(tool_context_);
+    else if (name == "pan") active_tool_ = std::make_unique<tools::PanTool>(tool_context_);
     else if (name.startsWith("align_"))
         active_tool_ = std::make_unique<tools::AlignTool>(tool_context_, name.mid(6).toStdString());
     else active_tool_ = std::make_unique<tools::SelectTool>(tool_context_);
@@ -7728,7 +7805,7 @@ void MainWindow::create_actions() {
     QMenu* cam_menu = menuBar()->addMenu("Percursos de ferramenta");
     const std::vector<std::pair<QString, cam::ToolpathType>> operations = {
         {"Percurso de perfil", cam::ToolpathType::Profile},
-        {"Percurso de bolso", cam::ToolpathType::Pocket},
+        {"Percurso de desbaste", cam::ToolpathType::Pocket},
         {"Percurso de fura\xC3\xA7\xC3\xA3o", cam::ToolpathType::Drill},
         {"Entalhe V", cam::ToolpathType::VCarve},
         {"Canais (Fluting)", cam::ToolpathType::Fluting},
@@ -7851,6 +7928,7 @@ void MainWindow::refresh_document_view() {
     material_guide_dirty_ = true;
     automatic_cut_panel_dirty_ = true;
     order_service_geometry_snapshot_valid_ = false;
+    order_service_preview_dirty_ = true;
     if (simulation_timer_ && simulation_timer_->isActive()) simulation_timer_->stop();
     simulation_.reset();
     refresh_simulation_status();

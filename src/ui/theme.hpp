@@ -6,7 +6,8 @@
 
 namespace cnc::ui {
 
-// Cores nomeadas: background, panel, surface, border, text, muted, accent, accent_light, drawing, canvas.
+// Cores nomeadas: background, panel, surface, border, text, muted, accent,
+// accent_light, drawing, canvas, desbaste.
 const QMap<QString, QString>& colors();
 QString color(const QString& name);
 

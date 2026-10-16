@@ -234,7 +234,7 @@ std::vector<Toolpath> generate_pocket_polygons(const std::vector<geo::Geom>& pol
     }
 
     const std::vector<double> depths = compute_passes(s.total_depth(), tool.pass_depth, s.maintain_exact_step);
-    if (polys.empty()) notes.push_back("Nenhum vetor fechado selecionado — o bolso precisa de área.");
+    if (polys.empty()) notes.push_back("Nenhum vetor fechado selecionado — o desbaste precisa de uma área.");
 
     std::vector<Points> exteriors;
     for (const geo::Geom& p : polys) exteriors.push_back(p.exterior_coords());
@@ -243,7 +243,7 @@ std::vector<Toolpath> generate_pocket_polygons(const std::vector<geo::Geom>& pol
         const std::vector<Points> rings = offset_rings(poly, tool, s, stepover);
         if (rings.empty()) {
             const BBox b = poly.bounds();
-            notes.push_back(std::format("Fresa ⌀{:g} mm não entra no bolso de {:.1f} × {:.1f} mm.",
+            notes.push_back(std::format("Fresa ⌀{:g} mm não entra na área de desbaste de {:.1f} × {:.1f} mm.",
                                         tool.diameter, b.x1 - b.x0, b.y1 - b.y0));
             continue;
         }

@@ -28,7 +28,7 @@ namespace cnc::cam {
 struct PocketSettings {
     static constexpr ToolpathType kKind = ToolpathType::Pocket;
 
-    std::string name = "Bolso 1";
+    std::string name = "Desbaste 1";
 
     double start_depth = 0.0;
     double cut_depth = 6.0;

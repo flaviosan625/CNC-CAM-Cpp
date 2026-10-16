@@ -437,7 +437,10 @@ void EntityItem::apply_style() {
     QColor col;
     double width;
     if (selected) {
-        col = kSelPen;
+        // A selecao e indicada pela espessura e pelas alcas. O contorno de
+        // corte continua branco; somente o percurso recebe a cor da operacao.
+        col = dim || cad::is_a<cad::DrillPoint>(e) || cad::is_a<cad::ConstructionLine>(e)
+            ? kSelPen : QColor(Qt::white);
         width = 2.0;
     } else if (dim) {
         col = dim->style.line_color ? QColor(QString::fromStdString(*dim->style.line_color)) : layer_qcolor();
@@ -449,7 +452,9 @@ void EntityItem::apply_style() {
         col = QColor("#d29b24");
         width = 1.2;
     } else {
-        col = layer_qcolor();
+        // Vetores de corte mantem a cor padrao do desenho. As camadas guardam
+        // classificacao e visibilidade; a cor variavel aparece no overlay do percurso.
+        col = QColor(Qt::white);
         width = fast_outline ? 1.0 : 1.2;
     }
 

@@ -17,6 +17,7 @@ const QMap<QString, QString>& colors() {
         {"accent_light", "#268fff"},
         {"drawing", "#e0e0e0"},
         {"canvas", "#1e1e1e"},
+        {"desbaste", "#7896d2"},
     };
     return table;
 }

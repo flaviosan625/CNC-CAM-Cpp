@@ -82,6 +82,7 @@ public:
 
     bool open_file(const QString& path);
     void show_3d_view();
+    void activate_tool(const QString& name);
     cad::Document& document() noexcept { return document_; }
     const cad::Document& document() const noexcept { return document_; }
 
@@ -96,7 +97,6 @@ private:
     bool recalculate_order_service_if_geometry_changed();
     void generate_order_service_pdf();
     void create_legacy_toolpath_panel();
-    void activate_tool(const QString& name);
     void activate_dimension(const QString& mode);
     void edit_dimension_style();
     void refresh_document_view();
@@ -179,6 +179,7 @@ private:
     std::vector<RegisteredJobRecord> job_history_;
     std::vector<std::pair<std::string, uint64_t>> order_service_geometry_versions_;
     bool order_service_geometry_snapshot_valid_ = false;
+    bool order_service_preview_dirty_ = true;
 
     cad::Document document_;
     std::vector<cad::EntityPtr> clipboard_entities_;

@@ -9,7 +9,7 @@ namespace cnc::cam {
 std::vector<Toolpath> generate_inlay(const std::vector<cad::EntityPtr>& entities, const Tool& tool,
                                      const cad::MaterialSetup& material, const InlaySettings& s) {
     PocketSettings pocket_settings;
-    pocket_settings.name = s.name + " -- bolso";
+    pocket_settings.name = s.name + " -- desbaste da base";
     pocket_settings.start_depth = s.start_depth;
     pocket_settings.cut_depth = s.pocket_depth;
     std::vector<Toolpath> pocket_tps = generate_pocket(entities, tool, material, pocket_settings);

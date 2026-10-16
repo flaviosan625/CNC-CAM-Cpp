@@ -17,6 +17,8 @@
 #include <QUrl>
 #include <QWheelEvent>
 
+#include <cmath>
+
 #include "io/importers.hpp"
 #include "tools/cursors.hpp"
 #include "viewport/canvas_2d.hpp"
@@ -92,10 +94,13 @@ void Canvas2D::dropEvent(QDropEvent* event) {
 // -- mouse --
 
 void Canvas2D::wheelEvent(QWheelEvent* event) {
-    begin_navigation_preview();
-    const double f = event->angleDelta().y() > 0 ? 1.15 : 1 / 1.15;
-    scale(f, f);
-    emit view_changed();
+    // Qt entrega 120 unidades por entalhe, mas mouses de alta resolucao podem
+    // enviar varios eventos menores. Cada evento deve mover so sua fracao.
+    const double steps = event->angleDelta().y() != 0
+        ? event->angleDelta().y() / 120.0
+        : event->pixelDelta().y() / 120.0;
+    if (steps != 0.0) zoom_by(std::pow(1.15, steps));
+    event->accept();
 }
 
 std::set<std::string> Canvas2D::dragging_ids() const {
@@ -106,11 +111,14 @@ std::set<std::string> Canvas2D::dragging_ids() const {
 }
 
 void Canvas2D::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::MiddleButton) {
+    if (event->button() == Qt::MiddleButton ||
+        (event->button() == Qt::LeftButton && (is_pan_active() || space_pressed_))) {
         begin_navigation_preview();
         panning_ = true;
+        pan_accumulator_ = QPointF(0, 0);
         last_pan_ = event->position();
         setCursor(Qt::ClosedHandCursor);
+        event->accept();
         return;
     }
     finish_navigation_preview();
@@ -149,11 +157,8 @@ void Canvas2D::mouseMoveEvent(QMouseEvent* event) {
     if (panning_) {
         const QPointF d = pos - last_pan_;
         last_pan_ = pos;
-        QScrollBar* hs = horizontalScrollBar();
-        QScrollBar* vs = verticalScrollBar();
-        hs->setValue(hs->value() - static_cast<int>(d.x()));
-        vs->setValue(vs->value() - static_cast<int>(d.y()));
-        emit view_changed();
+        pan_by(d);
+        event->accept();
         return;
     }
 
@@ -195,6 +200,10 @@ void Canvas2D::apply_cursor_code(int code) {
 // clicar, se vai girar, escalar ou mover. Em outras ferramentas o cursor e da ferramenta e nao deve
 // ser mexido aqui.
 void Canvas2D::update_hover_cursor(double wx, double wy) {
+    if (space_pressed_ || is_pan_active()) {
+        setCursor(panning_ ? Qt::ClosedHandCursor : Qt::OpenHandCursor);
+        return;
+    }
     if (!tool_ || tool_->name() != "select" || !handles.visible()) {
         // Fora da selecao, o cursor e da ferramenta: restaurar se foi alterado por hover anterior.
         if (hover_cursor_) {
@@ -225,9 +234,16 @@ void Canvas2D::update_hover_cursor(double wx, double wy) {
 }
 
 void Canvas2D::mouseReleaseEvent(QMouseEvent* event) {
-    if (event->button() == Qt::MiddleButton) {
+    if (panning_ && (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton)) {
         panning_ = false;
-        setCursor(tool_ ? tool_->cursor() : QCursor(Qt::ArrowCursor));
+        pan_accumulator_ = QPointF(0, 0);
+        finish_navigation_preview();
+        if (space_pressed_ || is_pan_active()) {
+            setCursor(Qt::OpenHandCursor);
+        } else {
+            setCursor(tool_ ? tool_->cursor() : QCursor(Qt::ArrowCursor));
+        }
+        event->accept();
         return;
     }
     if (dragging_tab_marker_) {
@@ -302,6 +318,12 @@ bool Canvas2D::event(QEvent* ev) {
 }
 
 void Canvas2D::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat() && !text_input_has_focus()) {
+        space_pressed_ = true;
+        setCursor(panning_ ? Qt::ClosedHandCursor : Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
     const int zoom = zoom_direction(event);
     if (zoom != 0 && !text_input_has_focus()) {
         zoom_by(zoom > 0 ? 1.25 : 1.0 / 1.25);
@@ -332,7 +354,35 @@ void Canvas2D::keyPressEvent(QKeyEvent* event) {
     QGraphicsView::keyPressEvent(event);
 }
 
+void Canvas2D::keyReleaseEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Space && !event->isAutoRepeat()) {
+        space_pressed_ = false;
+        if (!panning_) {
+            setCursor(is_pan_active() ? Qt::OpenHandCursor
+                                      : (tool_ ? tool_->cursor() : QCursor(Qt::ArrowCursor)));
+        }
+        event->accept();
+        return;
+    }
+    QGraphicsView::keyReleaseEvent(event);
+}
+
+void Canvas2D::focusOutEvent(QFocusEvent* event) {
+    if (space_pressed_) {
+        space_pressed_ = false;
+        if (!panning_) {
+            setCursor(is_pan_active() ? Qt::OpenHandCursor
+                                      : (tool_ ? tool_->cursor() : QCursor(Qt::ArrowCursor)));
+        }
+    }
+    QGraphicsView::focusOutEvent(event);
+}
+
 void Canvas2D::cancel_current_operation() {
+    panning_ = false;
+    space_pressed_ = false;
+    pan_accumulator_ = QPointF(0, 0);
+    finish_navigation_preview();
     // Esc abandona a operacao inteira; nao deixa a ferramenta limpar apenas uma etapa e continuar ativa.
     if (tool_) tool_->cancel();
     emit cancel_requested();

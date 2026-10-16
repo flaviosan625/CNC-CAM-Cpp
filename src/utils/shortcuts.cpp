@@ -12,7 +12,7 @@ const Table& defaults() {
         {"V", "select"}, {"L", "line"},       {"P", "polyline"},   {"R", "rectangle"},
         {"C", "circle"}, {"E", "ellipse"},    {"A", "arc"},        {"T", "scale"},
         {"M", "move"},   {"G", "group"},      {"U", "ungroup"},    {"N", "node_edit"},
-        {"F", "zoom_fit"}, {"DELETE", "delete"}, {"BACKSPACE", "delete"},
+        {"F", "zoom_fit"}, {"H", "pan"},      {"DELETE", "delete"}, {"BACKSPACE", "delete"},
     };
     return table;
 }

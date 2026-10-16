@@ -180,6 +180,19 @@ ToolpathJob ToolpathJob::from_json(const Json& data) {
     job.settings = settings_from_json(job.kind, data.contains("settings") ? data.at("settings") : Json::object());
     job.id = jget<std::string>(data, "id", new_id());
     job.name = jget<std::string>(data, "name", "Percurso");
+    // Projetos antigos guardavam o nome automatico "Bolso N". Atualiza so
+    // esse padrao; nomes escritos pelo usuario continuam como foram salvos.
+    if (job.kind == ToolpathType::Pocket) {
+        if (job.name == "Bolso") {
+            job.name = "Desbaste";
+        } else if (job.name.rfind("Bolso ", 0) == 0) {
+            const std::string suffix = job.name.substr(6);
+            if (!suffix.empty() && std::all_of(suffix.begin(), suffix.end(),
+                                               [](char digit) { return digit >= '0' && digit <= '9'; }))
+                job.name = "Desbaste " + suffix;
+        }
+        set_settings_name(job.settings, job.name);
+    }
     job.visible = jget<bool>(data, "visible", true);
     job.tool = Tool::from_json(data.contains("tool") ? data.at("tool") : Json::object());
     job.entity_ids = jget<std::vector<std::string>>(data, "entity_ids", {});

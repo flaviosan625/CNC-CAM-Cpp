@@ -5,17 +5,41 @@
 #include <cmath>
 
 #include <QBrush>
+#include <QBackingStore>
 #include <QColor>
 #include <QPainter>
 #include <QPen>
+#include <QScrollBar>
 
 #include "ui/theme.hpp"
 
 namespace cnc::vp {
 
+namespace {
+
+QImage last_painted_viewport(QWidget* viewport) {
+    QBackingStore* backing = viewport->backingStore();
+    if (!backing) return {};
+    auto* frame = dynamic_cast<QImage*>(backing->paintDevice());
+    if (!frame || frame->isNull()) return {};
+
+    const qreal dpr = frame->devicePixelRatio();
+    const QPoint origin = viewport->mapTo(viewport->window(), QPoint(0, 0));
+    const QRect pixels(qRound(origin.x() * dpr), qRound(origin.y() * dpr),
+                       qRound(viewport->width() * dpr), qRound(viewport->height() * dpr));
+    if (!frame->rect().contains(pixels)) return {};
+    return frame->copy(pixels);
+}
+
+}  // namespace
+
 Canvas2D::Canvas2D(QWidget* parent) : QGraphicsView(parent) {
     scene_ = new QGraphicsScene(this);
     setScene(scene_);
+    // Em chapas com milhares de pecas, subcontornos menores que um pixel nao
+    // contribuem para a imagem. Permanecem na cena para selecao e reaparecem
+    // automaticamente ao aproximar.
+    scene_->setMinimumRenderSize(0.75);
 
     setRenderHint(QPainter::Antialiasing);
     setDragMode(QGraphicsView::NoDrag);
@@ -42,7 +66,7 @@ Canvas2D::Canvas2D(QWidget* parent) : QGraphicsView(parent) {
                 finish_navigation_preview();
             } else {
                 update_navigation_preview_transform();
-                navigation_preview_timer_->start(500);
+                navigation_preview_timer_->start(90);
             }
         }
         const qreal scale = transform().m11();
@@ -81,7 +105,7 @@ void Canvas2D::set_document(cad::Document* doc) {
     if (doc) {
         material_width = doc->material.width;
         material_height = doc->material.height;
-        const double margin = std::max(material_width, material_height) * 3;
+        const double margin = std::max({material_width, material_height, 2000.0}) * 5000.0;
         scene_->setSceneRect(-margin, -margin, material_width + 2 * margin,
                              material_height + 2 * margin);
     }
@@ -102,23 +126,63 @@ void Canvas2D::setup_material(double width, double height) {
     }
     material_width = width;
     material_height = height;
-    const double margin = std::max(width, height) * 3;
+    const double margin = std::max({width, height, 2000.0}) * 5000.0;
     scene_->setSceneRect(-margin, -margin, width + 2 * margin, height + 2 * margin);
     rebuild_background();
     refresh_entities();
     fit_view();
 }
 
+void Canvas2D::ensure_infinite_scene_rect() {
+    const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
+    const QRectF current = scene_->sceneRect();
+    const double pad = std::max({visible.width() * 8.0, visible.height() * 8.0, 5000000.0});
+    const double margin_check = pad * 0.25;
+
+    if (!current.isValid() ||
+        visible.left() <= current.left() + margin_check ||
+        visible.right() >= current.right() - margin_check ||
+        visible.top() <= current.top() + margin_check ||
+        visible.bottom() >= current.bottom() - margin_check) {
+        const QPointF scene_center = mapToScene(viewport()->rect().center());
+        QRectF new_rect = current.isValid() ? current.united(visible) : visible;
+        new_rect.adjust(-pad, -pad, pad, pad);
+        scene_->setSceneRect(new_rect);
+        centerOn(scene_center);
+    }
+}
+
+void Canvas2D::pan_by(const QPointF& delta) {
+    if (delta.isNull()) return;
+    pan_accumulator_ += delta;
+    const int dx = static_cast<int>(pan_accumulator_.x());
+    const int dy = static_cast<int>(pan_accumulator_.y());
+    if (dx == 0 && dy == 0) return;
+    pan_accumulator_.rx() -= dx;
+    pan_accumulator_.ry() -= dy;
+
+    ensure_infinite_scene_rect();
+
+    QScrollBar* hs = horizontalScrollBar();
+    QScrollBar* vs = verticalScrollBar();
+    hs->setValue(hs->value() - dx);
+    vs->setValue(vs->value() - dy);
+    emit view_changed();
+}
+
 void Canvas2D::fit_view() {
     const double m = std::max(material_width, material_height) * 0.08;
     begin_navigation_preview();
+    ensure_infinite_scene_rect();
     fitInView(-m, -m, material_width + 2 * m, material_height + 2 * m, Qt::KeepAspectRatio);
     emit view_changed();
 }
 
 void Canvas2D::zoom_by(double factor) {
     begin_navigation_preview();
+    ensure_infinite_scene_rect();
     scale(factor, factor);
+    ensure_infinite_scene_rect();
     emit view_changed();
 }
 
@@ -149,24 +213,37 @@ void Canvas2D::zoom_selection() {
 }
 
 void Canvas2D::begin_navigation_preview() {
-    if (navigation_preview_active_ || ent_items_.size() < 128 || !viewport()->isVisible()) return;
-    QImage image = viewport()->grab().toImage();
+    if (navigation_preview_active_ || !viewport()->isVisible()) return;
+    constexpr size_t kMinPreviewEntities = 128;
+    constexpr int kMinPreviewPathElements = 4096;
+    if (ent_items_.size() < kMinPreviewEntities) {
+        int path_elements = 0;
+        for (const EntityItem* item : ent_items_) {
+            if (item) path_elements += item->path().elementCount();
+            if (path_elements >= kMinPreviewPathElements) break;
+        }
+        for (const QGraphicsItem* item : tp_items_) {
+            if (path_elements >= kMinPreviewPathElements) break;
+            if (const auto* path = dynamic_cast<const QGraphicsPathItem*>(item))
+                path_elements += path->path().elementCount();
+        }
+        // Um unico vetor ou percurso pode conter milhares de trechos.
+        if (path_elements < kMinPreviewPathElements) return;
+    }
+    QImage image = last_painted_viewport(viewport());
+    if (image.isNull()) image = viewport()->grab().toImage();
     if (image.isNull()) return;
 
     navigation_preview_image_ = std::move(image);
     navigation_preview_viewport_size_ = viewport()->size();
-    navigation_preview_previous_viewport_transform_ = viewportTransform();
+    navigation_preview_capture_viewport_transform_ = viewportTransform();
     navigation_preview_transform_.reset();
-    navigation_preview_hidden_items_.clear();
-    navigation_preview_hidden_items_.reserve(ent_items_.size());
-    for (EntityItem* item : ent_items_) {
-        if (item && item->isVisible()) {
-            navigation_preview_hidden_items_.push_back(item);
-            item->setVisible(false);
-        }
-    }
     navigation_preview_active_ = true;
-    navigation_preview_timer_->start(500);
+    // O modo indireto chama drawItems(), que ignora a pintura dos vetores
+    // enquanto a imagem anterior acompanha a roda. Evita alterar a visibilidade
+    // de milhares de itens e reconstruir o indice da cena ao terminar o zoom.
+    setOptimizationFlag(QGraphicsView::IndirectPainting, true);
+    navigation_preview_timer_->start(90);
     viewport()->update();
 }
 
@@ -177,18 +254,21 @@ void Canvas2D::finish_navigation_preview() {
     const bool zoom_changed = bulk_selection_proxy_persistent_ &&
                               std::fabs(transform().m11() - bulk_selection_proxy_scale_) > 1e-6;
     if (zoom_changed) clear_bulk_selection_proxy();
-    for (EntityItem* item : navigation_preview_hidden_items_) {
-        if (item && item->scene() == scene_) item->setVisible(true);
-    }
-    navigation_preview_hidden_items_.clear();
     navigation_preview_image_ = {};
     navigation_preview_active_ = false;
+    setOptimizationFlag(QGraphicsView::IndirectPainting, false);
     viewport()->update();
+}
+
+void Canvas2D::drawItems(QPainter* painter, int numItems, QGraphicsItem* items[],
+                         const QStyleOptionGraphicsItem options[]) {
+    if (!navigation_preview_active_)
+        QGraphicsView::drawItems(painter, numItems, items, options);
 }
 
 void Canvas2D::update_navigation_preview_transform() {
     bool invertible = false;
-    const QTransform screen_to_scene = navigation_preview_previous_viewport_transform_.inverted(&invertible);
+    const QTransform screen_to_scene = navigation_preview_capture_viewport_transform_.inverted(&invertible);
     if (!invertible) return;
 
     const QSize size = navigation_preview_viewport_size_;
@@ -202,7 +282,6 @@ void Canvas2D::update_navigation_preview_transform() {
 
     QTransform mapped;
     if (QTransform::quadToQuad(source, destination, mapped)) navigation_preview_transform_ = mapped;
-    navigation_preview_previous_viewport_transform_ = current;
 }
 
 void Canvas2D::drawForeground(QPainter* painter, const QRectF& rect) {

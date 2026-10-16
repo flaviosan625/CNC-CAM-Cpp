@@ -174,6 +174,9 @@ public:
     void zoom_selection();
     void set_grid_visible(bool visible);
     void reload_shortcuts();
+    bool is_pan_active() const { return (tool_ && tool_->name() == "pan") || space_pressed_; }
+    void pan_by(const QPointF& delta);
+    void ensure_infinite_scene_rect();
 
     // -- coordenadas --
     QPointF world_to_scene(double x, double y) const { return {x, material_height - y}; }
@@ -253,6 +256,8 @@ protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     bool event(QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private:
@@ -268,6 +273,8 @@ private:
     void begin_navigation_preview();
     void finish_navigation_preview();
     void update_navigation_preview_transform();
+    void drawItems(QPainter* painter, int numItems, QGraphicsItem* items[],
+                   const QStyleOptionGraphicsItem options[]) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
     std::optional<BBox> selection_bbox() const;
     void update_hover_cursor(double wx, double wy);
@@ -285,7 +292,9 @@ private:
     QGraphicsScene* scene_;
 
     bool panning_ = false;
+    bool space_pressed_ = false;
     QPointF last_pan_;
+    QPointF pan_accumulator_{};
     // A ferramenta ja usou este clique direito (polilinha e estender terminam com ele): nao abrir
     // menu por cima.
     bool right_consumed_ = false;
@@ -307,8 +316,7 @@ private:
     QImage navigation_preview_image_;
     QSize navigation_preview_viewport_size_;
     QTransform navigation_preview_transform_;
-    QTransform navigation_preview_previous_viewport_transform_;
-    std::vector<EntityItem*> navigation_preview_hidden_items_;
+    QTransform navigation_preview_capture_viewport_transform_;
     bool navigation_preview_active_ = false;
     std::set<std::string> fit_warning_ids_;
     std::vector<QGraphicsItem*> fit_warning_items_;

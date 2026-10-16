@@ -14,7 +14,7 @@ namespace cnc::cam {
 const char* toolpath_label(ToolpathType t) {
     switch (t) {
         case ToolpathType::Profile: return "Perfil";
-        case ToolpathType::Pocket: return "Bolso";
+        case ToolpathType::Pocket: return "Desbaste";
         case ToolpathType::Drill: return "Furação";
         case ToolpathType::VCarve: return "Entalhe V";
         case ToolpathType::Fluting: return "Canais (Fluting)";

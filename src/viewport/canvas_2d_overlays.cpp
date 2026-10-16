@@ -1,17 +1,91 @@
 // Porte de src/viewport/canvas_2d.py: snap, percursos, pontes, preview e medicao.
 #include <algorithm>
+#include <array>
+#include <bit>
+#include <cmath>
+#include <cstdint>
+#include <iterator>
+#include <set>
+#include <unordered_set>
 
 #include <QBrush>
 #include <QColor>
 #include <QFont>
+#include <QPainter>
 #include <QPainterPath>
 #include <QPen>
+#include <QStyleOptionGraphicsItem>
 #include <QTimer>
 
 #include "ui/theme.hpp"
 #include "viewport/canvas_2d.hpp"
 
 namespace cnc::vp {
+
+namespace {
+
+using SegmentKey = std::array<std::uint64_t, 4>;
+
+struct SegmentHash {
+    size_t operator()(const SegmentKey& key) const noexcept {
+        size_t hash = 0;
+        for (const std::uint64_t value : key)
+            hash ^= std::hash<std::uint64_t>{}(value) + 0x9e3779b97f4a7c15ULL +
+                    (hash << 6) + (hash >> 2);
+        return hash;
+    }
+};
+
+SegmentKey xy_segment_key(QPointF from, QPointF to) {
+    if (from.x() > to.x() || (from.x() == to.x() && from.y() > to.y()))
+        std::swap(from, to);
+    const auto bits = [](double value) {
+        return std::bit_cast<std::uint64_t>(value == 0.0 ? 0.0 : value);
+    };
+    return {bits(from.x()), bits(from.y()), bits(to.x()), bits(to.y())};
+}
+
+class ToolpathArrowItem final : public QGraphicsPathItem {
+public:
+    struct Arrow {
+        QPointF left;
+        QPointF tip;
+        QPointF right;
+        int run_index;
+    };
+
+    ToolpathArrowItem(const QPainterPath& full_path, std::vector<Arrow> arrows)
+        : QGraphicsPathItem(full_path), arrows_(std::move(arrows)) {
+        setFlag(QGraphicsItem::ItemUsesExtendedStyleOption);
+    }
+
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
+        if (arrows_.size() < 256) {
+            QGraphicsPathItem::paint(painter, option, widget);
+            return;
+        }
+
+        const qreal lod = std::max<qreal>(0.01, QStyleOptionGraphicsItem::levelOfDetailFromTransform(
+                                                  painter->worldTransform()));
+        const int stride = std::clamp(static_cast<int>(std::ceil(2.5 / lod)), 1, 64);
+        const QRectF visible = option->exposedRect.adjusted(-10.0, -10.0, 10.0, 10.0);
+        QPainterPath displayed;
+        for (const Arrow& arrow : arrows_) {
+            if (arrow.run_index % stride != 0 || !visible.contains(arrow.tip)) continue;
+            displayed.moveTo(arrow.left);
+            displayed.lineTo(arrow.tip);
+            displayed.lineTo(arrow.right);
+        }
+        painter->setPen(pen());
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(displayed);
+    }
+
+private:
+    std::vector<Arrow> arrows_;
+};
+
+}  // namespace
 
 // -- snap --
 
@@ -127,20 +201,22 @@ QPen Canvas2D::tp_pen(const QColor& color, double width, bool dashed) {
 // vetores para nao atrapalhar o clique de selecao, e o deslocamento rapido fica visivel de
 // proposito - e onde se enxerga a fresa atravessando onde nao devia.
 void Canvas2D::refresh_toolpaths(const std::vector<const cam::Toolpath*>& toolpaths) {
+    finish_navigation_preview();
     clear_items(tp_items_);
     for (size_t index = 0; index < toolpaths.size(); ++index) {
         const cam::Toolpath& tp = *toolpaths[index];
         if (!tp.visible || tp.moves.empty()) continue;
 
         // Padrão de cores por operação:
-        // Rebaixo: Laranja/Âmbar (#f59e0b)
+        // Desbaste: azul discreto, sem brilho
         // Corte fora (externo): Magenta (#e040fb)
         // Corte dentro (interno): Verde esmeralda (#10b981)
         // Corte sobre linha: Ciano (#00e5ff)
         // Furação: Azul claro (#38bdf8)
         QColor color;
-        if (tp.kind == cam::ToolpathType::Pocket) {
-            color = QColor("#f59e0b");
+        const bool is_desbaste = tp.kind == cam::ToolpathType::Pocket;
+        if (is_desbaste) {
+            color = QColor(ui::color("desbaste"));
         } else if (tp.kind == cam::ToolpathType::Profile) {
             if (tp.profile_side == cam::ProfileSide::Inside) {
                 color = QColor("#10b981");
@@ -180,29 +256,73 @@ void Canvas2D::refresh_toolpaths(const std::vector<const cam::Toolpath*>& toolpa
         }
 
         QPainterPath cut, rapid, arrow_path;
+        std::vector<ToolpathArrowItem::Arrow> arrows;
+        std::set<std::array<double, 6>> seen_arrows;
+        std::unordered_set<SegmentKey, SegmentHash> seen_desbaste_segments;
+        if (is_desbaste)
+            seen_desbaste_segments.reserve(std::min<size_t>(tp.moves.size(), 200000));
         std::optional<QPointF> prev;
         std::optional<QPointF> first_cut_target;
         double accumulated_dist = 0.0;
+        int arrow_run_index = 0;
+        std::optional<QPointF> cut_anchor, cut_pending, rapid_anchor, rapid_pending;
+        const auto flush_run = [](QPainterPath& path, std::optional<QPointF>& anchor,
+                                  std::optional<QPointF>& pending) {
+            if (anchor && pending && *anchor != *pending) path.lineTo(*pending);
+            anchor.reset();
+            pending.reset();
+        };
+        const auto add_segment = [&](QPainterPath& path, std::optional<QPointF>& anchor,
+                                     std::optional<QPointF>& pending,
+                                     const QPointF& from, const QPointF& to) {
+            if (from == to) return;
+            if (!pending || *pending != from) {
+                flush_run(path, anchor, pending);
+                path.moveTo(from);
+                anchor = from;
+                pending = to;
+                return;
+            }
+            const QPointF a = *pending - *anchor;
+            const QPointF b = to - *pending;
+            const double dot = a.x() * b.x() + a.y() * b.y();
+            const double cross = a.x() * b.y() - a.y() * b.x();
+            // Preserva cantos e comprime apenas trechos retos do desenho.
+            if (dot > 0.0 && std::fabs(cross) <= 1e-12 * std::hypot(a.x(), a.y()) * std::hypot(b.x(), b.y())) {
+                pending = to;
+                return;
+            }
+            path.lineTo(*pending);
+            anchor = *pending;
+            pending = to;
+        };
 
         for (const cam::Move& m : tp.moves) {
             if (m.kind == cam::MoveKind::Dwell) continue;
             const QPointF target = world_to_scene(m.x, m.y);
-            if (!prev) {
-                cut.moveTo(target);
-                rapid.moveTo(target);
-            } else {
+            if (prev) {
                 if (m.kind == cam::MoveKind::Rapid) {
-                    rapid.moveTo(*prev);
-                    rapid.lineTo(target);
+                    flush_run(cut, cut_anchor, cut_pending);
+                    add_segment(rapid, rapid_anchor, rapid_pending, *prev, target);
                     accumulated_dist = 0.0;
+                    arrow_run_index = 0;
                 } else {
-                    cut.moveTo(*prev);
-                    cut.lineTo(target);
+                    flush_run(rapid, rapid_anchor, rapid_pending);
+                    // Passadas em Z repetem o mesmo desenho XY. Uma unica
+                    // linha na tela basta; os movimentos originais seguem no CAM.
+                    if (!is_desbaste || seen_desbaste_segments.insert(xy_segment_key(*prev, target)).second)
+                        add_segment(cut, cut_anchor, cut_pending, *prev, target);
+                    else
+                        flush_run(cut, cut_anchor, cut_pending);
                     if (!first_cut_target) {
                         first_cut_target = *prev;
                     }
 
                     // Gera setas indicando sentido ao longo do percurso de corte
+                    if (is_desbaste) {
+                        prev = target;
+                        continue;
+                    }
                     const QPointF delta = target - *prev;
                     const double seg_len = std::hypot(delta.x(), delta.y());
                     if (seg_len > 0.01 && std::isfinite(seg_len)) {
@@ -217,9 +337,16 @@ void Canvas2D::refresh_toolpaths(const std::vector<const cam::Toolpath*>& toolpa
                         while (d <= seg_len && ++arrow_count < 200) {
                             if (d >= 2.0) {
                                 const QPointF pt = *prev + dir * d;
-                                arrow_path.moveTo(pt - dir * al + norm * aw);
-                                arrow_path.lineTo(pt);
-                                arrow_path.lineTo(pt - dir * al - norm * aw);
+                                const QPointF left = pt - dir * al + norm * aw;
+                                const QPointF right = pt - dir * al - norm * aw;
+                                const std::array<double, 6> key = {
+                                    left.x(), left.y(), pt.x(), pt.y(), right.x(), right.y()};
+                                if (seen_arrows.insert(key).second) {
+                                    arrow_path.moveTo(left);
+                                    arrow_path.lineTo(pt);
+                                    arrow_path.lineTo(right);
+                                    arrows.push_back({left, pt, right, arrow_run_index++});
+                                }
                             }
                             d += step;
                         }
@@ -229,17 +356,29 @@ void Canvas2D::refresh_toolpaths(const std::vector<const cam::Toolpath*>& toolpa
             }
             prev = target;
         }
+        flush_run(cut, cut_anchor, cut_pending);
+        flush_run(rapid, rapid_anchor, rapid_pending);
 
         // Camada do percurso: rápido (tracejado vermelho), corte (linha com cor padronizada) e setas de sentido
+        QColor cut_color = color;
+        if (is_desbaste) cut_color.setAlpha(185);
         const std::pair<const QPainterPath*, QPen> layers[] = {
             {&rapid, tp_pen(QColor("#ef5350"), 1.1, true)},
-            {&cut, tp_pen(color, 2.0, false)},
+            {&cut, tp_pen(cut_color, is_desbaste ? 1.0 : 2.0, false)},
             {&arrow_path, tp_pen(color.darker(115), 1.6, false)},
         };
-        for (const auto& [path, pen] : layers) {
+        for (size_t layer_index = 0; layer_index < std::size(layers); ++layer_index) {
+            const auto& [path, pen] = layers[layer_index];
             if (path->isEmpty()) continue;
-            auto* item = new QGraphicsPathItem(*path);
-            item->setPen(pen);
+            QGraphicsPathItem* item = layer_index == 2 && arrows.size() >= 256
+                ? static_cast<QGraphicsPathItem*>(new ToolpathArrowItem(*path, std::move(arrows)))
+                : new QGraphicsPathItem(*path);
+            QPen display_pen = pen;
+            if (is_desbaste || path->elementCount() >= 1024) {
+                display_pen.setCapStyle(Qt::FlatCap);
+                display_pen.setJoinStyle(Qt::BevelJoin);
+            }
+            item->setPen(display_pen);
             item->setZValue(15);
             item->setAcceptedMouseButtons(Qt::NoButton);
             scene_->addItem(item);

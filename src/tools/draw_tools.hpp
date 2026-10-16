@@ -19,6 +19,23 @@ namespace cnc::tools {
 inline constexpr double kPickPx = 8.0;
 
 // ======================================================================
+// Mover vista (Pan / Hand tool)
+// ======================================================================
+
+class PanTool : public BaseTool {
+public:
+    using BaseTool::BaseTool;
+
+    std::string name() const override { return "pan"; }
+    std::string label() const override { return "Mover vista"; }
+    QCursor cursor() const override { return QCursor(Qt::OpenHandCursor); }
+    bool cursor_snap() const override { return false; }
+    std::string hint() const override {
+        return "Clique e arraste com o botão esquerdo para mover a vista livremente";
+    }
+};
+
+// ======================================================================
 // Selecao
 // ======================================================================
 

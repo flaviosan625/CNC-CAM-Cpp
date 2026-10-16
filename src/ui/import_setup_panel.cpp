@@ -2,31 +2,32 @@
 
 #include <algorithm>
 #include <array>
-#include <utility>
+#include <cmath>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
-#include <QSizePolicy>
-#include <QStringList>
-#include <QTabWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include "cad/material.hpp"
+#include "cam/presets.hpp"
+#include "cam/tools.hpp"
 #include "ui/safe_inputs.hpp"
 
 namespace cnc::ui {
+
 namespace {
 
 QLabel* explanation(const QString& text, QWidget* parent) {
     auto* label = new QLabel(text, parent);
     label->setWordWrap(true);
-    label->setMinimumWidth(0);
-    label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     label->setObjectName("MutedText");
     return label;
 }
@@ -78,6 +79,7 @@ void populate_sheet_presets(QComboBox* combo, const std::string& material_name) 
         combo->addItem(QString::fromStdString(preset.label), static_cast<int>(i));
     }
 }
+
 }  // namespace
 
 ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
@@ -87,51 +89,79 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
-    root->setSpacing(7);
+    root->setSpacing(8);
+
     auto* heading = new QLabel("PREPARAR DESENHO IMPORTADO", this);
     heading->setWordWrap(true);
     heading->setObjectName("ImportSetupHeading");
-    heading->setStyleSheet("background: #1f1f1f; color: #ffffff; border-bottom: 2px solid #0078d4; padding: 8px 10px; font-weight: 600; border-radius: 4px 4px 0 0;");
+    heading->setStyleSheet(
+        "background: #1f1f1f; color: #ffffff; border-bottom: 2px solid #0078d4; "
+        "padding: 8px 10px; font-weight: 600; border-radius: 4px 4px 0 0;");
     root->addWidget(heading);
 
-    tabs_ = new QTabWidget(this);
-    tabs_->setObjectName("ImportSetupTabs");
-    tabs_->setMinimumWidth(0);
-    tabs_->setStyleSheet(
-        "QTabWidget::pane { border: 1px solid #2b2b2b; background: #1f1f1f; }"
-        "QTabBar::tab { padding: 6px 12px; min-width: 0; background: #181818; border: 1px solid #2b2b2b; color: #cccccc; }"
-        "QTabBar::tab:selected { background: #252526; color: #ffffff; border-top: 2px solid #0078d4; border-bottom: 1px solid #252526; }");
-    root->addWidget(tabs_);
+    // 1. Banner de Geometria Real
+    geometry_banner_ = new QLabel(this);
+    geometry_banner_->setObjectName("ImportGeometryBanner");
+    geometry_banner_->setWordWrap(true);
+    geometry_banner_->setStyleSheet(
+        "background: #252526; color: #4fc3f7; padding: 7px 10px; border-radius: 4px; "
+        "font-weight: 600; border: 1px solid #3c3c3c;");
+    geometry_banner_->setVisible(false);
+    root->addWidget(geometry_banner_);
 
-    auto* work_page = new QWidget(tabs_);
-    auto* work_layout = new QVBoxLayout(work_page);
-    work_layout->setContentsMargins(8, 8, 8, 8);
-    work_layout->setSpacing(7);
-    auto* work_form_widget = new QWidget(work_page);
-    auto* work_form = stacked_form(work_form_widget);
+    inch_convert_button_ = new QPushButton("⚠ Peça pequena: Converter Polegadas → mm (×25.4)", this);
+    inch_convert_button_->setObjectName("ImportConvertInches");
+    inch_convert_button_->setStyleSheet("background: #5a3d00; color: #ffeb3b; border: 1px solid #ffb300; padding: 4px;");
+    inch_convert_button_->setVisible(false);
+    connect(inch_convert_button_, &QPushButton::clicked, this, &ImportSetupPanel::convertInchesRequested);
+    root->addWidget(inch_convert_button_);
 
-    material_combo_ = new SafeComboBox(work_page);
-    material_combo_->setObjectName("ImportMaterial");
-    prepare_combo(material_combo_);
-    for (const QString& material : {QString("PVC"), QString("MDF"), QString("Acrílico"),
-                                    QString("ACM"), QString("PS"), QString("Policarbonato"),
-                                    QString("Compensado"), QString("Alumínio")})
-        material_combo_->addItem(material == "PVC" ? QStringLiteral("PVC Expandido") : material, material);
-    work_form->addRow("O que vai cortar?", material_combo_);
+    // 2. Seção de Presets Rápidos da Oficina (1 Clique)
+    auto* preset_header = new QLabel("⚡ PRESET RÁPIDO DO MATERIAL", this);
+    preset_header->setStyleSheet("font-weight: 600; color: #e0e0e0; font-size: 8.5pt; margin-top: 4px;");
+    root->addWidget(preset_header);
 
-    thickness_ = millimeters(work_page);
+    house_preset_combo_ = new SafeComboBox(this);
+    house_preset_combo_->setObjectName("ImportPresetCombo");
+    prepare_combo(house_preset_combo_);
+    house_preset_combo_->addItem("— Selecionar Preset da Casa —", -1);
+    const auto& house_presets = cam::house_presets();
+    for (int i = 0; i < static_cast<int>(house_presets.size()); ++i) {
+        const auto& p = house_presets[static_cast<size_t>(i)];
+        house_preset_combo_->addItem(
+            QString("%1 %2 mm · Ø%3mm (%4 pass)")
+                .arg(QString::fromStdString(p.material))
+                .arg(p.thickness, 0, 'g', 6)
+                .arg(p.diameter, 0, 'g', 6)
+                .arg(p.passes()),
+            i);
+    }
+    house_preset_combo_->addItem("Personalizado / Outro", -2);
+    root->addWidget(house_preset_combo_);
+
+    // 3. Seção de Tamanho da Chapa
+    auto* stock_header = new QLabel("TAMANHO DA CHAPA", this);
+    stock_header->setStyleSheet("font-weight: 600; color: #e0e0e0; font-size: 8.5pt; margin-top: 4px;");
+    root->addWidget(stock_header);
+
+    stock_mode_combo_ = new SafeComboBox(this);
+    stock_mode_combo_->setObjectName("ImportStockMode");
+    prepare_combo(stock_mode_combo_);
+    stock_mode_combo_->addItem("Ajustar ao desenho (+20 mm folga)", 0);
+    stock_mode_combo_->addItem("Chapa comercial inteira", 1);
+    stock_mode_combo_->addItem("Medida personalizada (X × Y)", 2);
+    root->addWidget(stock_mode_combo_);
+
+    auto* stock_fields = new QWidget(this);
+    auto* stock_form = stacked_form(stock_fields);
+
+    thickness_ = millimeters(stock_fields);
     thickness_->setObjectName("ImportThickness");
     thickness_->setDecimals(2);
     thickness_->setMinimumWidth(80);
-    work_form->addRow("Espessura da chapa", thickness_);
+    stock_form->addRow("Espessura da chapa", thickness_);
 
-    sheet_preset_combo_ = new SafeComboBox(work_page);
-    sheet_preset_combo_->setObjectName("ImportSheetPreset");
-    prepare_combo(sheet_preset_combo_);
-    populate_sheet_presets(sheet_preset_combo_, material_combo_->currentData().toString().toStdString());
-    work_form->addRow("Tamanho comercial", sheet_preset_combo_);
-
-    auto* size_row = new QWidget(work_page);
+    auto* size_row = new QWidget(stock_fields);
     auto* size_layout = new QHBoxLayout(size_row);
     size_layout->setContentsMargins(0, 0, 0, 0);
     size_layout->setSpacing(6);
@@ -154,39 +184,102 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
     height_->setToolTip("Comprimento da chapa, eixo Y");
     size_layout->addWidget(width_, 1);
     size_layout->addWidget(height_, 1);
-    work_form->addRow("Chapa X × Y (mm)", size_row);
+    stock_form->addRow("Dimensões da chapa", size_row);
+    root->addWidget(stock_fields);
 
-    tools_combo_ = new SafeComboBox(work_page);
-    tools_combo_->setObjectName("ImportTool");
-    prepare_combo(tools_combo_);
-    work_form->addRow("Fresa", tools_combo_);
-    work_layout->addWidget(work_form_widget);
+    // 4. Seção de Rebaixo (Não-bloqueante)
+    has_recess_check_ = new QCheckBox("Esta peça possui rebaixo / usinagem rasa", this);
+    has_recess_check_->setObjectName("ImportHasRecessCheck");
+    has_recess_check_->setStyleSheet("font-weight: 500; color: #cccccc; margin-top: 4px;");
+    root->addWidget(has_recess_check_);
 
-    tool_summary_ = explanation({}, work_page);
-    tool_summary_->setObjectName("ImportToolSummary");
-    work_layout->addWidget(tool_summary_);
-
-    auto* answer_form_widget = new QWidget(work_page);
-    auto* answer_form = stacked_form(answer_form_widget);
-    recess_answer_ = new SafeComboBox(work_page);
+    // Dropdown oculto/sincronizado para manter contrato com testes e legados
+    recess_answer_ = new SafeComboBox(this);
     recess_answer_->setObjectName("ImportHasRecess");
     prepare_combo(recess_answer_);
     recess_answer_->addItem("Escolher: tem rebaixo?", -1);
     recess_answer_->addItem("Não", 0);
     recess_answer_->addItem("Sim", 1);
-    answer_form->addRow("Tem rebaixo?", recess_answer_);
-    work_layout->addWidget(answer_form_widget);
+    recess_answer_->setVisible(false);
+    root->addWidget(recess_answer_);
 
-    auto* origin_toggle = new QToolButton(work_page);
-    origin_toggle->setObjectName("ImportOriginToggle");
-    origin_toggle->setText("Conferir origem XY e Z");
-    origin_toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    origin_toggle->setArrowType(Qt::RightArrow);
-    origin_toggle->setCheckable(true);
-    work_layout->addWidget(origin_toggle);
-    auto* origin_fields = new QWidget(work_page);
-    auto* origin_form = stacked_form(origin_fields);
-    zero_xy_ = new SafeComboBox(origin_fields);
+    recess_fields_ = new QWidget(this);
+    auto* recess_fields_layout = new QVBoxLayout(recess_fields_);
+    recess_fields_layout->setContentsMargins(0, 0, 0, 0);
+    recess_fields_layout->setSpacing(6);
+
+    recess_intro_ = explanation(
+        "Selecione os contornos fechados no desenho. Use Shift para selecionar várias áreas. Depois marque a seleção como rebaixo.",
+        recess_fields_);
+    recess_fields_layout->addWidget(recess_intro_);
+
+    auto* recess_form_widget = new QWidget(recess_fields_);
+    auto* recess_form = stacked_form(recess_form_widget);
+    recess_depth_ = millimeters(recess_fields_);
+    recess_depth_->setObjectName("ImportRecessDepth");
+    recess_depth_->setValue(3.0);
+    recess_form->addRow("Profundidade do rebaixo", recess_depth_);
+    recess_fields_layout->addWidget(recess_form_widget);
+
+    recess_tool_summary_ = explanation({}, recess_fields_);
+    recess_fields_layout->addWidget(recess_tool_summary_);
+    recess_count_ = explanation({}, recess_fields_);
+    recess_count_->setObjectName("ImportRecessCount");
+    recess_fields_layout->addWidget(recess_count_);
+
+    assign_recess_ = new QPushButton("Marcar seleção como rebaixo", recess_fields_);
+    assign_recess_->setObjectName("ImportAssignRecess");
+    assign_recess_->setMinimumHeight(34);
+    recess_fields_layout->addWidget(assign_recess_);
+
+    create_recess_ = new QPushButton("Gerar desbaste", recess_fields_);
+    create_recess_->setObjectName("ImportCreateRecess");
+    create_recess_->setProperty("primary", true);
+    create_recess_->setMinimumHeight(34);
+    recess_fields_layout->addWidget(create_recess_);
+    recess_fields_layout->addWidget(explanation(
+        "Sequência do trabalho: rebaixo → corte interno → corte externo.", recess_fields_));
+    recess_fields_->setVisible(false);
+    root->addWidget(recess_fields_);
+
+    // 5. Configurações Avançadas (Retrátil)
+    advanced_toggle_ = new QToolButton(this);
+    advanced_toggle_->setObjectName("ImportAdvancedToggle");
+    advanced_toggle_->setText("Configurações Avançadas (Fresa e Origens)");
+    advanced_toggle_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    advanced_toggle_->setArrowType(Qt::RightArrow);
+    advanced_toggle_->setCheckable(true);
+    advanced_toggle_->setStyleSheet("color: #9cdcfe; margin-top: 4px;");
+    root->addWidget(advanced_toggle_);
+
+    advanced_fields_ = new QWidget(this);
+    auto* adv_form = stacked_form(advanced_fields_);
+
+    material_combo_ = new SafeComboBox(advanced_fields_);
+    material_combo_->setObjectName("ImportMaterial");
+    prepare_combo(material_combo_);
+    for (const QString& material : {QString("PVC"), QString("MDF"), QString("Acrílico"),
+                                    QString("ACM"), QString("PS"), QString("Policarbonato"),
+                                    QString("Compensado"), QString("Alumínio")})
+        material_combo_->addItem(material, material);
+    adv_form->addRow("Material base", material_combo_);
+
+    sheet_preset_combo_ = new SafeComboBox(advanced_fields_);
+    sheet_preset_combo_->setObjectName("ImportSheetPreset");
+    prepare_combo(sheet_preset_combo_);
+    populate_sheet_presets(sheet_preset_combo_, material_combo_->currentData().toString().toStdString());
+    adv_form->addRow("Tamanho comercial", sheet_preset_combo_);
+
+    tools_combo_ = new SafeComboBox(advanced_fields_);
+    tools_combo_->setObjectName("ImportTool");
+    prepare_combo(tools_combo_);
+    adv_form->addRow("Fresa de corte", tools_combo_);
+
+    tool_summary_ = explanation({}, advanced_fields_);
+    tool_summary_->setObjectName("ImportToolSummary");
+    adv_form->addRow(tool_summary_);
+
+    zero_xy_ = new SafeComboBox(advanced_fields_);
     zero_xy_->setObjectName("ImportZeroXY");
     prepare_combo(zero_xy_);
     const std::array<std::pair<QString, QString>, 9> origins = {{
@@ -197,87 +290,95 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
         {"Superior direito", "right/top"},
     }};
     for (const auto& [label, code] : origins) zero_xy_->addItem(label, code);
-    origin_form->addRow("Zero XY", zero_xy_);
-    zero_z_ = new SafeComboBox(origin_fields);
+    adv_form->addRow("Zero XY", zero_xy_);
+
+    zero_z_ = new SafeComboBox(advanced_fields_);
     zero_z_->setObjectName("ImportZeroZ");
     prepare_combo(zero_z_);
     zero_z_->addItem("Topo da chapa", "top");
     zero_z_->addItem("Base da chapa", "bottom");
-    origin_form->addRow("Zero Z", zero_z_);
-    origin_fields->setVisible(false);
-    work_layout->addWidget(origin_fields);
-    connect(origin_toggle, &QToolButton::toggled, this, [origin_toggle, origin_fields](bool expanded) {
-        origin_fields->setVisible(expanded);
-        origin_toggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    adv_form->addRow("Zero Z", zero_z_);
+
+    advanced_fields_->setVisible(false);
+    root->addWidget(advanced_fields_);
+
+    connect(advanced_toggle_, &QToolButton::toggled, this, [this](bool expanded) {
+        advanced_fields_->setVisible(expanded);
+        advanced_toggle_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
     });
 
-    apply_ = new QPushButton("Aplicar chapa e ferramenta", work_page);
+    // 6. Botões Principais de Ação
+    generate_cut_ = new QPushButton("⚡ GERAR CORTE AUTOMÁTICO", this);
+    generate_cut_->setObjectName("ImportGenerateCut");
+    generate_cut_->setProperty("primary", true);
+    generate_cut_->setMinimumHeight(42);
+    generate_cut_->setStyleSheet("font-weight: 700; font-size: 10pt;");
+    generate_cut_->setToolTip("Aplica a chapa e gera os percursos de corte automaticamente");
+    root->addWidget(generate_cut_);
+
+    apply_ = new QPushButton("Aplicar chapa e ferramenta", this);
     apply_->setObjectName("ImportApply");
-    apply_->setProperty("primary", true);
-    apply_->setMinimumHeight(36);
-    work_layout->addWidget(apply_);
-    work_layout->addWidget(explanation(
-        "O material orienta os parâmetros sugeridos. Todos os recursos e percursos continuam disponíveis.", work_page));
-    tabs_->addTab(work_page, "Trabalho");
+    apply_->setMinimumHeight(34);
+    root->addWidget(apply_);
 
-    auto* recess_page = new QWidget(tabs_);
-    auto* recess_layout = new QVBoxLayout(recess_page);
-    recess_layout->setContentsMargins(8, 8, 8, 8);
-    recess_layout->setSpacing(8);
-    recess_intro_ = explanation({}, recess_page);
-    recess_layout->addWidget(recess_intro_);
-    recess_fields_ = new QWidget(recess_page);
-    auto* recess_fields_layout = new QVBoxLayout(recess_fields_);
-    recess_fields_layout->setContentsMargins(0, 0, 0, 0);
-    recess_fields_layout->setSpacing(8);
-    recess_fields_layout->addWidget(explanation(
-        "Selecione os contornos fechados no desenho. Use Shift para selecionar várias áreas. Depois marque a seleção como rebaixo.", recess_fields_));
-    auto* recess_form_widget = new QWidget(recess_fields_);
-    auto* recess_form = stacked_form(recess_form_widget);
-    recess_depth_ = millimeters(recess_fields_);
-    recess_depth_->setObjectName("ImportRecessDepth");
-    recess_depth_->setValue(3.0);
-    recess_form->addRow("Profundidade do rebaixo", recess_depth_);
-    recess_fields_layout->addWidget(recess_form_widget);
-    recess_tool_summary_ = explanation({}, recess_fields_);
-    recess_fields_layout->addWidget(recess_tool_summary_);
-    recess_count_ = explanation({}, recess_fields_);
-    recess_count_->setObjectName("ImportRecessCount");
-    recess_fields_layout->addWidget(recess_count_);
-    assign_recess_ = new QPushButton("Marcar seleção como rebaixo", recess_fields_);
-    assign_recess_->setObjectName("ImportAssignRecess");
-    assign_recess_->setMinimumHeight(36);
-    recess_fields_layout->addWidget(assign_recess_);
-    create_recess_ = new QPushButton("Gerar rebaixo", recess_fields_);
-    create_recess_->setObjectName("ImportCreateRecess");
-    create_recess_->setProperty("primary", true);
-    create_recess_->setMinimumHeight(36);
-    recess_fields_layout->addWidget(create_recess_);
-    recess_fields_layout->addWidget(explanation(
-        "Sequência do trabalho: rebaixo → corte interno → corte externo.", recess_fields_));
-    recess_layout->addWidget(recess_fields_);
-    recess_layout->addStretch();
-    tabs_->addTab(recess_page, "Rebaixos");
+    auto* aux_row = new QWidget(this);
+    auto* aux_layout = new QHBoxLayout(aux_row);
+    aux_layout->setContentsMargins(0, 0, 0, 0);
+    aux_layout->setSpacing(6);
+    layers_button_ = new QPushButton("Camadas", aux_row);
+    layers_button_->setObjectName("ImportManageLayers");
+    toolpaths_button_ = new QPushButton("Ver percursos", aux_row);
+    toolpaths_button_->setObjectName("ImportOpenToolpaths");
+    aux_layout->addWidget(layers_button_);
+    aux_layout->addWidget(toolpaths_button_);
+    root->addWidget(aux_row);
 
-    status_ = explanation("Importe o desenho e confira os dados do trabalho.", this);
+    status_ = explanation("Escolha o material e gere o corte.", this);
     status_->setObjectName("ImportSetupStatus");
     root->addWidget(status_);
-    auto* layers = new QPushButton("Camadas / renomear", this);
-    layers->setObjectName("ImportManageLayers");
-    root->addWidget(layers);
-    auto* toolpaths = new QPushButton("Escolher percurso", this);
-    toolpaths->setObjectName("ImportOpenToolpaths");
-    root->addWidget(toolpaths);
 
-    connect(apply_, &QPushButton::clicked, this, &ImportSetupPanel::applyRequested);
+    // Conexões de eventos
+    connect(apply_, &QPushButton::clicked, this, [this] {
+        if (!recess_answered()) set_recess_answer(false);
+        emit applyRequested();
+    });
+    connect(generate_cut_, &QPushButton::clicked, this, [this] {
+        if (!recess_answered()) set_recess_answer(false);
+        emit generateAutomaticCutRequested();
+    });
     connect(assign_recess_, &QPushButton::clicked, this, &ImportSetupPanel::assignRecessRequested);
     connect(create_recess_, &QPushButton::clicked, this, &ImportSetupPanel::createRecessRequested);
-    connect(layers, &QPushButton::clicked, this, &ImportSetupPanel::manageLayersRequested);
-    connect(toolpaths, &QPushButton::clicked, this, &ImportSetupPanel::openToolpathsRequested);
-    connect(recess_answer_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+    connect(layers_button_, &QPushButton::clicked, this, &ImportSetupPanel::manageLayersRequested);
+    connect(toolpaths_button_, &QPushButton::clicked, this, &ImportSetupPanel::openToolpathsRequested);
+
+    connect(has_recess_check_, &QCheckBox::toggled, this, [this](bool checked) {
+        const QSignalBlocker blocker(recess_answer_);
+        const int target = checked ? 1 : 0;
+        const int idx = recess_answer_->findData(target);
+        if (idx >= 0) recess_answer_->setCurrentIndex(idx);
         refresh_recess_controls();
-        if (recess_answer_->currentData().toInt() == 1) tabs_->setCurrentIndex(1);
     });
+
+    connect(recess_answer_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        if (idx < 0) return;
+        const int val = recess_answer_->currentData().toInt();
+        const QSignalBlocker blocker(has_recess_check_);
+        has_recess_check_->setChecked(val == 1);
+        refresh_recess_controls();
+    });
+
+    connect(house_preset_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        if (idx < 0) return;
+        const int preset_idx = house_preset_combo_->currentData().toInt();
+        if (preset_idx >= 0) {
+            apply_house_preset(preset_idx);
+        }
+    });
+
+    connect(stock_mode_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+        update_stock_dimensions();
+    });
+
     connect(tools_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
         refresh_tool_summary();
         refresh_recess_controls();
@@ -288,10 +389,13 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
         populate_sheet_presets(sheet_preset_combo_, mat_name);
         const auto* preset = cad::find_sheet_preset(mat_name);
         if (preset) {
-            const QSignalBlocker bw(width_), bh(height_), bt(thickness_);
-            width_->setValue(preset->width);
-            height_->setValue(preset->height);
+            const QSignalBlocker bt(thickness_);
             thickness_->setValue(preset->default_thickness);
+            if (stock_mode_combo_ && stock_mode_combo_->currentIndex() == 1) {
+                const QSignalBlocker bw(width_), bh(height_);
+                width_->setValue(preset->width);
+                height_->setValue(preset->height);
+            }
             if (sheet_preset_combo_ && sheet_preset_combo_->count() > 1) sheet_preset_combo_->setCurrentIndex(1);
             for (int i = 0; i < static_cast<int>(tools_.size()); ++i) {
                 if (std::fabs(tools_[static_cast<size_t>(i)].diameter - preset->tool_diameter) < 0.1) {
@@ -301,11 +405,6 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
             }
             refresh_tool_summary();
             refresh_recess_controls();
-            set_status(QString("Material %1: medidas padrão %2 × %3 mm, espessura %4 mm reconhecidas.")
-                .arg(QString::fromStdString(preset->name))
-                .arg(preset->width, 0, 'f', 0)
-                .arg(preset->height, 0, 'f', 0)
-                .arg(preset->default_thickness, 0, 'f', 1));
         }
     });
 
@@ -321,18 +420,72 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
         thickness_->setValue(preset.default_thickness);
     });
 
-    const auto set_custom_preset = [this] {
+    const auto set_custom_stock = [this] {
+        if (stock_mode_combo_ && stock_mode_combo_->currentIndex() != 2) {
+            const QSignalBlocker blocker(stock_mode_combo_);
+            stock_mode_combo_->setCurrentIndex(2);
+        }
         if (sheet_preset_combo_ && sheet_preset_combo_->currentIndex() != 0) {
             const QSignalBlocker blocker(sheet_preset_combo_);
             sheet_preset_combo_->setCurrentIndex(0);
         }
     };
-    connect(width_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, set_custom_preset);
-    connect(height_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, set_custom_preset);
+    connect(width_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, set_custom_stock);
+    connect(height_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, set_custom_stock);
 
     set_material(material_);
     set_tools({});
     set_recess_selection_count(0);
+}
+
+void ImportSetupPanel::set_geometry_info(double width, double height, int closed_contours, int total_entities) {
+    piece_width_ = width;
+    piece_height_ = height;
+    closed_contours_ = closed_contours;
+    total_entities_ = total_entities;
+
+    if (geometry_banner_) {
+        if (width > 0.0 && height > 0.0) {
+            geometry_banner_->setText(QString("📐 Peça: %1 × %2 mm · %3 contornos")
+                                          .arg(width, 0, 'f', 1)
+                                          .arg(height, 0, 'f', 1)
+                                          .arg(closed_contours));
+            geometry_banner_->setVisible(true);
+        } else {
+            geometry_banner_->setVisible(false);
+        }
+    }
+
+    if (inch_convert_button_) {
+        const double max_dim = std::max(width, height);
+        inch_convert_button_->setVisible(max_dim > 0.01 && max_dim < 25.0);
+    }
+
+    update_stock_dimensions();
+}
+
+void ImportSetupPanel::update_stock_dimensions() {
+    const int mode = stock_mode_combo_ ? stock_mode_combo_->currentIndex() : 0;
+    if (mode == 0) {
+        // Auto-fit com 20 mm de borda
+        if (piece_width_ > 0.0 && piece_height_ > 0.0) {
+            const double margin = 20.0;
+            const double target_w = std::ceil(piece_width_ + margin * 2.0);
+            const double target_h = std::ceil(piece_height_ + margin * 2.0);
+            const QSignalBlocker bw(width_), bh(height_);
+            width_->setValue(std::max(10.0, target_w));
+            height_->setValue(std::max(10.0, target_h));
+        }
+    } else if (mode == 1) {
+        // Comercial
+        const std::string mat_name = material_combo_->currentData().toString().toStdString();
+        const auto* sheet_preset = cad::find_sheet_preset(mat_name);
+        if (sheet_preset) {
+            const QSignalBlocker bw(width_), bh(height_);
+            width_->setValue(sheet_preset->width);
+            height_->setValue(sheet_preset->height);
+        }
+    }
 }
 
 void ImportSetupPanel::set_material(const cad::MaterialSetup& material) {
@@ -373,8 +526,10 @@ void ImportSetupPanel::set_material(const cad::MaterialSetup& material) {
             break;
         }
     }
-    const QString origin = QString::fromStdString(material.zero_x + "/" + material.zero_y);
-    const int origin_index = zero_xy_->findData(origin);
+    const QString origin_code = QString("%1/%2")
+        .arg(QString::fromStdString(material.zero_x))
+        .arg(QString::fromStdString(material.zero_y));
+    const int origin_index = zero_xy_->findData(origin_code);
     if (origin_index >= 0) zero_xy_->setCurrentIndex(origin_index);
     const int z_index = zero_z_->findData(QString::fromStdString(material.zero_z));
     if (z_index >= 0) zero_z_->setCurrentIndex(z_index);
@@ -382,54 +537,138 @@ void ImportSetupPanel::set_material(const cad::MaterialSetup& material) {
 
 void ImportSetupPanel::set_tools(const std::vector<cam::Tool>& tools,
                                  std::optional<cam::Tool> preferred) {
-    if (!preferred && tools_combo_->currentIndex() >= 0 &&
-        tools_combo_->currentIndex() < static_cast<int>(tools_.size()))
-        preferred = tools_[static_cast<size_t>(tools_combo_->currentIndex())];
-    const QSignalBlocker blocker(tools_combo_);
     tools_ = tools;
-    if (preferred && std::find(tools_.begin(), tools_.end(), *preferred) == tools_.end())
-        tools_.push_back(*preferred);
+    const QSignalBlocker blocker(tools_combo_);
     tools_combo_->clear();
     int preferred_index = -1;
-    for (int i = 0; i < static_cast<int>(tools_.size()); ++i) {
-        const auto& tool = tools_[static_cast<size_t>(i)];
-        const QString label = QString("T%1 · %2 · Ø %3 mm")
-                                  .arg(tool.tool_number).arg(QString::fromStdString(tool.name))
-                                  .arg(tool.diameter, 0, 'g', 6);
-        tools_combo_->addItem(label);
-        tools_combo_->setItemData(i, label, Qt::ToolTipRole);
-        if (preferred && tool == *preferred) preferred_index = i;
+    for (size_t i = 0; i < tools_.size(); ++i) {
+        const auto& tool = tools_[i];
+        tools_combo_->addItem(
+            QString("T%1 · %2 · Ø %3 mm")
+                .arg(tool.tool_number)
+                .arg(QString::fromStdString(tool.name))
+                .arg(tool.diameter, 0, 'g', 6),
+            static_cast<int>(i));
+        if (preferred && preferred_index < 0 &&
+            ((tool.tool_number == preferred->tool_number && tool.name == preferred->name) ||
+             (std::fabs(tool.diameter - preferred->diameter) < 0.01 &&
+              tool.name == preferred->name))) {
+            preferred_index = static_cast<int>(i);
+        }
+    }
+    if (preferred_index < 0 && preferred) {
+        for (size_t i = 0; i < tools_.size(); ++i) {
+            if (std::fabs(tools_[i].diameter - preferred->diameter) < 0.01) {
+                preferred_index = static_cast<int>(i);
+                break;
+            }
+        }
     }
     if (preferred_index >= 0) tools_combo_->setCurrentIndex(preferred_index);
-    if (tools_.empty()) tools_combo_->addItem("Nenhuma fresa cadastrada");
-    tools_combo_->setEnabled(!tools_.empty());
+    else if (!tools_.empty()) tools_combo_->setCurrentIndex(0);
     refresh_tool_summary();
     refresh_recess_controls();
 }
 
 void ImportSetupPanel::begin_import(const cad::MaterialSetup& material,
-                                    const std::vector<cam::Tool>& tools,
-                                    std::optional<cam::Tool> preferred) {
+                                   const std::vector<cam::Tool>& tools,
+                                   std::optional<cam::Tool> preferred) {
     set_material(material);
-    set_tools(tools, std::move(preferred));
-    reset_recess_answer();
-    set_recess_selection_count(0);
-    set_marked_recess_count(0);
-    tabs_->setCurrentIndex(0);
+    set_tools(tools, preferred);
+    refresh_tool_summary();
+    refresh_recess_controls();
 }
 
 void ImportSetupPanel::reset_recess_answer() {
-    set_recess_answer(std::nullopt);
+    {
+        const QSignalBlocker blocker(recess_answer_);
+        recess_answer_->setCurrentIndex(0);
+    }
+    {
+        const QSignalBlocker blocker(has_recess_check_);
+        has_recess_check_->setChecked(false);
+    }
+    refresh_recess_controls();
 }
 
 void ImportSetupPanel::set_recess_answer(std::optional<bool> answer) {
-    const int answer_code = answer ? (*answer ? 1 : 0) : -1;
-    recess_answer_->setCurrentIndex(recess_answer_->findData(answer_code));
+    if (!answer.has_value()) {
+        reset_recess_answer();
+        return;
+    }
+    const int target = *answer ? 1 : 0;
+    const int idx = recess_answer_->findData(target);
+    if (idx >= 0) {
+        const QSignalBlocker blocker(recess_answer_);
+        recess_answer_->setCurrentIndex(idx);
+    }
+    {
+        const QSignalBlocker blocker(has_recess_check_);
+        has_recess_check_->setChecked(*answer);
+    }
     refresh_recess_controls();
 }
 
 void ImportSetupPanel::set_recess_depth(double depth) {
+    const QSignalBlocker blocker(recess_depth_);
     recess_depth_->setValue(depth);
+}
+
+int ImportSetupPanel::selected_preset_index() const {
+    if (!house_preset_combo_) return -1;
+    return house_preset_combo_->currentData().toInt();
+}
+
+void ImportSetupPanel::select_house_preset(int preset_index) {
+    if (!house_preset_combo_) return;
+    const int combo_idx = house_preset_combo_->findData(preset_index);
+    if (combo_idx >= 0) {
+        house_preset_combo_->setCurrentIndex(combo_idx);
+    }
+}
+
+void ImportSetupPanel::apply_house_preset(int preset_index) {
+    const auto& presets = cam::house_presets();
+    if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) return;
+    const auto& preset = presets[static_cast<size_t>(preset_index)];
+
+    // Espessura
+    {
+        const QSignalBlocker bt(thickness_);
+        thickness_->setValue(preset.thickness);
+    }
+
+    // Material
+    for (int i = 0; i < material_combo_->count(); ++i) {
+        if (normalize(material_combo_->itemData(i).toString().toStdString()) == normalize(preset.material)) {
+            const QSignalBlocker bm(material_combo_);
+            material_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // Fresa correspondente
+    for (int i = 0; i < static_cast<int>(tools_.size()); ++i) {
+        if (std::fabs(tools_[static_cast<size_t>(i)].diameter - preset.diameter) < 0.1) {
+            const QSignalBlocker btc(tools_combo_);
+            tools_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    update_stock_dimensions();
+
+    if (!recess_answered()) {
+        set_recess_answer(false);
+    }
+
+    refresh_tool_summary();
+    refresh_recess_controls();
+
+    set_status(QString("Preset %1 selecionado: Fresa Ø%2 mm, %3 passada(s).")
+                   .arg(QString::fromStdString(preset.name()))
+                   .arg(preset.diameter, 0, 'g', 6)
+                   .arg(preset.passes()));
 }
 
 ImportSetupValues ImportSetupPanel::values() const {
@@ -445,7 +684,7 @@ ImportSetupValues ImportSetupPanel::values() const {
         result.material.zero_y = origin[1].toStdString();
     }
     result.material.zero_z = zero_z_->currentData().toString().toStdString();
-    result.has_recess = recess_answer_->currentData().toInt() == 1;
+    result.has_recess = recess_answered() ? (recess_answer_->currentData().toInt() == 1) : false;
     result.recess_depth = recess_depth_->value();
     const int tool_index = tools_combo_->currentIndex();
     if (tool_index >= 0 && tool_index < static_cast<int>(tools_.size()))
@@ -476,15 +715,16 @@ void ImportSetupPanel::refresh_recess_controls() {
     const bool has_recess = answered && recess_answer_->currentData().toInt() == 1;
     recess_fields_->setVisible(has_recess);
     if (!answered)
-        recess_intro_->setText("Na aba Trabalho, responda se o desenho tem rebaixo para continuar.");
+        recess_intro_->setText("Escolha um preset ou marque se o trabalho tem rebaixo para continuar.");
     else if (!has_recess)
-        recess_intro_->setText("Trabalho sem rebaixo. Posicione o desenho e escolha o percurso desejado.");
+        recess_intro_->setText("Trabalho sem rebaixo. Clique em Gerar Corte ou posicione o desenho.");
     else
-        recess_intro_->setText("Indique as áreas e a profundidade. A ferramenta escolhida na aba Trabalho será usada no rebaixo.");
+        recess_intro_->setText("Indique as áreas e a profundidade. A ferramenta escolhida será usada no rebaixo.");
     const bool has_tool = !tools_.empty();
     recess_count_->setText(QString("Selecionados: %1 contornos · marcados: %2")
                               .arg(recess_selection_count_).arg(marked_recess_count_));
     apply_->setEnabled(answered && has_tool);
+    if (generate_cut_) generate_cut_->setEnabled(has_tool);
     assign_recess_->setEnabled(has_recess && has_tool && recess_selection_count_ > 0);
     create_recess_->setEnabled(has_recess && has_tool && marked_recess_count_ > 0);
 }
@@ -501,7 +741,7 @@ void ImportSetupPanel::refresh_tool_summary() {
                               .arg(tool.spindle_speed).arg(tool.feed_rate, 0, 'g', 6)
                               .arg(tool.plunge_rate, 0, 'g', 6).arg(tool.pass_depth, 0, 'g', 6)
                               .arg(tool.stepover, 0, 'g', 6));
-    recess_tool_summary_->setText(QString("Fresa: T%1 · %2 · Ø %3 mm\nPara trocar a fresa, abra a aba Trabalho.")
+    recess_tool_summary_->setText(QString("Fresa: T%1 · %2 · Ø %3 mm")
                                      .arg(tool.tool_number).arg(QString::fromStdString(tool.name))
                                      .arg(tool.diameter, 0, 'g', 6));
 }

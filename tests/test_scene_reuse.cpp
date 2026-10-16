@@ -11,7 +11,7 @@
 #include "viewport/canvas_2d.hpp"
 #include "viewport/entity_items.hpp"
 
-TEST_CASE("canvas: cache de clique acompanha edicao e cor de camada sem recriar a peca") {
+TEST_CASE("canvas: cache de clique acompanha edicao e vetor permanece branco") {
     cnc::cad::Document document;
     auto& layer = document.add_layer("Pecas");
     layer.color = {0.2, 0.7, 0.4};
@@ -38,7 +38,7 @@ TEST_CASE("canvas: cache de clique acompanha edicao e cor de camada sem recriar 
     for (auto* candidate : canvas.scene()->items())
         if (auto* drawing = dynamic_cast<cnc::vp::EntityItem*>(candidate)) item = drawing;
     REQUIRE(item != nullptr);
-    CHECK(item->pen().color() == QColor::fromRgbF(0.8f, 0.2f, 0.3f));
+    CHECK(item->pen().color() == QColor(Qt::white));
 }
 
 TEST_CASE("canvas: remover percurso conserva a cor original do vetor") {
@@ -64,6 +64,11 @@ TEST_CASE("canvas: remover percurso conserva a cor original do vetor") {
                   {cnc::cam::MoveKind::Cut, 20, 0, -2}};
     canvas.refresh_toolpaths({&path});
     CHECK(drawing->pen().color() == vector_color);
+    document.set_selected(rectangle, true);
+    canvas.refresh_entities();
+    CHECK(drawing->pen().color() == vector_color);
+    document.clear_selection();
+    canvas.refresh_entities();
     canvas.refresh_toolpaths({});
     CHECK(drawing->pen().color() == vector_color);
 }

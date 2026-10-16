@@ -16,6 +16,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTest>
+#include <QWheelEvent>
 
 #include "geo/types.hpp"
 #include "cad/document.hpp"
@@ -222,6 +223,182 @@ TEST_CASE("performance: inserir e remover pecas preserva itens existentes e atua
     canvas.setup_material(document.material.width, document.material.height);
     REQUIRE(item_for(canvas, first) == first_item);
     CHECK(first_item->path().boundingRect().y() == doctest::Approx(original_y + 500.0));
+}
+
+TEST_CASE("performance: zoom suspende desenho de percurso denso durante a roda") {
+    if (!qEnvironmentVariableIsSet("CNC_PERF_RUN")) return;
+
+    cnc::cad::Document document;
+    document.material.width = 1000.0;
+    document.material.height = 1000.0;
+    auto line = std::make_shared<cnc::cad::Line>();
+    line->x2 = 1000.0;
+    document.add_entity(line);
+
+    cnc::vp::Canvas2D canvas;
+    canvas.resize(1280, 800);
+    canvas.set_document(&document);
+    canvas.show();
+    canvas.fit_view();
+    QApplication::processEvents();
+
+    cnc::cam::Toolpath toolpath;
+    for (int pass = 0; pass < 3; ++pass) {
+        toolpath.moves.push_back({cnc::cam::MoveKind::Rapid, 0.0, 0.0, 0.0});
+        for (int i = 0; i < 50000; ++i) {
+            const int row = i / 200;
+            const int col = i % 200;
+            const double x = (row % 2 == 0 ? col : 199 - col) * 5.0;
+            toolpath.moves.push_back({cnc::cam::MoveKind::Cut, x, row * 4.0, -pass - 1.0});
+        }
+    }
+    canvas.refresh_toolpaths({&toolpath});
+    canvas.viewport()->repaint();
+    QApplication::processEvents();
+
+    std::vector<QGraphicsItem*> path_items;
+    for (QGraphicsItem* item : canvas.scene()->items())
+        if (item->zValue() == 15.0) path_items.push_back(item);
+    REQUIRE_FALSE(path_items.empty());
+
+    const QPointF pos(canvas.viewport()->width() / 2.0, canvas.viewport()->height() / 2.0);
+    const qreal initial_scale = canvas.transform().m11();
+    QWheelEvent wheel(pos, canvas.viewport()->mapToGlobal(pos.toPoint()), {}, {0, 120},
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QElapsedTimer timer;
+    timer.start();
+    QApplication::sendEvent(canvas.viewport(), &wheel);
+    canvas.viewport()->repaint();
+    const double wheel_frame_ms = timer.nsecsElapsed() / 1.e6;
+
+    QWheelEvent second_wheel(pos, canvas.viewport()->mapToGlobal(pos.toPoint()), {}, {0, 120},
+                             Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    timer.restart();
+    QApplication::sendEvent(canvas.viewport(), &second_wheel);
+    canvas.viewport()->repaint();
+    const double second_wheel_frame_ms = timer.nsecsElapsed() / 1.e6;
+    CHECK(canvas.transform().m11() == doctest::Approx(initial_scale * 1.15 * 1.15));
+    CHECK(canvas.optimizationFlags().testFlag(QGraphicsView::IndirectPainting));
+    for (QGraphicsItem* item : path_items) CHECK(item->isVisible());
+    timer.restart();
+    QTest::qWait(600);
+    const double settle_wait_ms = timer.nsecsElapsed() / 1.e6;
+    CHECK_FALSE(canvas.optimizationFlags().testFlag(QGraphicsView::IndirectPainting));
+    for (QGraphicsItem* item : path_items) CHECK(item->isVisible());
+    timer.restart();
+    canvas.viewport()->repaint();
+    const double resting_frame_ms = timer.nsecsElapsed() / 1.e6;
+    std::vector<int> path_elements;
+    std::vector<double> without_path_ms;
+    for (QGraphicsItem* item : path_items) {
+        auto* path = static_cast<QGraphicsPathItem*>(item);
+        path_elements.push_back(path->path().elementCount());
+        item->setVisible(false);
+        timer.restart();
+        canvas.viewport()->repaint();
+        without_path_ms.push_back(timer.nsecsElapsed() / 1.e6);
+        item->setVisible(true);
+    }
+    CHECK(*std::max_element(path_elements.begin(), path_elements.end()) < 25000);
+    std::cout << "CNC_ZOOM {\"moves\":" << toolpath.moves.size()
+              << ",\"wheel_frame_ms\":" << wheel_frame_ms
+              << ",\"second_wheel_frame_ms\":" << second_wheel_frame_ms
+              << ",\"settle_wait_ms\":" << settle_wait_ms
+              << ",\"resting_frame_ms\":" << resting_frame_ms << ",\"path_elements\":[";
+    for (size_t i = 0; i < path_elements.size(); ++i)
+        std::cout << (i ? "," : "") << path_elements[i];
+    std::cout << "],\"without_path_ms\":[";
+    for (size_t i = 0; i < without_path_ms.size(); ++i)
+        std::cout << (i ? "," : "") << without_path_ms[i];
+    std::cout << "]}\n" << std::flush;
+}
+
+TEST_CASE("performance: roda no arquivo real antes de calcular percursos") {
+    if (!qEnvironmentVariableIsSet("CNC_PERF_RUN")) return;
+    const QString project = qEnvironmentVariable(
+        "CNC_PERF_PROJECT", "D:/CORTES ROUTER/UNIPAR/UNIPAR_TETO_2500MM.cnc");
+    const std::filesystem::path path(project.toStdWString());
+    REQUIRE(std::filesystem::exists(path));
+
+    for (const int copies : copy_counts()) {
+        cnc::cad::Document document;
+        document.load(path);
+        duplicate_drawing(document, copies);
+        cnc::vp::Canvas2D canvas;
+        canvas.resize(1450, 900);
+        canvas.show();
+        QApplication::processEvents();
+        canvas.set_document(&document);
+        canvas.fit_view();
+        QTest::qWait(130);
+        canvas.viewport()->repaint();
+        auto visible_entity_count = [&] {
+            size_t count = 0;
+            for (QGraphicsItem* item : canvas.scene()->items())
+                if (auto* drawing = dynamic_cast<cnc::vp::EntityItem*>(item); drawing && drawing->isVisible())
+                    ++count;
+            return count;
+        };
+        const size_t initial_visible_entities = visible_entity_count();
+        REQUIRE(initial_visible_entities > 0);
+
+        const QPointF pos(canvas.viewport()->width() / 2.0, canvas.viewport()->height() / 2.0);
+        auto wheel_step = [&](QPoint pixels, QPoint angles) {
+            QWheelEvent wheel(pos, canvas.viewport()->mapToGlobal(pos.toPoint()), pixels, angles,
+                              Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            QElapsedTimer timer;
+            timer.start();
+            QApplication::sendEvent(canvas.viewport(), &wheel);
+            canvas.viewport()->repaint();
+            return timer.nsecsElapsed() / 1.e6;
+        };
+        const double initial_scale = canvas.transform().m11();
+        const double first_ms = wheel_step({}, {0, 120});
+        const double second_ms = wheel_step({}, {0, 120});
+        CHECK(canvas.transform().m11() == doctest::Approx(initial_scale * 1.15 * 1.15));
+        CHECK(canvas.optimizationFlags().testFlag(QGraphicsView::IndirectPainting));
+        if (copies == 1) {
+            // A pre-visualizacao precisa continuar mostrando o desenho, mesmo
+            // quando a pintura dos itens da cena fica suspensa durante a roda.
+            const QImage frame = canvas.viewport()->grab().toImage();
+            int white_pixels = 0;
+            for (int y = 0; y < frame.height(); y += 2)
+                for (int x = 0; x < frame.width(); x += 2) {
+                    const QRgb pixel = frame.pixel(x, y);
+                    if (qRed(pixel) >= 240 && qGreen(pixel) >= 240 && qBlue(pixel) >= 240)
+                        ++white_pixels;
+                }
+            CHECK(white_pixels > 10);
+        }
+        QElapsedTimer settle_timer;
+        settle_timer.start();
+        QTest::qWait(170);
+        const double settle_ms = settle_timer.nsecsElapsed() / 1.e6;
+        CHECK_FALSE(canvas.optimizationFlags().testFlag(QGraphicsView::IndirectPainting));
+        QElapsedTimer timer;
+        timer.start();
+        canvas.viewport()->repaint();
+        const double resting_ms = timer.nsecsElapsed() / 1.e6;
+        CHECK(visible_entity_count() == initial_visible_entities);
+
+        wheel_step({}, {0, -120});
+        wheel_step({}, {0, -120});
+        QTest::qWait(170);
+        CHECK(canvas.transform().m11() == doctest::Approx(initial_scale));
+        const double before_small_steps = canvas.transform().m11();
+        for (int i = 0; i < 8; ++i) wheel_step({}, {0, 15});
+        CHECK(canvas.transform().m11() == doctest::Approx(before_small_steps * 1.15));
+        const double before_horizontal = canvas.transform().m11();
+        wheel_step({}, {120, 0});
+        CHECK(canvas.transform().m11() == doctest::Approx(before_horizontal));
+        wheel_step({0, 20}, {});
+        CHECK(canvas.transform().m11() == doctest::Approx(before_horizontal * std::pow(1.15, 20.0 / 120.0)));
+        std::cout << "CNC_REAL_ZOOM {\"copies\":" << copies
+                  << ",\"entities\":" << document.entities.size()
+                  << ",\"wheel_ms\":[" << first_ms << "," << second_ms << "]"
+                  << ",\"resting_ms\":" << resting_ms
+                  << ",\"settle_ms\":" << settle_ms << "}\n" << std::flush;
+    }
 }
 
 TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
@@ -513,7 +690,7 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         REQUIRE(moved_polyline != nullptr);
         moved_item = item_for(canvas, moving);
         REQUIRE(moved_item != nullptr);
-        CHECK(moved_item->opacity() == doctest::Approx(0.0));
+        CHECK(moved_item->isVisible());
         CHECK(moved_item->world_bounds().x0 == doctest::Approx(moving->bounding_box().x0));
         canvas.zoom_by(1.05);
         QTest::qWait(600);

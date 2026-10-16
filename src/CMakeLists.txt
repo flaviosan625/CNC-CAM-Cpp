@@ -35,12 +35,20 @@ if(CNC_BUILD_APP)
     add_executable(cnccam WIN32 app/main.cpp)
     set_target_properties(cnccam PROPERTIES OUTPUT_NAME "CNC-CAM")
     target_link_libraries(cnccam PRIVATE cnc_gui)
+    add_executable(cnccam_os_leve WIN32 app/main.cpp)
+    set_target_properties(cnccam_os_leve PROPERTIES OUTPUT_NAME "CNC-CAM-OS-Leve")
+    target_link_libraries(cnccam_os_leve PRIVATE cnc_gui)
     if(CNC_HAVE_MUPDF)
         add_custom_command(TARGET cnccam POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CNC_MUPDF_DLL}" "$<TARGET_FILE_DIR:cnccam>")
     endif()
     if(WIN32)
+        add_custom_command(TARGET cnccam POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:GEOS::geos>" "$<TARGET_FILE:GEOS::geos_c>"
+                "$<TARGET_FILE_DIR:cnccam>"
+            COMMENT "Deploying GEOS runtime beside CNC-CAM.exe")
         # Make the generated executable launchable by double-clicking it in
         # Explorer, just like the Python distribution.  The build environment
         # puts Qt on PATH for scripts/run.bat, but Explorer does not inherit
