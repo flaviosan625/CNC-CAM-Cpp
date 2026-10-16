@@ -66,6 +66,18 @@ QString normalize(const std::string& text) {
     return result.trimmed().toLower();
 }
 
+void populate_sheet_presets(QComboBox* combo, const std::string& material_name) {
+    const QSignalBlocker blocker(combo);
+    combo->clear();
+    combo->addItem("Personalizado / atual", -1);
+    const QString selected_material = normalize(material_name);
+    const auto& presets = cad::standard_sheet_presets();
+    for (size_t i = 0; i < presets.size(); ++i) {
+        const auto& preset = presets[i];
+        if (normalize(preset.name) != selected_material) continue;
+        combo->addItem(QString::fromStdString(preset.label), static_cast<int>(i));
+    }
+}
 }  // namespace
 
 ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
@@ -104,7 +116,7 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
     for (const QString& material : {QString("PVC"), QString("MDF"), QString("Acrílico"),
                                     QString("ACM"), QString("PS"), QString("Policarbonato"),
                                     QString("Compensado"), QString("Alumínio")})
-        material_combo_->addItem(material, material);
+        material_combo_->addItem(material == "PVC" ? QStringLiteral("PVC Expandido") : material, material);
     work_form->addRow("O que vai cortar?", material_combo_);
 
     thickness_ = millimeters(work_page);
@@ -116,13 +128,7 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
     sheet_preset_combo_ = new SafeComboBox(work_page);
     sheet_preset_combo_->setObjectName("ImportSheetPreset");
     prepare_combo(sheet_preset_combo_);
-    sheet_preset_combo_->addItem("Padrão comercial do material", QPointF(0, 0));
-    sheet_preset_combo_->addItem("Chapa Inteira MDF (1850 × 2750 mm)", QPointF(1850.0, 2750.0));
-    sheet_preset_combo_->addItem("Chapa Inteira PVC/ACM (1220 × 2440 mm)", QPointF(1220.0, 2440.0));
-    sheet_preset_combo_->addItem("Chapa 1000 × 2000 mm", QPointF(1000.0, 2000.0));
-    sheet_preset_combo_->addItem("Meia Chapa (1220 × 1220 mm)", QPointF(1220.0, 1220.0));
-    sheet_preset_combo_->addItem("Meia Chapa MDF (1850 × 1375 mm)", QPointF(1850.0, 1375.0));
-    sheet_preset_combo_->addItem("Personalizado", QPointF(-1, -1));
+    populate_sheet_presets(sheet_preset_combo_, material_combo_->currentData().toString().toStdString());
     work_form->addRow("Tamanho comercial", sheet_preset_combo_);
 
     auto* size_row = new QWidget(work_page);
@@ -279,13 +285,14 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
 
     connect(material_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
         const std::string mat_name = material_combo_->currentData().toString().toStdString();
+        populate_sheet_presets(sheet_preset_combo_, mat_name);
         const auto* preset = cad::find_sheet_preset(mat_name);
         if (preset) {
             const QSignalBlocker bw(width_), bh(height_), bt(thickness_);
             width_->setValue(preset->width);
             height_->setValue(preset->height);
             thickness_->setValue(preset->default_thickness);
-            if (sheet_preset_combo_) sheet_preset_combo_->setCurrentIndex(0);
+            if (sheet_preset_combo_ && sheet_preset_combo_->count() > 1) sheet_preset_combo_->setCurrentIndex(1);
             for (int i = 0; i < static_cast<int>(tools_.size()); ++i) {
                 if (std::fabs(tools_[static_cast<size_t>(i)].diameter - preset->tool_diameter) < 0.1) {
                     tools_combo_->setCurrentIndex(i);
@@ -303,19 +310,21 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
     });
 
     connect(sheet_preset_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int idx) {
-        if (idx <= 0) return;
-        const auto data = sheet_preset_combo_->currentData().toPointF();
-        if (data.x() > 0 && data.y() > 0) {
-            const QSignalBlocker bw(width_), bh(height_);
-            width_->setValue(data.x());
-            height_->setValue(data.y());
-        }
+        if (idx < 0) return;
+        const int preset_index = sheet_preset_combo_->currentData().toInt();
+        const auto& presets = cad::standard_sheet_presets();
+        if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) return;
+        const auto& preset = presets[static_cast<size_t>(preset_index)];
+        const QSignalBlocker bw(width_), bh(height_), bt(thickness_);
+        width_->setValue(preset.width);
+        height_->setValue(preset.height);
+        thickness_->setValue(preset.default_thickness);
     });
 
     const auto set_custom_preset = [this] {
-        if (sheet_preset_combo_ && sheet_preset_combo_->currentIndex() != sheet_preset_combo_->count() - 1) {
+        if (sheet_preset_combo_ && sheet_preset_combo_->currentIndex() != 0) {
             const QSignalBlocker blocker(sheet_preset_combo_);
-            sheet_preset_combo_->setCurrentIndex(sheet_preset_combo_->count() - 1);
+            sheet_preset_combo_->setCurrentIndex(0);
         }
     };
     connect(width_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, set_custom_preset);
@@ -345,11 +354,24 @@ void ImportSetupPanel::set_material(const cad::MaterialSetup& material) {
         const QSignalBlocker blocker(material_combo_);
         material_combo_->setCurrentIndex(material_index < 0 ? 0 : material_index);
     }
+    populate_sheet_presets(sheet_preset_combo_, material_combo_->currentData().toString().toStdString());
     {
         const QSignalBlocker bw(width_), bh(height_), bt(thickness_);
         thickness_->setValue(material.thickness);
         width_->setValue(material.width);
         height_->setValue(material.height);
+    }
+    for (int i = 1; i < sheet_preset_combo_->count(); ++i) {
+        const int preset_index = sheet_preset_combo_->itemData(i).toInt();
+        const auto& presets = cad::standard_sheet_presets();
+        if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) continue;
+        const auto& preset = presets[static_cast<size_t>(preset_index)];
+        if (std::fabs(preset.width - material.width) < 0.01 &&
+            std::fabs(preset.height - material.height) < 0.01) {
+            const QSignalBlocker blocker(sheet_preset_combo_);
+            sheet_preset_combo_->setCurrentIndex(i);
+            break;
+        }
     }
     const QString origin = QString::fromStdString(material.zero_x + "/" + material.zero_y);
     const int origin_index = zero_xy_->findData(origin);

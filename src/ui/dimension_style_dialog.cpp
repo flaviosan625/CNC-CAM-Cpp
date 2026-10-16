@@ -9,20 +9,22 @@
 namespace cnc::ui {
 
 ColorButton::ColorButton(const std::optional<std::string>& initial_color, QWidget* parent)
-    : QPushButton(parent), color_(initial_color ? *initial_color : "#00e5ff") {
+    : QPushButton(parent), color_(initial_color ? *initial_color : "#FF007F") {
     setMinimumHeight(28);
     refresh();
     connect(this, &QPushButton::clicked, this, &ColorButton::choose_color);
 }
 
 void ColorButton::set_color(const std::string& c) {
-    color_ = c.empty() ? "#00e5ff" : c;
+    color_ = c.empty() ? "#FF007F" : c;
     refresh();
 }
 
 void ColorButton::choose_color() {
     const QColor initial(QString::fromStdString(color_));
-    const QColor chosen = QColorDialog::getColor(initial, this, "Cor da cota");
+    // The button paints itself with the selected color. Do not use it as the
+    // dialog parent or its inline stylesheet will bleed into QColorDialog.
+    const QColor chosen = QColorDialog::getColor(initial, window(), "Cor da cota");
     if (chosen.isValid()) {
         color_ = chosen.name(QColor::HexRgb).toStdString();
         refresh();

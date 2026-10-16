@@ -5,6 +5,7 @@
 #include <QSignalSpy>
 #include <QPainterPath>
 
+#include "cam/model.hpp"
 #include "cad/document.hpp"
 #include "tools/draw_tools.hpp"
 #include "viewport/canvas_2d.hpp"
@@ -38,6 +39,33 @@ TEST_CASE("canvas: cache de clique acompanha edicao e cor de camada sem recriar 
         if (auto* drawing = dynamic_cast<cnc::vp::EntityItem*>(candidate)) item = drawing;
     REQUIRE(item != nullptr);
     CHECK(item->pen().color() == QColor::fromRgbF(0.8f, 0.2f, 0.3f));
+}
+
+TEST_CASE("canvas: remover percurso conserva a cor original do vetor") {
+    cnc::cad::Document document;
+    auto& layer = document.add_layer("Vetores brancos");
+    layer.color = {1.0, 1.0, 1.0};
+    auto rectangle = std::make_shared<cnc::cad::Rectangle>();
+    rectangle->layer = layer.name;
+    document.add_entity(rectangle);
+
+    cnc::vp::Canvas2D canvas;
+    canvas.set_document(&document);
+    cnc::vp::EntityItem* drawing = nullptr;
+    for (auto* candidate : canvas.scene()->items())
+        if (auto* item = dynamic_cast<cnc::vp::EntityItem*>(candidate)) drawing = item;
+    REQUIRE(drawing != nullptr);
+    const QColor vector_color = drawing->pen().color();
+    CHECK(vector_color == QColor(Qt::white));
+
+    cnc::cam::Toolpath path;
+    path.moves = {{cnc::cam::MoveKind::Rapid, 0, 0, 5},
+                  {cnc::cam::MoveKind::Plunge, 0, 0, -2},
+                  {cnc::cam::MoveKind::Cut, 20, 0, -2}};
+    canvas.refresh_toolpaths({&path});
+    CHECK(drawing->pen().color() == vector_color);
+    canvas.refresh_toolpaths({});
+    CHECK(drawing->pen().color() == vector_color);
 }
 
 TEST_CASE("canvas: zoom e pan nao notificam alteracao da selecao") {

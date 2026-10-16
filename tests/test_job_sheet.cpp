@@ -250,6 +250,60 @@ TEST_CASE("preview da OS mostra letras usinadas e deixa deslocamentos rapidos de
     CHECK(cyan_cut_pixels > 80);
 }
 
+TEST_CASE("preview da OS remove miolos e conserva a peca em perfil passante") {
+    cam::Toolpath exterior;
+    exterior.kind = cam::ToolpathType::Profile;
+    exterior.profile_side = cam::ProfileSide::Outside;
+    exterior.moves = {{cam::MoveKind::Rapid, 40, 30, 5},
+                      {cam::MoveKind::Plunge, 40, 30, -18},
+                      {cam::MoveKind::Cut, 160, 30, -18},
+                      {cam::MoveKind::Cut, 160, 100, -18},
+                      {cam::MoveKind::Cut, 40, 100, -18},
+                      {cam::MoveKind::Cut, 40, 30, -18},
+                      {cam::MoveKind::Rapid, 40, 30, 5}};
+    cam::Toolpath counter;
+    counter.kind = cam::ToolpathType::Profile;
+    counter.profile_side = cam::ProfileSide::Inside;
+    counter.moves = {{cam::MoveKind::Rapid, 80, 50, 5},
+                     {cam::MoveKind::Plunge, 80, 50, -18},
+                     {cam::MoveKind::Cut, 120, 50, -18},
+                     {cam::MoveKind::Cut, 120, 80, -18},
+                     {cam::MoveKind::Cut, 80, 80, -18},
+                     {cam::MoveKind::Cut, 80, 50, -18},
+                     {cam::MoveKind::Rapid, 80, 50, 5}};
+    cad::MaterialSetup material;
+    material.width = 300;
+    material.height = 200;
+    material.thickness = 18;
+
+    const QImage preview = app::make_job_layout_preview(
+        {{&exterior, nullptr}, {&counter, nullptr}}, &material);
+    REQUIRE_FALSE(preview.isNull());
+
+    // Convert two known XY points through the same isometric projection. The
+    // product remains wood; its through-cut counter reveals the dark viewport.
+    constexpr double x_scale = .92, x_y = .28, y_scale = .92, y_y = -.28, z_scale = .9;
+    const double raw_x_min = 0.0, raw_x_max = x_scale * 300 + y_scale * 200;
+    const double raw_y_min = y_y * 200;
+    const double raw_y_max = x_y * 300 + z_scale * 18;
+    const double drawing_width = 944.0;
+    const double drawing_height = preview.height() / 3.0 - 70.0 - 62.0 - 16.0 - 6.0;
+    const double scale = std::min(drawing_width / (raw_x_max - raw_x_min),
+                                  drawing_height / (raw_y_max - raw_y_min));
+    const double raw_center_x = (raw_x_min + raw_x_max) / 2.0;
+    const double raw_center_y = (raw_y_min + raw_y_max) / 2.0;
+    const auto sample = [&](double x, double y) {
+        const double raw_x = x_scale * x + y_scale * y;
+        const double raw_y = x_y * x + y_y * y;
+        const int px = qRound((18.0 + drawing_width / 2.0 + (raw_x - raw_center_x) * scale) * 3.0);
+        const int py = qRound((70.0 + drawing_height / 2.0 + (raw_y - raw_center_y) * scale) * 3.0);
+        return preview.pixelColor(px, py);
+    };
+    const QColor product = sample(60, 60);
+    const QColor counter_color = sample(100, 65);
+    CHECK(qGray(product.rgb()) > qGray(counter_color.rgb()) + 30);
+}
+
 TEST_CASE("ordem de serviço mantém muitos percursos na mesma folha horizontal") {
     std::vector<cam::Toolpath> paths;
     std::vector<cam::SetupSheetOperation> operations;

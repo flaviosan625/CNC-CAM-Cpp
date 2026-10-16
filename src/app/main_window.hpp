@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -156,6 +157,7 @@ private:
     void import_file(const QString& path);
     void import_folder();
     bool save_file(const QString& path = {});
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
     struct RegisteredJobRecord {
         std::string id;
@@ -261,6 +263,8 @@ private:
     std::unique_ptr<sim::ToolpathSimulation> simulation_;
     std::string bridge_target_job_id_;
     std::optional<cam::ToolpathJob> bridge_preparation_job_;
+    QPointer<QDialog> active_toolpath_dialog_;
+    std::function<void()> sync_toolpath_bridge_draft_;
     QWidget* bridge_mode_banner_ = nullptr;
     std::chrono::steady_clock::time_point simulation_last_tick_{};
 };

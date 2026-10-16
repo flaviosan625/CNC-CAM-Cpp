@@ -82,8 +82,10 @@ const std::vector<SheetPreset>& standard_sheet_presets() {
     static const std::vector<SheetPreset> kPresets = {
         {"MDF", "MDF — Chapa padrão (1850 × 2750 mm)", 1850.0, 2750.0, 15.0, 6.0, "Padrão de fábrica nacional (Arauco, Duratex, Berneck)"},
         {"PVC", "PVC Expandido (1220 × 2440 mm)", 1220.0, 2440.0, 10.0, 4.0, "Chapa inteira padrão comunicação visual e corte rápido"},
-        {"Acrílico", "Acrílico Cristal / Cast (1000 × 2000 mm)", 1000.0, 2000.0, 4.0, 6.0, "Passada curta para acabamento limpo sem derretimento"},
-        {"ACM", "ACM Alumínio Composto (1220 × 2440 mm)", 1220.0, 2440.0, 3.0, 4.0, "Painel compósito padrão para fachadas e totens"},
+        {"Acrílico", "Acrílico (1000 × 2000 mm)", 1000.0, 2000.0, 4.0, 6.0, "Passada curta para acabamento limpo sem derretimento"},
+        {"Acrílico", "Acrílico (2000 × 3000 mm)", 2000.0, 3000.0, 4.0, 6.0, "Passada curta para acabamento limpo sem derretimento"},
+        {"ACM", "ACM (1200 × 5000 mm)", 1200.0, 5000.0, 3.0, 4.0, "Painel compósito para fachadas e totens"},
+        {"ACM", "ACM (1500 × 5000 mm)", 1500.0, 5000.0, 3.0, 4.0, "Painel compósito para fachadas e totens"},
         {"PS", "PS Poliestireno (1000 × 2000 mm)", 1000.0, 2000.0, 2.0, 2.0, "Chapa fina para corte com fresa 2mm"},
         {"Policarbonato", "Policarbonato Compacto (1000 × 2000 mm)", 1000.0, 2000.0, 4.0, 4.0, "Alta resistência ao impacto"},
         {"Compensado", "Compensado Naval / Pinus (1220 × 2440 mm)", 1220.0, 2440.0, 15.0, 6.0, "Madeira multilaminada padrão marcenaria"},

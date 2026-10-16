@@ -85,7 +85,7 @@ TEST_CASE("ui: DimensionStyleDialog tem 7 abas com todos os detalhes e controles
     cad::DimensionStyle default_style;
     CHECK(default_style.text_height == doctest::Approx(20.0));
     CHECK(default_style.line_color.has_value());
-    CHECK(default_style.line_color.value() == "#00e5ff");
+    CHECK(default_style.line_color.value() == "#FF007F");
     ui::DimensionStyleDialog dialog_zero(default_style, 0, nullptr);
     CHECK(dialog_zero.apply_to_selected() == false);
 }

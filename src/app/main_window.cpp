@@ -11,6 +11,7 @@
 #include <tuple>
 
 #include <QAction>
+#include <QAbstractSpinBox>
 #include <QApplication>
 #include <QAbstractItemView>
 #include <QButtonGroup>
@@ -31,6 +32,7 @@
 #include <QHBoxLayout>
 #include <QImage>
 #include <QImageReader>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineF>
 #include <QLineEdit>
@@ -40,6 +42,8 @@
 #include <QMenuBar>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPainterPathStroker>
 #include <QPixmap>
 #include <QPolygonF>
 #include <QProgressBar>
@@ -204,6 +208,111 @@ private:
 };
 
 using InteractiveGuideWidget = ui::MachiningGuide;
+
+}  // namespace
+
+namespace {
+
+struct ThroughProfileContour {
+    std::vector<QPointF> points;
+    bool explicit_void = false;
+    double tool_diameter = 4.0;
+};
+
+std::vector<ThroughProfileContour> through_profile_contours(
+    const std::vector<cam::SetupSheetOperation>& operations, const JobPreviewOptions& options,
+    double material_bottom_z) {
+    std::vector<ThroughProfileContour> contours;
+    const auto included = [&](size_t index) {
+        return options.only_operation < 0 || static_cast<size_t>(options.only_operation) == index;
+    };
+    for (size_t index = 0; index < operations.size(); ++index) {
+        const auto& operation = operations[index];
+        if (!included(index) || !operation.path || operation.path->kind != cam::ToolpathType::Profile)
+            continue;
+        const double tool_diameter = operation.job && operation.job->tool.diameter > 0.0
+                                         ? operation.job->tool.diameter
+                                         : 4.0;
+
+        std::vector<QPointF> current;
+        bool reaches_bottom = true;
+        const auto finish_contour = [&] {
+            if (reaches_bottom && current.size() >= 4 &&
+                QLineF(current.front(), current.back()).length() <= 0.05) {
+                current.pop_back();
+                if (current.size() >= 3) {
+                    double twice_area = 0.0;
+                    for (size_t point = 0; point < current.size(); ++point) {
+                        const QPointF& a = current[point];
+                        const QPointF& b = current[(point + 1) % current.size()];
+                        twice_area += a.x() * b.y() - b.x() * a.y();
+                    }
+                    if (std::fabs(twice_area) > 0.02) {
+                        QPolygonF polygon;
+                        for (const QPointF& point : current) polygon << point;
+                        const QRectF bounds = polygon.boundingRect();
+                        const double area = std::fabs(twice_area) * 0.5;
+                        const bool duplicate = std::any_of(contours.begin(), contours.end(),
+                            [&](const ThroughProfileContour& prior) {
+                                if (prior.explicit_void !=
+                                        (operation.path->profile_side == cam::ProfileSide::Inside) ||
+                                    prior.points.size() != current.size() ||
+                                    std::fabs(prior.tool_diameter - tool_diameter) >= 0.05) return false;
+                                QPolygonF prior_polygon;
+                                double prior_twice_area = 0.0;
+                                for (size_t p = 0; p < prior.points.size(); ++p) {
+                                    prior_polygon << prior.points[p];
+                                    const QPointF& a = prior.points[p];
+                                    const QPointF& b = prior.points[(p + 1) % prior.points.size()];
+                                    prior_twice_area += a.x() * b.y() - b.x() * a.y();
+                                }
+                                const QRectF prior_bounds = prior_polygon.boundingRect();
+                                const double prior_area = std::fabs(prior_twice_area) * 0.5;
+                                if (std::fabs(bounds.x() - prior_bounds.x()) >= 0.05 ||
+                                    std::fabs(bounds.y() - prior_bounds.y()) >= 0.05 ||
+                                    std::fabs(bounds.width() - prior_bounds.width()) >= 0.05 ||
+                                    std::fabs(bounds.height() - prior_bounds.height()) >= 0.05 ||
+                                    std::fabs(area - prior_area) >= std::max(0.05, area * 1e-5)) return false;
+
+                                for (size_t start = 0; start < prior.points.size(); ++start) {
+                                    if (QLineF(current.front(), prior.points[start]).length() >= 0.05) continue;
+                                    bool same_forward = true, same_reverse = true;
+                                    for (size_t point = 0; point < current.size(); ++point) {
+                                        const size_t forward = (start + point) % current.size();
+                                        const size_t reverse = (start + current.size() - point) % current.size();
+                                        same_forward = same_forward &&
+                                            QLineF(current[point], prior.points[forward]).length() < 0.05;
+                                        same_reverse = same_reverse &&
+                                            QLineF(current[point], prior.points[reverse]).length() < 0.05;
+                                        if (!same_forward && !same_reverse) break;
+                                    }
+                                    if (same_forward || same_reverse) return true;
+                                }
+                                return false;
+                            });
+                        if (!duplicate)
+                            contours.push_back({current,
+                                operation.path->profile_side == cam::ProfileSide::Inside, tool_diameter});
+                    }
+                }
+            }
+            current.clear();
+            reaches_bottom = true;
+        };
+
+        for (const cam::Move& move : operation.path->moves) {
+            if (move.kind == cam::MoveKind::Rapid || move.kind == cam::MoveKind::Dwell) {
+                finish_contour();
+                continue;
+            }
+            if (!move.cutting()) continue;
+            current.emplace_back(move.x, move.y);
+            reaches_bottom = reaches_bottom && move.z <= material_bottom_z + 0.05;
+        }
+        finish_contour();
+    }
+    return contours;
+}
 
 }  // namespace
 
@@ -416,6 +525,43 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     const QPolygonF front_face{top_face[0], top_face[1], bottom_face[1], bottom_face[0]};
     const QPolygonF right_face{top_face[1], top_face[2], bottom_face[2], bottom_face[1]};
 
+    QPainterPath board_surface;
+    board_surface.addPolygon(top_polygon);
+    QPainterPath exterior_parts;
+    exterior_parts.setFillRule(Qt::OddEvenFill);
+    QPainterPath interior_voids;
+    interior_voids.setFillRule(Qt::OddEvenFill);
+    QTransform world_to_screen(projection_scale * x_axis_x, projection_scale * x_axis_y,
+                               projection_scale * y_axis_x, projection_scale * y_axis_y,
+                               project(0.0, 0.0, z_top).x(), project(0.0, 0.0, z_top).y());
+    bool has_exterior_profile = false;
+    const std::vector<ThroughProfileContour> through_cuts =
+        through_profile_contours(operations, options, z_bottom);
+    for (const ThroughProfileContour& contour : through_cuts) {
+        QPolygonF world_polygon;
+        for (const QPointF& point : contour.points) world_polygon << point;
+        QPainterPath world_ring;
+        world_ring.addPolygon(world_polygon);
+        world_ring.closeSubpath();
+        QPainterPathStroker cutter;
+        cutter.setWidth(contour.tool_diameter);
+        const QPainterPath cutter_sweep = cutter.createStroke(world_ring);
+        const QPainterPath finished_edge = contour.explicit_void
+                                               ? world_ring.united(cutter_sweep)
+                                               : world_ring.subtracted(cutter_sweep);
+        const QPainterPath ring = world_to_screen.map(finished_edge);
+        if (contour.explicit_void) {
+            interior_voids.addPath(ring);
+        } else {
+            exterior_parts.addPath(ring);
+            has_exterior_profile = true;
+        }
+    }
+    QPainterPath retained_top = board_surface;
+    if (has_exterior_profile) retained_top = board_surface.intersected(exterior_parts);
+    if (!interior_voids.isEmpty()) retained_top = retained_top.subtracted(interior_voids);
+    const QPainterPath removed_top = board_surface.subtracted(retained_top);
+
     painter.save();
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(0, 0, 0, 75));
@@ -435,7 +581,7 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
 
     painter.save();
     QPainterPath top_clip;
-    top_clip.addPolygon(top_polygon);
+    top_clip = retained_top;
     painter.setClipPath(top_clip);
     const QRectF texture_bounds = top_polygon.boundingRect();
     painter.drawImage(texture_bounds, ui::woodTexture());
@@ -444,9 +590,33 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     wood_light.setColorAt(1.0, QColor(45, 30, 19, 56));
     painter.fillRect(texture_bounds, wood_light);
     painter.restore();
+    if (!removed_top.isEmpty()) {
+        painter.save();
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor("#222a32"));
+        painter.drawPath(removed_top);
+        painter.setClipPath(board_surface);
+        painter.setBrush(QColor("#684a32"));
+        painter.setPen(QPen(QColor("#292019"), .55));
+        for (const ThroughProfileContour& contour : through_cuts) {
+            for (size_t point = 0; point < contour.points.size(); ++point) {
+                const QPointF& a = contour.points[point];
+                const QPointF& b = contour.points[(point + 1) % contour.points.size()];
+                QPolygonF wall{project(a.x(), a.y(), z_top), project(b.x(), b.y(), z_top),
+                               project(b.x(), b.y(), z_bottom), project(a.x(), a.y(), z_bottom)};
+                painter.drawPolygon(wall);
+            }
+        }
+        painter.restore();
+    }
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(QColor("#f0d4a9"), 1.35));
     painter.drawPolygon(top_polygon);
+    if (has_exterior_profile || !interior_voids.isEmpty()) {
+        painter.setPen(QPen(QColor("#3a2a1c"), 1.0));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(retained_top);
+    }
 
     // Layer lines make the stock thickness readable in the perspective view.
     for (int layer = 1; layer <= 3; ++layer) {
@@ -469,7 +639,10 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
             margin_polygon << project(corner.x(), corner.y(), z_top);
         painter.setPen(QPen(QColor("#f3e4c8"), .8, Qt::DashLine));
         painter.setBrush(Qt::NoBrush);
+        painter.save();
+        painter.setClipPath(retained_top);
         painter.drawPolygon(margin_polygon);
+        painter.restore();
     }
     const QRectF material_tag(top_polygon.boundingRect().topRight() + QPointF(-122, 3), QSizeF(118, 19));
     painter.setBrush(QColor(31, 31, 31, 230));
@@ -771,6 +944,7 @@ std::vector<QImage> make_operation_previews(const std::vector<cam::SetupSheetOpe
 }
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(document_, undo_stack_) {
+    if (qApp) qApp->installEventFilter(this);
     setWindowTitle("CNC-CAM");
     // The stylesheet is installed on QApplication in main.cpp.  A local
     // stylesheet here used to leave top-level dialogs and helper widgets on
@@ -991,6 +1165,37 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
                                  : "recursos FALTANDO");
 }
 
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    const bool hidden_bridge_dialog = !active_toolpath_dialog_.isNull() &&
+        QApplication::activeModalWidget() == active_toolpath_dialog_.data() &&
+        !active_toolpath_dialog_->isVisible();
+    const bool has_canvas_operation = canvas_widget_ && canvas_widget_->canvas &&
+        ((active_tool_ && active_tool_->name() != "select") ||
+         canvas_widget_->canvas->manual_tab_mode || canvas_widget_->canvas->manual_drill_mode);
+    const QWidget* modal = QApplication::activeModalWidget();
+    if (event && event->type() == QEvent::KeyPress && isActiveWindow() &&
+        (!modal || hidden_bridge_dialog) && !QApplication::activePopupWidget() &&
+        has_canvas_operation) {
+        auto* key = static_cast<QKeyEvent*>(event);
+        QWidget* focus = QApplication::focusWidget();
+        bool editing_text = false;
+        for (QWidget* widget = focus; widget; widget = widget->parentWidget()) {
+            if (qobject_cast<QLineEdit*>(widget) || qobject_cast<QTextEdit*>(widget) ||
+                qobject_cast<QPlainTextEdit*>(widget) || qobject_cast<QAbstractSpinBox*>(widget)) {
+                editing_text = true;
+                break;
+            }
+            if (widget == this) break;
+        }
+        const bool belongs_to_main_window = focus && (focus == this || isAncestorOf(focus));
+        if (key->key() == Qt::Key_Escape && belongs_to_main_window && !editing_text) {
+            canvas_widget_->canvas->cancel_current_operation();
+            key->accept();
+            return true;
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
 void MainWindow::create_order_service_page() {
     auto* page = new QWidget(view_stack_);
     page->setObjectName("OrderServicePage");
@@ -2342,9 +2547,12 @@ void MainWindow::delete_bridge_marker(int index) {
     settings->tab_manual_only = true;
     settings->tabs = !settings->manual_tabs.empty();
     if (preparing) {
-        document_.modified = true;
+        if (active_toolpath_dialog_.isNull()) document_.modified = true;
         refresh_bridge_markers();
-        statusBar()->showMessage("Ponte manual removida da preparação do percurso.", 3500);
+        statusBar()->showMessage(active_toolpath_dialog_.isNull()
+                                     ? "Ponte manual removida da preparacao do percurso."
+                                     : "Ponte removida do perfil em edicao. Clique em Calcular para salvar.",
+                                 3500);
         return;
     }
     document_.modified = true;
@@ -2439,10 +2647,12 @@ void MainWindow::add_manual_bridge(double x, double y) {
     settings->tab_manual_only = true;
     settings->manual_tabs.push_back({best->entity_id, best->x, best->y});
     if (preparing) {
-        document_.modified = true;
+        if (active_toolpath_dialog_.isNull()) document_.modified = true;
         refresh_bridge_markers();
         statusBar()->showMessage(
-            QString("Ponte pré-marcada em X %1, Y %2 mm. As marcações entrarão no próximo percurso Perfil.")
+            QString(active_toolpath_dialog_.isNull()
+                        ? "Ponte pre-marcada reposicionada para X %1, Y %2 mm."
+                        : "Ponte marcada em X %1, Y %2 mm. Clique em Calcular para salvar neste perfil.")
                 .arg(best->x, 0, 'f', 2).arg(best->y, 0, 'f', 2),
             4500);
         return;
@@ -2513,10 +2723,12 @@ void MainWindow::move_bridge_marker(int index, double x, double y) {
     settings->tabs = true;
     settings->tab_manual_only = true;
     if (preparing) {
-        document_.modified = true;
+        if (active_toolpath_dialog_.isNull()) document_.modified = true;
         refresh_bridge_markers();
         statusBar()->showMessage(
-            QString("Ponte pré-marcada reposicionada para X %1, Y %2 mm.")
+            QString(active_toolpath_dialog_.isNull()
+                        ? "Ponte pre-marcada reposicionada para X %1, Y %2 mm."
+                        : "Ponte reposicionada para X %1, Y %2 mm. Clique em Calcular para salvar neste perfil.")
                 .arg(moved->x, 0, 'f', 2).arg(moved->y, 0, 'f', 2),
             3500);
         return;
@@ -2535,22 +2747,34 @@ void MainWindow::move_bridge_marker(int index, double x, double y) {
 void MainWindow::stop_manual_bridge_mode() {
     if (!canvas_widget_ || !canvas_widget_->canvas || !canvas_widget_->canvas->manual_tab_mode) return;
     const bool preparing = bridge_preparation_job_.has_value() && bridge_target_job_id_.empty();
+    const bool returning_to_toolpath_dialog = !active_toolpath_dialog_.isNull();
     canvas_widget_->canvas->manual_tab_mode = false;
     canvas_widget_->canvas->setCursor(Qt::ArrowCursor);
     bridge_target_job_id_.clear();
     if (bridge_mode_banner_) bridge_mode_banner_->setVisible(false);
+    if (returning_to_toolpath_dialog && sync_toolpath_bridge_draft_)
+        sync_toolpath_bridge_draft_();
     refresh_bridge_markers();
-    statusBar()->showMessage(preparing
-                                 ? "Pontes pré-marcadas guardadas. Crie um percurso Perfil nos mesmos contornos para incluí-las no G-code."
-                                 : "Marcacao manual de pontes encerrada.",
-                             5000);
+    if (returning_to_toolpath_dialog) {
+        active_toolpath_dialog_->show();
+        active_toolpath_dialog_->raise();
+        active_toolpath_dialog_->activateWindow();
+        statusBar()->showMessage(
+            "Pontes atualizadas no perfil em edicao. Clique em Calcular para salvar neste mesmo percurso.",
+            5000);
+    } else {
+        statusBar()->showMessage(preparing
+                                     ? "Pontes pre-marcadas guardadas. Crie um percurso Perfil nos mesmos contornos para inclui-las no G-code."
+                                     : "Marcacao manual de pontes encerrada.",
+                                 5000);
+    }
 }
 
 bool MainWindow::apply_bridge_preparation(cam::ToolpathJob& job) {
     if (!bridge_preparation_job_) return true;
     if (canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
         QMessageBox::information(this, "Pontes em marcação",
-                                 "Conclua a marcação das pontes antes de gerar o percurso.");
+                                 "Conclua a marcacao das pontes antes de gerar o percurso.");
         return false;
     }
     if (job.kind != cam::ToolpathType::Profile) {
@@ -3161,23 +3385,86 @@ void MainWindow::edit_material_setup() {
     zero_z->addItem("Base", "bottom");
     zero_z->setCurrentIndex(zero_z->findData(QString::fromStdString(document_.material.zero_z)));
 
+    auto* material = new QComboBox(&dialog);
     auto* sheet_preset = new QComboBox(&dialog);
-    sheet_preset->addItem("— Personalizado / Atual —");
-    for (const auto& p : cad::standard_sheet_presets()) {
-        sheet_preset->addItem(QString::fromStdString(p.label));
+    const auto& presets = cad::standard_sheet_presets();
+    for (const auto& preset : presets) {
+        const QString profile = QString::fromStdString(preset.name);
+        if (material->findData(profile) >= 0) continue;
+        material->addItem(preset.name == "PVC" ? QStringLiteral("PVC Expandido") : profile, profile);
     }
-    form->addRow("Chapa padrão", sheet_preset);
-    connect(sheet_preset, qOverload<int>(&QComboBox::currentIndexChanged), [&dialog, width, height, thickness](int idx) {
-        if (idx <= 0) return;
-        const auto& presets = cad::standard_sheet_presets();
-        if (idx - 1 < static_cast<int>(presets.size())) {
-            const auto& p = presets[static_cast<size_t>(idx - 1)];
-            width->setValue(p.width);
-            height->setValue(p.height);
-            thickness->setValue(p.default_thickness);
-        }
-    });
+    const auto current_preset = cad::find_sheet_preset(document_.material.material_profile);
+    const QString current_profile = current_preset
+        ? QString::fromStdString(current_preset->name)
+        : QString::fromStdString(document_.material.material_profile);
+    int current_material_index = material->findData(current_profile);
+    if (current_material_index < 0 && !current_profile.isEmpty()) {
+        material->addItem(current_profile, current_profile);
+        current_material_index = material->count() - 1;
+    }
+    if (current_material_index >= 0) material->setCurrentIndex(current_material_index);
+    form->addRow("Material", material);
+    form->addRow(QString::fromUtf8("Tamanho padr\u00e3o"), sheet_preset);
 
+    const auto populate_sheet_presets = [material, sheet_preset, &presets](bool select_default) {
+        const QString selected_profile = material->currentData().toString();
+        int first_index = -1;
+        {
+            const QSignalBlocker blocker(sheet_preset);
+            sheet_preset->clear();
+            sheet_preset->addItem("Personalizado / atual", -1);
+            for (size_t i = 0; i < presets.size(); ++i) {
+                const auto& preset = presets[i];
+                if (QString::fromStdString(preset.name) != selected_profile) continue;
+                sheet_preset->addItem(QString::fromStdString(preset.label), static_cast<int>(i));
+                if (first_index < 0) first_index = sheet_preset->count() - 1;
+            }
+        }
+        if (select_default && first_index >= 0) sheet_preset->setCurrentIndex(first_index);
+    };
+    const auto apply_sheet_preset = [sheet_preset, width, height, thickness](int index) {
+        if (index < 0) return;
+        const int preset_index = sheet_preset->itemData(index).toInt();
+        const auto& all_presets = cad::standard_sheet_presets();
+        if (preset_index < 0 || preset_index >= static_cast<int>(all_presets.size())) return;
+        const auto& preset = all_presets[static_cast<size_t>(preset_index)];
+        const QSignalBlocker block_width(width);
+        const QSignalBlocker block_height(height);
+        const QSignalBlocker block_thickness(thickness);
+        width->setValue(preset.width);
+        height->setValue(preset.height);
+        thickness->setValue(preset.default_thickness);
+    };
+    connect(sheet_preset, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            apply_sheet_preset);
+    connect(material, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [populate_sheet_presets](int) { populate_sheet_presets(true); });
+    const auto use_custom_sheet = [sheet_preset] {
+        if (sheet_preset->currentIndex() == 0) return;
+        const QSignalBlocker blocker(sheet_preset);
+        sheet_preset->setCurrentIndex(0);
+    };
+    connect(width, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog,
+            [use_custom_sheet](double) { use_custom_sheet(); });
+    connect(height, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog,
+            [use_custom_sheet](double) { use_custom_sheet(); });
+    connect(thickness, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog,
+            [use_custom_sheet](double) { use_custom_sheet(); });
+    populate_sheet_presets(false);
+    int matching_preset_index = -1;
+    for (int i = 1; i < sheet_preset->count(); ++i) {
+        const int preset_index = sheet_preset->itemData(i).toInt();
+        const auto& preset = presets[static_cast<size_t>(preset_index)];
+        if (std::abs(preset.width - document_.material.width) < 0.01 &&
+            std::abs(preset.height - document_.material.height) < 0.01) {
+            matching_preset_index = i;
+            break;
+        }
+    }
+    if (matching_preset_index >= 0) {
+        const QSignalBlocker blocker(sheet_preset);
+        sheet_preset->setCurrentIndex(matching_preset_index);
+    }
     form->addRow("Largura", width);
     form->addRow("Altura", height);
     form->addRow("Espessura", thickness);
@@ -3215,6 +3502,7 @@ void MainWindow::edit_material_setup() {
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     if (dialog.exec() != QDialog::Accepted) return;
+    document_.material.material_profile = material->currentData().toString().toStdString();
     document_.material.width = width->value();
     document_.material.height = height->value();
     document_.material.thickness = thickness->value();
@@ -3230,12 +3518,21 @@ void MainWindow::edit_material_setup() {
         job->error.clear();
     }
     refresh_document_view();
-    if (import_setup_panel_) import_setup_panel_->set_material(document_.material);
+    refresh_import_preparation();
     statusBar()->showMessage("Definições do material atualizadas; recalcule os percursos");
 }
 
 bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
+    if (!active_toolpath_dialog_.isNull()) {
+        statusBar()->showMessage(
+            "Conclua a marcacao manual e calcule o perfil que esta em edicao primeiro.", 4000);
+        return false;
+    }
+    sync_toolpath_bridge_draft_ = {};
     auto job = destination; // Edits and tool changes remain a draft until Calculate.
+    const auto previous_bridge_preparation = bridge_preparation_job_;
+    const std::string previous_bridge_target = bridge_target_job_id_;
+    bool manual_bridge_mode_used = false;
     ui::ResponsiveDialog dialog(this);
     dialog.setWindowTitle(
         QString("Percurso de %1").arg(QString::fromUtf8(cam::toolpath_label(job.kind))));
@@ -3856,7 +4153,6 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         refresh();
     };
 
-    bool request_manual_bridge_mode = false;
     bool clear_manuals_on_accept = false;
     bool undo_last_manual_on_accept = false;
     std::visit([&](auto& settings) {
@@ -4090,11 +4386,6 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                     settings.manual_tabs.pop_back();
                 }
             });
-            connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
-                request_manual_bridge_mode = true;
-                bridge_enabled->setChecked(true);
-                dialog.accept();
-            });
             connect(clear_manual_bridges, &QPushButton::clicked, &dialog,
                     [&, manual_only, clear_manual_bridges, restore_auto_bridges, undo_manual_bridge] {
                 clear_manuals_on_accept = true;
@@ -4171,6 +4462,51 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             connect(restore_auto_bridges, &QPushButton::clicked, &dialog, update_bridge_controls);
             connect(undo_manual_bridge, &QPushButton::clicked, &dialog, update_bridge_controls);
             update_bridge_controls();
+
+            connect(mark_bridges, &QPushButton::clicked, &dialog,
+                    [&, bridge_enabled, manual_only, update_bridge_controls] {
+                auto* profile = std::get_if<cam::ProfileSettings>(&job.settings);
+                if (!profile || !canvas_widget_ || !canvas_widget_->canvas) return;
+
+                bridge_enabled->setChecked(true);
+                for (const auto& change : apply) change();
+                clear_manuals_on_accept = false;
+                undo_last_manual_on_accept = false;
+                update_bridge_controls();
+
+                profile->tabs = true;
+                bridge_preparation_job_ = job;
+                bridge_target_job_id_.clear();
+                manual_bridge_mode_used = true;
+                active_toolpath_dialog_ = &dialog;
+                sync_toolpath_bridge_draft_ = [this, &job, bridge_enabled, manual_only,
+                                               update_bridge_controls] {
+                    auto* draft_profile = std::get_if<cam::ProfileSettings>(&job.settings);
+                    const auto* marked_profile = bridge_preparation_job_
+                        ? std::get_if<cam::ProfileSettings>(&bridge_preparation_job_->settings)
+                        : nullptr;
+                    if (!draft_profile || !marked_profile) return;
+                    draft_profile->tabs = marked_profile->tabs;
+                    draft_profile->tab_length = marked_profile->tab_length;
+                    draft_profile->tab_thickness = marked_profile->tab_thickness;
+                    draft_profile->tabs_3d = marked_profile->tabs_3d;
+                    draft_profile->manual_tabs = marked_profile->manual_tabs;
+                    draft_profile->tab_manual_only = marked_profile->tab_manual_only;
+                    bridge_enabled->setChecked(draft_profile->tabs);
+                    manual_only->setChecked(draft_profile->tab_manual_only);
+                    update_bridge_controls();
+                };
+
+                canvas_widget_->canvas->manual_tab_mode = true;
+                canvas_widget_->canvas->setCursor(Qt::CrossCursor);
+                if (view_tabs_) view_tabs_->setCurrentIndex(0);
+                if (bridge_mode_banner_) bridge_mode_banner_->setVisible(true);
+                refresh_bridge_markers();
+                statusBar()->showMessage(
+                    "Marque as pontes no desenho. Pressione Esc ou Concluir para voltar ao perfil e clicar em Calcular.",
+                    6000);
+                dialog.hide();
+            });
 
             form = add_profile_tab("Entradas", "Entradas e saídas", "Entradas e saídas", "04_entradas_saidas");
             auto* lead_type = add_enum(form, "Tipo de entrada", static_cast<int>(settings.lead),
@@ -4490,24 +4826,36 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     root->addWidget(button_bar);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted) return false;
+    const int dialog_result = dialog.exec();
+    if (dialog_result != QDialog::Accepted) {
+        if (manual_bridge_mode_used) {
+            if (canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
+                canvas_widget_->canvas->manual_tab_mode = false;
+                canvas_widget_->canvas->setCursor(Qt::ArrowCursor);
+            }
+            if (bridge_mode_banner_) bridge_mode_banner_->setVisible(false);
+            bridge_preparation_job_ = previous_bridge_preparation;
+            bridge_target_job_id_ = previous_bridge_target;
+            refresh_bridge_markers();
+        }
+        active_toolpath_dialog_.clear();
+        sync_toolpath_bridge_draft_ = {};
+        return false;
+    }
 
+    if (manual_bridge_mode_used && sync_toolpath_bridge_draft_)
+        sync_toolpath_bridge_draft_();
     for (const auto& change : apply) change();
     cam::set_settings_name(job.settings, job.name);
     job.results.clear();
     job.error.clear();
     destination = job;
-    if (request_manual_bridge_mode) {
-        if (auto* profile = std::get_if<cam::ProfileSettings>(&job.settings)) {
-            profile->tabs = true;
-            destination = job;
-            bridge_target_job_id_ = job.id;
-            canvas_widget_->canvas->manual_tab_mode = true;
-            canvas_widget_->canvas->setCursor(Qt::CrossCursor);
-            if (view_tabs_) view_tabs_->setCurrentIndex(0);
-            if (bridge_mode_banner_) bridge_mode_banner_->setVisible(true);
-        }
+    if (manual_bridge_mode_used) {
+        bridge_preparation_job_ = previous_bridge_preparation;
+        bridge_target_job_id_ = previous_bridge_target;
     }
+    active_toolpath_dialog_.clear();
+    sync_toolpath_bridge_draft_ = {};
     return true;
 }
 
@@ -7111,15 +7459,131 @@ void MainWindow::create_actions() {
     QAction* new_action = file_menu->addAction("Novo");
     new_action->setShortcut(QKeySequence::New);
     connect(new_action, &QAction::triggered, this, [this] {
-        document_ = cad::Document();
+        if (!active_toolpath_dialog_.isNull()) {
+            statusBar()->showMessage(
+                "Conclua a marcação de pontes no perfil em edição antes de criar outro projeto.", 4000);
+            return;
+        }
+
+        ui::ResponsiveDialog dialog(this);
+        dialog.setWindowTitle("Novo projeto");
+        dialog.setMinimumWidth(380);
+        auto* layout = new QVBoxLayout(&dialog);
+        layout->setContentsMargins(18, 16, 18, 14);
+        layout->setSpacing(12);
+
+        auto* intro = new QLabel("Escolha o material e confirme as dimensões da chapa.", &dialog);
+        intro->setWordWrap(true);
+        layout->addWidget(intro);
+
+        auto* form = new QFormLayout();
+        form->setSpacing(10);
+        layout->addLayout(form);
+
+        auto* material = new QComboBox(&dialog);
+        const std::array<std::string, 5> material_keys = {
+            "MDF", "PVC", "acrilico", "PS", "ACM"};
+        for (const std::string& key : material_keys) {
+            const cad::SheetPreset* preset = cad::find_sheet_preset(key);
+            if (!preset) continue;
+            const QString profile = QString::fromStdString(preset->name);
+            if (material->findData(profile) >= 0) continue;
+            material->addItem(preset->name == "PVC" ? QStringLiteral("PVC Expandido") : profile,
+                              profile);
+        }
+        auto* sheet_size = new QComboBox(&dialog);
+
+        const auto make_sheet_value = [&dialog](double minimum, double maximum, double step) {
+            auto* field = new QDoubleSpinBox(&dialog);
+            field->setRange(minimum, maximum);
+            field->setDecimals(1);
+            field->setSingleStep(step);
+            field->setSuffix(" mm");
+            return field;
+        };
+        auto* width = make_sheet_value(1.0, 100000.0, 100.0);
+        auto* height = make_sheet_value(1.0, 100000.0, 100.0);
+        auto* thickness = make_sheet_value(0.1, 1000.0, 1.0);
+        form->addRow("Material", material);
+        form->addRow("Tamanho padrão", sheet_size);
+        form->addRow("Largura da folha", width);
+        form->addRow("Comprimento da folha", height);
+        form->addRow("Espessura", thickness);
+
+        const auto& sheet_presets = cad::standard_sheet_presets();
+        const auto apply_sheet_preset = [sheet_size, width, height, thickness](int index) {
+            if (index < 0) return;
+            const int preset_index = sheet_size->itemData(index).toInt();
+            const auto& presets = cad::standard_sheet_presets();
+            if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) return;
+            const auto& preset = presets[static_cast<size_t>(preset_index)];
+            const QSignalBlocker block_width(width);
+            const QSignalBlocker block_height(height);
+            const QSignalBlocker block_thickness(thickness);
+            width->setValue(preset.width);
+            height->setValue(preset.height);
+            thickness->setValue(preset.default_thickness);
+        };
+        connect(sheet_size, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+                apply_sheet_preset);
+        const auto populate_sheet_sizes = [material, sheet_size, &sheet_presets](bool select_default) {
+            const QString selected_profile = material->currentData().toString();
+            int first_preset_index = -1;
+            {
+                const QSignalBlocker blocker(sheet_size);
+                sheet_size->clear();
+                sheet_size->addItem("Personalizado / atual", -1);
+                for (size_t i = 0; i < sheet_presets.size(); ++i) {
+                    const auto& preset = sheet_presets[i];
+                    if (QString::fromStdString(preset.name) != selected_profile) continue;
+                    sheet_size->addItem(QString::fromStdString(preset.label), static_cast<int>(i));
+                    if (first_preset_index < 0) first_preset_index = sheet_size->count() - 1;
+                }
+            }
+            if (select_default && first_preset_index >= 0)
+                sheet_size->setCurrentIndex(first_preset_index);
+        };
+        connect(material, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+                [populate_sheet_sizes](int) { populate_sheet_sizes(true); });
+        const auto use_custom_dimensions = [sheet_size] {
+            if (sheet_size->currentIndex() <= 0) return;
+            const QSignalBlocker blocker(sheet_size);
+            sheet_size->setCurrentIndex(0);
+        };
+        connect(width, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog,
+                [use_custom_dimensions](double) { use_custom_dimensions(); });
+        connect(height, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog,
+                [use_custom_dimensions](double) { use_custom_dimensions(); });
+        connect(thickness, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog,
+                [use_custom_dimensions](double) { use_custom_dimensions(); });
+        if (material->count() > 0) populate_sheet_sizes(true);
+
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                             &dialog);
+        buttons->button(QDialogButtonBox::Ok)->setText("Criar projeto");
+        buttons->button(QDialogButtonBox::Cancel)->setText("Cancelar");
+        layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted || material->currentIndex() < 0) return;
+
+        cad::Document new_document;
+        new_document.material.width = width->value();
+        new_document.material.height = height->value();
+        new_document.material.thickness = thickness->value();
+        new_document.material.material_profile = material->currentData().toString().toStdString();
+        document_ = std::move(new_document);
         import_preparation_pending_ = false;
         bridge_preparation_job_.reset();
         bridge_target_job_id_.clear();
-        document_.material.width = 1220.0;
-        document_.material.height = 2440.0;
         refresh_document_view();
         refresh_import_preparation();
-        statusBar()->showMessage("Novo projeto");
+        statusBar()->showMessage(
+            QString("Novo projeto: %1 · %2 × %3 × %4 mm")
+                .arg(material->currentText())
+                .arg(document_.material.width, 0, 'f', 1)
+                .arg(document_.material.height, 0, 'f', 1)
+                .arg(document_.material.thickness, 0, 'f', 1));
     });
 
     QAction* open_action = file_menu->addAction("Abrir...");

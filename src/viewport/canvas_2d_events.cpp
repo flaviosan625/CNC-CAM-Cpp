@@ -310,10 +310,7 @@ void Canvas2D::keyPressEvent(QKeyEvent* event) {
     }
     finish_navigation_preview();
     if (event->key() == Qt::Key_Escape) {
-        // Esc tem um significado unico no aplicativo: abandonar a operacao inteira. Nao deixamos
-        // cada ferramenta interpretar a tecla como apenas "limpar o passo atual" e continuar ativa.
-        if (tool_) tool_->cancel();
-        emit cancel_requested();
+        cancel_current_operation();
         event->accept();
         return;
     }
@@ -333,6 +330,12 @@ void Canvas2D::keyPressEvent(QKeyEvent* event) {
         }
     }
     QGraphicsView::keyPressEvent(event);
+}
+
+void Canvas2D::cancel_current_operation() {
+    // Esc abandona a operacao inteira; nao deixa a ferramenta limpar apenas uma etapa e continuar ativa.
+    if (tool_) tool_->cancel();
+    emit cancel_requested();
 }
 
 // Seta do teclado empurra a selecao - nunca rola a pagina. Passos como no Aspire: Ctrl afina, Shift

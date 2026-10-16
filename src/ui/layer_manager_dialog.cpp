@@ -203,7 +203,9 @@ void LayerManagerDialog::choose_color() {
     cad::Layer* layer = current_layer();
     if (!layer) return;
     const QColor current = QColor::fromRgbF(layer->color[0], layer->color[1], layer->color[2]);
-    const QColor chosen = QColorDialog::getColor(current, this, "Cor da camada");
+    // The button paints itself with the selected color. Do not use it as the
+    // dialog parent or its inline stylesheet will bleed into QColorDialog.
+    const QColor chosen = QColorDialog::getColor(current, window(), "Cor da camada");
     if (!chosen.isValid()) return;
     layer->color = {chosen.redF(), chosen.greenF(), chosen.blueF()};
     load_current();

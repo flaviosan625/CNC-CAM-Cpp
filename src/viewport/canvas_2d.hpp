@@ -167,6 +167,7 @@ public:
     // -- configuracao --
     void set_document(cad::Document* doc);
     void set_tool(tools::BaseTool* tool);
+    void cancel_current_operation();
     void setup_material(double width, double height);
     void fit_view();
     void zoom_by(double factor);
