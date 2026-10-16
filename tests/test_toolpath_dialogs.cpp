@@ -17,7 +17,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-#include "app/main_window.hpp"
+#include "app/main_window.hpp"  
 #include "cad/entities.hpp"
 #include "ui/machining_guide.hpp"
 #include "viewport/canvas_2d.hpp"

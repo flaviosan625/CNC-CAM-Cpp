@@ -124,6 +124,12 @@ public:
         (void)start; (void)end; (void)text;
     }
     virtual void clear_measurement() {}
+    // Arrasto visual sem editar a geometria ate o mouse ser solto.
+    virtual void preview_translation(const std::vector<cad::EntityPtr>& entities, double dx, double dy) {
+        (void)entities; (void)dx; (void)dy;
+    }
+    virtual void clear_translation_preview() {}
+    virtual void commit_translation_preview() {}
     virtual void set_cursor(const QCursor& cursor) { (void)cursor; }
 };
 
@@ -154,7 +160,8 @@ public:
     void remove(const std::vector<cad::EntityPtr>& entities);
     void replace(const std::vector<cad::EntityPtr>& old_ents, std::vector<cad::EntityPtr> new_ents,
                  const std::string& label);
-    void transform(const std::vector<cad::EntityPtr>& entities, TransformCommand::ApplyFn fn, const std::string& label);
+    void transform(const std::vector<cad::EntityPtr>& entities, TransformCommand::ApplyFn fn,
+                   const std::string& label, bool refresh = true);
     std::vector<cad::EntityPtr> selection() const { return document->selected_entities(); }
     void refresh() {
         if (canvas) canvas->refresh_entities();

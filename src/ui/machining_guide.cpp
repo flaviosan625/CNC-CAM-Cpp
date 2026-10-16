@@ -615,10 +615,16 @@ void MachiningGuide::drawScene(QPainter& p) {
 }
 
 void MachiningGuide::paintEvent(QPaintEvent*) {
-    QPainter p(this); p.setRenderHint(QPainter::Antialiasing); p.setRenderHint(QPainter::SmoothPixmapTransform);
-    QLinearGradient background(0, 0, width(), height()); background.setColorAt(0, QColor("#263440")); background.setColorAt(1, QColor("#101b23"));
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+    QLinearGradient background(0, 0, width(), height());
+    background.setColorAt(0, QColor("#222222"));
+    background.setColorAt(1, QColor("#181818"));
     p.fillRect(rect(), background);
-    p.setPen(QPen(QColor("#526475"), 1)); p.setBrush(Qt::NoBrush); p.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 8, 8);
+    p.setPen(QPen(QColor("#333333"), 1));
+    p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 6, 6);
     if (property("compact").toBool()) {
         // Header thumbnail uses the same textured material as the full-size guide.
         const double aspect = std::clamp(model_->number("width") / std::max(1.0, model_->number("height")), .4, 2.5);

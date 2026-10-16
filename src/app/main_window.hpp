@@ -48,6 +48,8 @@ class Canvas2DWidget;
 class Viewport3D;
 }  // namespace cnc::vp
 
+namespace cnc::ui { class ImportSetupPanel; }
+
 namespace cnc::app {
 
 // Layout of the job-sheet drawing, in logical units.  The image comes back
@@ -95,6 +97,7 @@ private:
     void create_legacy_toolpath_panel();
     void activate_tool(const QString& name);
     void activate_dimension(const QString& mode);
+    void edit_dimension_style();
     void refresh_document_view();
     void schedule_selection_previews();
     void refresh_guide_previews();
@@ -108,9 +111,12 @@ private:
     void show_canvas_context_menu(const QPoint& global_pos, double wx, double wy);
     void refresh_toolpaths();
     void refresh_bridge_markers();
+    void start_manual_bridge_preparation();
     void add_manual_bridge(double x, double y);
     void move_bridge_marker(int index, double x, double y);
+    void delete_bridge_marker(int index);
     void stop_manual_bridge_mode();
+    bool apply_bridge_preparation(cam::ToolpathJob& job);
     void edit_tool_database();
     bool edit_tool_database(const std::string& preselected_tool_name, cam::Tool* out_tool = nullptr);
     void add_toolpath_from_panel();
@@ -135,6 +141,13 @@ private:
     void set_right_panel_collapsed(bool collapsed);
     void refresh_automatic_cut_panel();
     void create_automatic_cut();
+    void classify_imported_entities(const std::vector<cad::EntityPtr>& entities);
+    void begin_import_preparation();
+    void refresh_import_preparation();
+    bool apply_import_preparation();
+    void assign_selected_recess();
+    bool calculate_prepared_recesses(const std::vector<std::string>& scope = {});
+    void generate_prepared_recesses();
     void show_guides_gallery();
     void export_gcode();
     void export_setup_sheet();
@@ -228,6 +241,7 @@ private:
     QPushButton* simulation_finish_button_ = nullptr;
     QPushButton* simulation_restart_button_ = nullptr;
     QDockWidget* toolpath_dock_ = nullptr;
+    int last_expanded_dock_width_ = 340;
     QScrollArea* right_panel_scroll_ = nullptr;
     QToolButton* selection_nav_button_ = nullptr;
     QToolButton* toolpath_nav_button_ = nullptr;
@@ -235,6 +249,8 @@ private:
     QToolButton* order_service_nav_button_ = nullptr;
     QToolButton* automatic_nav_button_ = nullptr;
     QComboBox* automatic_cut_combo_ = nullptr;
+    ui::ImportSetupPanel* import_setup_panel_ = nullptr;
+    bool import_preparation_pending_ = false;
     QLabel* automatic_cut_info_label_ = nullptr;
     QPushButton* automatic_create_button_ = nullptr;
     QTimer* selection_preview_timer_ = nullptr;
@@ -244,6 +260,7 @@ private:
     QTimer* simulation_timer_ = nullptr;
     std::unique_ptr<sim::ToolpathSimulation> simulation_;
     std::string bridge_target_job_id_;
+    std::optional<cam::ToolpathJob> bridge_preparation_job_;
     QWidget* bridge_mode_banner_ = nullptr;
     std::chrono::steady_clock::time_point simulation_last_tick_{};
 };

@@ -313,19 +313,19 @@ void QuickEditPopup::build_ui() {
     auto* card = new QFrame(this);
     card->setObjectName("QuickEditCard");
     card->setStyleSheet(R"(
-        #QuickEditCard { background-color: #1b2737; border: 1px solid #2589f5; border-radius: 11px; }
-        #QuickEditTitle { color: #8ec5ff; font-size: 10px; font-weight: 600; }
-        #QuickEditHint { color: #7b90aa; font-size: 9px; }
-        #QuickEditLabel { color: #c3d4e8; font-size: 11px; }
-        #QuickEditUnit { color: #7b90aa; font-size: 10px; }
-        QLineEdit { background-color: #121a25; color: #eef5ff; border: 1px solid #31506f;
-                    border-radius: 6px; padding: 4px 7px; selection-background-color: #2589f5; }
-        QLineEdit:focus { border-color: #2589f5; background-color: #16202d; }
+        #QuickEditCard { background-color: #1f1f1f; border: 1px solid #0078d4; border-radius: 8px; }
+        #QuickEditTitle { color: #75beff; font-size: 10px; font-weight: 600; }
+        #QuickEditHint { color: #858585; font-size: 9px; }
+        #QuickEditLabel { color: #cccccc; font-size: 11px; }
+        #QuickEditUnit { color: #858585; font-size: 10px; }
+        QLineEdit { background-color: #252526; color: #cccccc; border: 1px solid #3c3c3c;
+                    border-radius: 5px; padding: 4px 7px; selection-background-color: #04395e; }
+        QLineEdit:focus { border-color: #0078d4; background-color: #2a2a2a; }
     )");
     auto* glow = new QGraphicsDropShadowEffect(card);
     glow->setBlurRadius(36);
     glow->setOffset(0, 0);
-    glow->setColor(QColor("#2589f5"));
+    glow->setColor(QColor("#0078d4"));
     card->setGraphicsEffect(glow);
     outer->addWidget(card);
 

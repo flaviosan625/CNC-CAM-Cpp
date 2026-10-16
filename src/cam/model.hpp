@@ -100,6 +100,7 @@ namespace cnc::cam {
 struct Toolpath {
     std::string name;
     ToolpathType kind = ToolpathType::Profile;
+    ProfileSide profile_side = ProfileSide::Outside;
     std::string tool_name;
     int tool_number = 1;
     int spindle_speed = 18000;

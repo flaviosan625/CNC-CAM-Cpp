@@ -152,11 +152,11 @@ void Canvas2D::rebuild_background() {
     const double w = material_width, h = material_height;
     const double off = std::max(w, h) * 0.006;
 
-    QGraphicsRectItem* sombra = scene_->addRect(off, off, w, h, QPen(Qt::NoPen), QBrush(QColor(30, 30, 30, 80)));
+    QGraphicsRectItem* sombra = scene_->addRect(off, off, w, h, QPen(Qt::NoPen), QBrush(QColor(0, 0, 0, 110)));
     sombra->setZValue(-101);
     bg_items_.push_back(sombra);
 
-    QGraphicsRectItem* chapa = scene_->addRect(0, 0, w, h, QPen(QColor(100, 100, 100), 0.5), QBrush(QColor("white")));
+    QGraphicsRectItem* chapa = scene_->addRect(0, 0, w, h, QPen(QColor(60, 60, 60), 1.0), QBrush(QColor("#252526")));
     chapa->setZValue(-100);
     bg_items_.push_back(chapa);
 
@@ -169,7 +169,7 @@ void Canvas2D::rebuild_background() {
             const double candidate = power * n;
             if (std::fabs(candidate - rough) < std::fabs(step - rough)) step = candidate;
         }
-        const QPen grid_pen(QColor(65, 105, 145, 55), 0);
+        const QPen grid_pen(QColor(255, 255, 255, 20), 0);
         const int nx = static_cast<int>(std::ceil(w / step));
         for (int i = 1; i < nx; ++i) {
             QGraphicsLineItem* item = scene_->addLine(i * step, 0, i * step, h, grid_pen);

@@ -78,4 +78,54 @@ MaterialSetup MaterialSetup::from_json(const Json& j, const std::string& fallbac
     return m;
 }
 
+const std::vector<SheetPreset>& standard_sheet_presets() {
+    static const std::vector<SheetPreset> kPresets = {
+        {"MDF", "MDF — Chapa padrão (1850 × 2750 mm)", 1850.0, 2750.0, 15.0, 6.0, "Padrão de fábrica nacional (Arauco, Duratex, Berneck)"},
+        {"PVC", "PVC Expandido (1220 × 2440 mm)", 1220.0, 2440.0, 10.0, 4.0, "Chapa inteira padrão comunicação visual e corte rápido"},
+        {"Acrílico", "Acrílico Cristal / Cast (1000 × 2000 mm)", 1000.0, 2000.0, 4.0, 6.0, "Passada curta para acabamento limpo sem derretimento"},
+        {"ACM", "ACM Alumínio Composto (1220 × 2440 mm)", 1220.0, 2440.0, 3.0, 4.0, "Painel compósito padrão para fachadas e totens"},
+        {"PS", "PS Poliestireno (1000 × 2000 mm)", 1000.0, 2000.0, 2.0, 2.0, "Chapa fina para corte com fresa 2mm"},
+        {"Policarbonato", "Policarbonato Compacto (1000 × 2000 mm)", 1000.0, 2000.0, 4.0, 4.0, "Alta resistência ao impacto"},
+        {"Compensado", "Compensado Naval / Pinus (1220 × 2440 mm)", 1220.0, 2440.0, 15.0, 6.0, "Madeira multilaminada padrão marcenaria"},
+        {"Alumínio", "Chapa de Alumínio (1000 × 2000 mm)", 1000.0, 2000.0, 2.0, 4.0, "Liga naval / estrutural usinável"},
+    };
+    return kPresets;
+}
+
+namespace {
+std::string clean_key(const std::string& text) {
+    std::string out;
+    for (char c : text) {
+        const unsigned char uc = static_cast<unsigned char>(c);
+        if (std::isalnum(uc)) out.push_back(static_cast<char>(std::tolower(uc)));
+    }
+    return out;
+}
+}  // namespace
+
+const SheetPreset* find_sheet_preset(const std::string& material_name) {
+    const std::string key = clean_key(material_name);
+    if (key.empty()) return nullptr;
+
+    const auto& presets = standard_sheet_presets();
+    // 1. Exact or starts-with match
+    for (const auto& p : presets) {
+        const std::string pkey = clean_key(p.name);
+        if (key == pkey || key.find(pkey) != std::string::npos || pkey.find(key) != std::string::npos) {
+            return &p;
+        }
+    }
+    // 2. Specific aliases
+    if (key.find("acril") != std::string::npos) {
+        for (const auto& p : presets) if (p.name == "Acrílico") return &p;
+    }
+    if (key.find("madeira") != std::string::npos || key.find("compensad") != std::string::npos) {
+        for (const auto& p : presets) if (p.name == "Compensado") return &p;
+    }
+    if (key.find("alumin") != std::string::npos) {
+        for (const auto& p : presets) if (p.name == "Alumínio") return &p;
+    }
+    return nullptr;
+}
+
 }  // namespace cnc::cad

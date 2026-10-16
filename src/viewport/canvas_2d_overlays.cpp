@@ -131,7 +131,32 @@ void Canvas2D::refresh_toolpaths(const std::vector<const cam::Toolpath*>& toolpa
     for (size_t index = 0; index < toolpaths.size(); ++index) {
         const cam::Toolpath& tp = *toolpaths[index];
         if (!tp.visible || tp.moves.empty()) continue;
-        const QColor color(kToolpathColors[index % kToolpathColors.size()]);
+
+        // Padrão de cores por operação:
+        // Rebaixo: Laranja/Âmbar (#f59e0b)
+        // Corte fora (externo): Magenta (#e040fb)
+        // Corte dentro (interno): Verde esmeralda (#10b981)
+        // Corte sobre linha: Ciano (#00e5ff)
+        // Furação: Azul claro (#38bdf8)
+        QColor color;
+        if (tp.kind == cam::ToolpathType::Pocket) {
+            color = QColor("#f59e0b");
+        } else if (tp.kind == cam::ToolpathType::Profile) {
+            if (tp.profile_side == cam::ProfileSide::Inside) {
+                color = QColor("#10b981");
+            } else if (tp.profile_side == cam::ProfileSide::On) {
+                color = QColor("#00e5ff");
+            } else {
+                color = QColor("#e040fb");
+            }
+        } else if (tp.kind == cam::ToolpathType::Drill) {
+            color = QColor("#38bdf8");
+        } else if (tp.kind == cam::ToolpathType::VCarve) {
+            color = QColor("#a855f7");
+        } else {
+            color = QColor(kToolpathColors[index % kToolpathColors.size()]);
+        }
+
         if (tp.kind == cam::ToolpathType::Drill) {
             std::vector<Pt> centers;
             for (const cam::Move& move : tp.moves) {
@@ -153,8 +178,12 @@ void Canvas2D::refresh_toolpaths(const std::vector<const cam::Toolpath*>& toolpa
                 tp_items_.push_back(marker);
             }
         }
-        QPainterPath cut, rapid;
+
+        QPainterPath cut, rapid, arrow_path;
         std::optional<QPointF> prev;
+        std::optional<QPointF> first_cut_target;
+        double accumulated_dist = 0.0;
+
         for (const cam::Move& m : tp.moves) {
             if (m.kind == cam::MoveKind::Dwell) continue;
             const QPointF target = world_to_scene(m.x, m.y);
@@ -162,28 +191,73 @@ void Canvas2D::refresh_toolpaths(const std::vector<const cam::Toolpath*>& toolpa
                 cut.moveTo(target);
                 rapid.moveTo(target);
             } else {
-                QPainterPath& path = m.kind == cam::MoveKind::Rapid ? rapid : cut;
-                path.moveTo(*prev);
-                path.lineTo(target);
+                if (m.kind == cam::MoveKind::Rapid) {
+                    rapid.moveTo(*prev);
+                    rapid.lineTo(target);
+                    accumulated_dist = 0.0;
+                } else {
+                    cut.moveTo(*prev);
+                    cut.lineTo(target);
+                    if (!first_cut_target) {
+                        first_cut_target = *prev;
+                    }
+
+                    // Gera setas indicando sentido ao longo do percurso de corte
+                    const QPointF delta = target - *prev;
+                    const double seg_len = std::hypot(delta.x(), delta.y());
+                    if (seg_len > 0.01 && std::isfinite(seg_len)) {
+                        const QPointF dir = delta / seg_len;
+                        const QPointF norm(-dir.y(), dir.x());
+                        constexpr double step = 32.0;  // espaçamento entre setas
+                        constexpr double al = 5.5;     // comprimento da seta
+                        constexpr double aw = 3.2;     // largura da asa
+                        if (accumulated_dist < 0.0 || !std::isfinite(accumulated_dist)) accumulated_dist = 0.0;
+                        double d = step - accumulated_dist;
+                        int arrow_count = 0;
+                        while (d <= seg_len && ++arrow_count < 200) {
+                            if (d >= 2.0) {
+                                const QPointF pt = *prev + dir * d;
+                                arrow_path.moveTo(pt - dir * al + norm * aw);
+                                arrow_path.lineTo(pt);
+                                arrow_path.lineTo(pt - dir * al - norm * aw);
+                            }
+                            d += step;
+                        }
+                        accumulated_dist = std::fmod(accumulated_dist + seg_len, step);
+                    }
+                }
             }
             prev = target;
         }
 
+        // Camada do percurso: rápido (tracejado vermelho), corte (linha com cor padronizada) e setas de sentido
         const std::pair<const QPainterPath*, QPen> layers[] = {
             {&rapid, tp_pen(QColor("#ef5350"), 1.1, true)},
-            {&cut, tp_pen(color, 2.2, false)},
+            {&cut, tp_pen(color, 2.0, false)},
+            {&arrow_path, tp_pen(color.darker(115), 1.6, false)},
         };
         for (const auto& [path, pen] : layers) {
             if (path->isEmpty()) continue;
             auto* item = new QGraphicsPathItem(*path);
             item->setPen(pen);
-            // Canais, faca e keyhole percorrem o proprio vetor. Atras da entidade o percurso
-            // existia, mas ficava totalmente oculto. Acima do desenho e abaixo das alcas ele fica
-            // legivel sem atrapalhar selecao ou edicao.
             item->setZValue(15);
             item->setAcceptedMouseButtons(Qt::NoButton);
             scene_->addItem(item);
             tp_items_.push_back(item);
+        }
+
+        // Ponto inicial de entrada da fresa (quadrado verde indicador de início)
+        if (first_cut_target) {
+            auto* start_marker = new QGraphicsRectItem(-3.5, -3.5, 7.0, 7.0);
+            start_marker->setPen(QPen(QColor("#0f172a"), 1.2));
+            start_marker->setBrush(QBrush(QColor("#22c55e")));
+            start_marker->setPos(*first_cut_target);
+            start_marker->setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
+            start_marker->setZValue(18);
+            start_marker->setAcceptedMouseButtons(Qt::NoButton);
+            start_marker->setToolTip("Início do corte (ponto de entrada)");
+            scene_->addItem(start_marker);
+            tp_items_.push_back(start_marker);
         }
     }
 }
@@ -202,9 +276,15 @@ void Canvas2D::set_profile_tab_markers(const std::vector<TabPlacement>& placemen
         const Pt p = scene_to_world(scene_point);
         emit tab_marker_moved(index, p.x, p.y);
     };
+    auto deleted = [this](int index) {
+        emit tab_marker_deleted(index);
+    };
     for (size_t index = 0; index < placements.size(); ++index) {
         const TabPlacement& pl = placements[index];
-        auto* marker = new TabMarker(static_cast<int>(index), movable ? TabMarker::MovedFn(moved) : TabMarker::MovedFn(), pl.manual);
+        auto* marker = new TabMarker(static_cast<int>(index),
+                                     movable ? TabMarker::MovedFn(moved) : TabMarker::MovedFn(),
+                                     movable ? TabMarker::DeletedFn(deleted) : TabMarker::DeletedFn(),
+                                     pl.manual);
         marker->setPos(world_to_scene(pl.x, pl.y));
         scene_->addItem(marker);
         (pl.manual ? manual_tab_items_ : automatic_tab_items_).push_back(marker);

@@ -44,6 +44,7 @@ public:
     BBox world_bounds() const;
     bool hit_test_world(double x, double y, double tolerance) const;
     void refresh();
+    void adopt_preview_translation();
     void apply_style();
 
 private:

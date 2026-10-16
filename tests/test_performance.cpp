@@ -379,6 +379,28 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         CHECK(document.to_json().at("entities") == before_drag);
         REQUIRE(document.entities.size() == originals * copies);
 
+        // Arrasta o bloco original inteiro, como no uso em grupo de pecas importadas.
+        // Mede o percurso otimizado de pre-visualizacao e confirma que soltar continua desfazivel.
+        for (size_t i = 0; i < originals; ++i) document.set_selected(document.entities[i], true);
+        canvas.refresh_entities();
+        const auto before_group_drag = document.to_json().at("entities");
+        measure(measurements, "interactive_group_move_8_frames", 8, [&] {
+            QTest::mousePress(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, start, 0);
+            for (int frame = 1; frame <= 8; ++frame) {
+                send_move(canvas.viewport(), start + QPoint(frame * 4, frame * -2), Qt::LeftButton);
+                QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+            }
+        });
+        measure(measurements, "interactive_group_release", 1, [&] {
+            QTest::mouseRelease(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, start + QPoint(32, -16), 0);
+            QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        });
+        REQUIRE_MESSAGE(undo.can_undo(), "arrasto em grupo deve criar um comando reversivel");
+        undo.undo();
+        canvas.refresh_entities();
+        document.clear_selection();
+        CHECK(document.to_json().at("entities") == before_group_drag);
+
         cnc::Json report = {{"copies", copies}, {"entities", document.entities.size()},
                             {"polyline_points", points}, {"texts", texts},
                             {"iterations", iterations}, {"viewport", {1280, 800}},

@@ -5,6 +5,7 @@
 #include <QBrush>
 #include <QColor>
 #include <QFont>
+#include <QGraphicsSceneMouseEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
@@ -34,19 +35,22 @@ QString ruler_label(double v) {
 // Ponte arrastavel
 // ======================================================================
 
-TabMarker::TabMarker(int index, MovedFn callback, bool manual)
-    : QGraphicsEllipseItem(-5, -5, 10, 10), index_(index), callback_(std::move(callback)) {
+TabMarker::TabMarker(int index, MovedFn callback, DeletedFn delete_callback, bool manual)
+    : QGraphicsEllipseItem(-5, -5, 10, 10), index_(index), callback_(std::move(callback)),
+      delete_callback_(std::move(delete_callback)) {
     setPen(QPen(QColor("#fff4dc"), 1.4));
     setBrush(QBrush(manual ? QColor("#39a9ff") : QColor("#ff9f1c")));
     setFlag(QGraphicsItem::ItemIgnoresTransformations, true);
     setFlag(QGraphicsItem::ItemIsMovable, static_cast<bool>(callback_));
     setFlag(QGraphicsItem::ItemIsSelectable, static_cast<bool>(callback_));
     setCursor(Qt::OpenHandCursor);
-    setToolTip(manual ? "Ponte manual" : "Ponte automática — arraste para reposicionar");
+    setToolTip(manual ? "Ponte manual — clique para apagar ou arraste para reposicionar"
+                      : "Ponte automática — clique para apagar ou arraste para reposicionar");
     setZValue(110);
 }
 
 void TabMarker::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+    press_scene_pos_ = event->scenePos();
     setCursor(Qt::ClosedHandCursor);
     QGraphicsEllipseItem::mousePressEvent(event);
 }
@@ -54,7 +58,13 @@ void TabMarker::mousePressEvent(QGraphicsSceneMouseEvent* event) {
 void TabMarker::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     QGraphicsEllipseItem::mouseReleaseEvent(event);
     setCursor(Qt::OpenHandCursor);
-    if (callback_) callback_(index_, scenePos());
+    const QPointF diff = event->scenePos() - press_scene_pos_;
+    const double drag_distance = std::hypot(diff.x(), diff.y());
+    if (drag_distance <= 4.0) {
+        if (delete_callback_) delete_callback_(index_);
+    } else {
+        if (callback_) callback_(index_, scenePos());
+    }
 }
 
 // ======================================================================
@@ -137,7 +147,7 @@ void RulerH::paintEvent(QPaintEvent*) {
     while (x <= vr.right()) {
         const int vx = canvas_->mapFromScene(QPointF(x, 0)).x();
         if (-20 <= vx && vx <= w + 20) {
-            p.setPen(QPen(QColor("#6380a2"), 1));
+            p.setPen(QPen(QColor("#6e7681"), 1));
             p.drawLine(vx, h - 10, vx, h - 1);
             p.setPen(QColor(ui::color("muted")));
             p.drawText(vx + 2, h - 13, ruler_label((x - ox) / factor));
@@ -145,7 +155,7 @@ void RulerH::paintEvent(QPaintEvent*) {
         for (int j = 1; j < 5; ++j) {
             const int mvx = canvas_->mapFromScene(QPointF(x + j * sp / 5, 0)).x();
             if (0 <= mvx && mvx <= w) {
-                p.setPen(QPen(QColor("#35495f"), 1));
+                p.setPen(QPen(QColor("#3c3c3c"), 1));
                 p.drawLine(mvx, h - 5, mvx, h - 1);
             }
         }
@@ -194,7 +204,7 @@ void RulerV::paintEvent(QPaintEvent*) {
     while (wy <= wy_max) {
         const int vy = canvas_->mapFromScene(QPointF(0, mat_h_ - wy)).y();
         if (-20 <= vy && vy <= h + 20) {
-            p.setPen(QPen(QColor("#6380a2"), 1));
+            p.setPen(QPen(QColor("#6e7681"), 1));
             p.drawLine(w - 10, vy, w - 1, vy);
             const QString label = ruler_label((wy - oy) / factor);
             p.setPen(QColor(ui::color("muted")));
@@ -207,7 +217,7 @@ void RulerV::paintEvent(QPaintEvent*) {
         for (int j = 1; j < 5; ++j) {
             const int mvy = canvas_->mapFromScene(QPointF(0, mat_h_ - (wy + j * sp / 5))).y();
             if (0 <= mvy && mvy <= h) {
-                p.setPen(QPen(QColor("#35495f"), 1));
+                p.setPen(QPen(QColor("#3c3c3c"), 1));
                 p.drawLine(w - 5, mvy, w - 1, mvy);
             }
         }

@@ -75,6 +75,8 @@
 #include "ui/responsive.hpp"
 #include "ui/icons.hpp"
 #include "ui/layer_manager_dialog.hpp"
+#include "ui/dimension_style_dialog.hpp"
+#include "ui/import_setup_panel.hpp"
 #include "ui/quick_edit.hpp"
 #include "ui/safe_inputs.hpp"
 #include "cad/layout.hpp"
@@ -86,6 +88,7 @@
 #include "cam/templates.hpp"
 #include "cam/vectric_tools.hpp"
 #include "io/importers.hpp"
+#include "io/import_operations.hpp"
 #include "tools/draw_tools.hpp"
 #include "tools/edit_tools.hpp"
 #include "tools/transform_tools.hpp"
@@ -214,7 +217,7 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     const auto make_canvas = [&](double height) {
         QImage image(qRound(canvas_w * supersample), qRound(height * supersample),
                      QImage::Format_ARGB32_Premultiplied);
-        image.fill(QColor("#0b1521"));
+        image.fill(QColor("#181818"));
         return image;
     };
     const auto start_painter = [&](QPainter& painter) {
@@ -352,12 +355,12 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
     header_path.addRoundedRect(header, 15, 15);
     painter.setBrush(QLinearGradient(header.topLeft(), header.bottomLeft()));
     QLinearGradient header_gradient(header.topLeft(), header.bottomLeft());
-    header_gradient.setColorAt(0.0, QColor("#111f31"));
-    header_gradient.setColorAt(1.0, QColor("#1b2a3d"));
+    header_gradient.setColorAt(0.0, QColor("#1f1f1f"));
+    header_gradient.setColorAt(1.0, QColor("#252526"));
     painter.setBrush(header_gradient);
-    painter.setPen(QPen(QColor("#29d9ef"), 1.1));
+    painter.setPen(QPen(QColor("#0078d4"), 1.0));
     painter.drawPath(header_path);
-    painter.setPen(QColor("#f5f8fc"));
+    painter.setPen(QColor("#e0e0e0"));
     painter.setFont(QFont("Segoe UI", 9.5, QFont::DemiBold));
     QString header_text = QString("CHAPA %1 × %2 × %3 mm  |  CORTE X %4 × Y %5 mm  |  Z %6…%7 mm  |  ZERO Z: %8")
         .arg(board_width, 0, 'f', 1).arg(board_height, 0, 'f', 1)
@@ -370,10 +373,10 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
 
     const QRectF viewport(12, 46, canvas_w - 24, canvas_h - 62);
     QLinearGradient viewport_gradient(viewport.topLeft(), viewport.bottomLeft());
-    viewport_gradient.setColorAt(0.0, QColor("#172636"));
-    viewport_gradient.setColorAt(1.0, QColor("#0d1825"));
+    viewport_gradient.setColorAt(0.0, QColor("#1e1e1e"));
+    viewport_gradient.setColorAt(1.0, QColor("#181818"));
     painter.setBrush(viewport_gradient);
-    painter.setPen(QPen(QColor("#344b61"), 1.0));
+    painter.setPen(QPen(QColor("#2b2b2b"), 1.0));
     painter.drawRoundedRect(viewport, 7, 7);
 
     QString badge_text = "VISTA 3D ISO · PERCURSO REAL E MATERIAL";
@@ -385,7 +388,7 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
                          .arg(QString::fromStdString(operations[options.only_operation].path->name));
     }
     const QRectF badge(22, 52, std::max(270.0, badge_text.size() * 6.4 + 28.0), 20);
-    painter.setBrush(QColor("#1879ad"));
+    painter.setBrush(QColor("#0078d4"));
     painter.setPen(Qt::NoPen);
     painter.drawRoundedRect(badge, 4, 4);
     painter.setPen(Qt::white);
@@ -469,10 +472,10 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
         painter.drawPolygon(margin_polygon);
     }
     const QRectF material_tag(top_polygon.boundingRect().topRight() + QPointF(-122, 3), QSizeF(118, 19));
-    painter.setBrush(QColor(13, 25, 38, 210));
-    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(31, 31, 31, 230));
+    painter.setPen(QPen(QColor("#2b2b2b"), 1.0));
     painter.drawRoundedRect(material_tag, 3, 3);
-    painter.setPen(QColor("#fff8e9"));
+    painter.setPen(QColor("#cccccc"));
     painter.setFont(QFont("Segoe UI", 7.6, QFont::Bold));
     painter.drawText(material_tag, Qt::AlignCenter,
         QString("%1 × %2 × %3 mm").arg(board_width, 0, 'f', 0)
@@ -659,14 +662,14 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
                            std::clamp(point.y(), box.top(), box.bottom()));
         painter.setPen(QPen(color, 1.6, Qt::SolidLine, Qt::RoundCap));
         painter.drawLine(point, edge);
-        painter.setBrush(QColor(7, 18, 30, 238));
+        painter.setBrush(QColor(31, 31, 31, 240));
         painter.setPen(QPen(color, 1.25));
         painter.drawRoundedRect(box, 5, 5);
         painter.setPen(color);
         painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
         painter.drawText(box.adjusted(9, 5, -7, -23), Qt::AlignLeft | Qt::AlignVCenter,
                          title);
-        painter.setPen(QColor("#f4f8fc"));
+        painter.setPen(QColor("#cccccc"));
         painter.setFont(QFont("Segoe UI", 8.8, QFont::DemiBold));
         painter.drawText(box.adjusted(9, 23, -7, -4), Qt::AlignLeft | Qt::AlignVCenter,
                          detail);
@@ -674,7 +677,7 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
 
     const bool zero_is_cut_start = first_cut_point &&
         QLineF(origin, *first_cut_point).length() < 14.0;
-    painter.setBrush(QColor(7, 18, 30, 235));
+    painter.setBrush(QColor("#1f1f1f"));
     painter.setPen(QPen(QColor("#ffbd69"), 2.0));
     painter.drawEllipse(origin, zero_is_cut_start ? 12.0 : 7.0,
                         zero_is_cut_start ? 12.0 : 7.0);
@@ -687,7 +690,7 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
                      .arg(has_material && material->zero_z == "bottom" ? "base" : "topo"),
                  QColor("#ffbd69"));
     if (first_cut_point && first_cut_xy) {
-        painter.setBrush(QColor(8, 30, 24, 235));
+        painter.setBrush(QColor("#1f1f1f"));
         painter.setPen(QPen(QColor("#47ec9c"), 2.0));
         painter.drawEllipse(*first_cut_point, zero_is_cut_start ? 6.0 : 8.0,
                             zero_is_cut_start ? 6.0 : 8.0);
@@ -702,8 +705,8 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
 
     // The cotas run as a strip under the stock: spreading them across the width
     // leaves room for type the operator can read from the machine.
-    painter.setBrush(QColor(9, 20, 31, 205));
-    painter.setPen(QPen(QColor("#334b61"), .9));
+    painter.setBrush(QColor(31, 31, 31, 230));
+    painter.setPen(QPen(QColor("#2b2b2b"), 1.0));
     painter.drawRoundedRect(legend, 6, 6);
 
     const std::array<std::pair<QString, QString>, 5> cotas = {{
@@ -725,25 +728,25 @@ QImage make_job_layout_preview(const std::vector<cam::SetupSheetOperation>& oper
         const double x = cell_x;
         cell_x += cell_width;
         if (i > 0) {
-            painter.setPen(QPen(QColor(70, 96, 122, 150), .8));
+            painter.setPen(QPen(QColor("#2b2b2b"), 1.0));
             painter.drawLine(QPointF(x - 6, legend.top() + 10),
                              QPointF(x - 6, legend.bottom() - 10));
         }
-        painter.setPen(QColor("#8ea4ba"));
+        painter.setPen(QColor("#858585"));
         painter.setFont(QFont("Segoe UI", 7.5, QFont::Bold));
         painter.drawText(QRectF(x, legend.top() + 8, cell_width - 10, 16),
                          Qt::AlignLeft | Qt::AlignVCenter, cotas[i].first);
-        painter.setPen(QColor("#f4f8fc"));
+        painter.setPen(QColor("#ffffff"));
         painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
         painter.drawText(QRectF(x, legend.top() + 26, cell_width - 10, 26),
                          Qt::AlignLeft | Qt::AlignVCenter, cotas[i].second);
     }
 
     painter.setFont(QFont("Segoe UI", 7.6));
-    painter.setPen(QColor("#29d9ef"));
+    painter.setPen(QColor("#0078d4"));
     painter.drawText(QRectF(16, canvas_h - 17, canvas_w - 32, 13),
                      Qt::AlignLeft | Qt::AlignVCenter, "Colorido: centro da fresa");
-    painter.setPen(QColor("#9bacbc"));
+    painter.setPen(QColor("#858585"));
     painter.drawText(QRectF(16, canvas_h - 17, canvas_w - 32, 13),
                      Qt::AlignRight | Qt::AlignVCenter,
                      "Vista isométrica · percurso de corte e material removido.");
@@ -873,19 +876,19 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
     auto* banner_text = new QLabel(
         "Modo de pontes ativo — Clique nos contornos para adicionar ou remover · Arraste para mover",
         bridge_mode_banner_);
-    banner_text->setStyleSheet("font-weight: bold; color: #7ec7ff; font-size: 12px;");
+    banner_text->setStyleSheet("font-weight: bold; color: #75beff; font-size: 12px;");
     banner_layout->addWidget(banner_text, 1);
     auto* finish_button = new QPushButton("Concluir pontes (Esc)", bridge_mode_banner_);
     finish_button->setCursor(Qt::PointingHandCursor);
     finish_button->setStyleSheet(
-        "QPushButton { background-color: #1976d2; color: #ffffff; font-weight: bold; padding: 4px 12px; "
-        "border-radius: 4px; border: 1px solid #42a5f5; font-size: 11px; } "
-        "QPushButton:hover { background-color: #1e88e5; border-color: #64b5f6; }");
+        "QPushButton { background-color: #0e639c; color: #ffffff; font-weight: bold; padding: 4px 12px; "
+        "border-radius: 4px; border: 1px solid #1177bb; font-size: 11px; } "
+        "QPushButton:hover { background-color: #1177bb; border-color: #3794ff; }");
     banner_layout->addWidget(finish_button);
     connect(finish_button, &QPushButton::clicked, this, &MainWindow::stop_manual_bridge_mode);
     bridge_mode_banner_->setVisible(false);
     bridge_mode_banner_->setStyleSheet(
-        "QWidget#BridgeModeBanner { background-color: #0e2238; border: 1px solid #1976d2; border-radius: 5px; margin: 1px 4px; }");
+        "QWidget#BridgeModeBanner { background-color: #1e1e1e; border: 1px solid #0078d4; border-radius: 5px; margin: 1px 4px; }");
     view_header_layout->addWidget(bridge_mode_banner_);
 
     layout->addWidget(view_header);
@@ -971,6 +974,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
             &MainWindow::add_manual_bridge);
     connect(canvas_widget_->canvas, &vp::Canvas2D::tab_marker_moved, this,
             &MainWindow::move_bridge_marker);
+    connect(canvas_widget_->canvas, &vp::Canvas2D::tab_marker_deleted, this,
+            &MainWindow::delete_bridge_marker);
     connect(canvas_widget_->canvas, &vp::Canvas2D::cancel_requested, this,
             &MainWindow::stop_manual_bridge_mode);
     connect(canvas_widget_, &vp::Canvas2DWidget::entity_double_clicked,
@@ -980,6 +985,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
 
     create_actions();
     refresh_document_view();
+    refresh_import_preparation();
     statusBar()->showMessage(QFile::exists(":/assets/check.svg")
                                  ? "0 objeto(s) selecionado(s)"
                                  : "recursos FALTANDO");
@@ -996,7 +1002,7 @@ void MainWindow::create_order_service_page() {
     auto* heading_text = new QVBoxLayout();
     heading_text->setSpacing(2);
     auto* title = new QLabel("CENTRAL OS · SETUP EM 5 ETAPAS", page);
-    title->setStyleSheet("font-size: 15pt; font-weight: 700; color: #8cc8ff;");
+    title->setStyleSheet("font-size: 15pt; font-weight: 700; color: #75beff;");
     auto* subtitle = new QLabel(
         "Confira material, origem e ferramentas; o desenho acompanha os percursos calculados.", page);
     subtitle->setObjectName("MutedText");
@@ -1014,22 +1020,22 @@ void MainWindow::create_order_service_page() {
     order_service_step_tabs_->setExpanding(true);
     order_service_step_tabs_->setDrawBase(false);
     order_service_step_tabs_->setStyleSheet(R"QSS(
-        QTabBar::tab { background:#1a2939; color:#a9bfd6; border:1px solid #344a62;
-            padding:8px 7px; margin-right:3px; font-weight:600; }
-        QTabBar::tab:selected { background:#1d4567; color:#f0f7ff; border-color:#168be0; }
-        QTabBar::tab:hover:!selected { background:#24384d; color:#ffffff; }
+        QTabBar::tab { background:#181818; color:#969696; padding:9px 7px;
+            border:none; border-bottom:2px solid transparent; font-weight:600; }
+        QTabBar::tab:selected { background:#1f1f1f; color:#ffffff; border-bottom:2px solid #0078d4; }
+        QTabBar::tab:hover:!selected { background:#2a2d2e; color:#e0e0e0; }
     )QSS");
     for (const QString& step : {"1 · Material", "2 · Origem", "3 · Ferramentas",
                                 "4 · Percurso", "5 · Identificação / PDF"})
         order_service_step_tabs_->addTab(step);
     root->addWidget(order_service_step_tabs_);
 
-    auto* body = new QHBoxLayout();
-    body->setSpacing(10);
-    order_service_steps_ = new QStackedWidget(page);
+    auto* body = new QSplitter(Qt::Horizontal, page);
+    body->setObjectName("OrderServiceSplitter");
+    order_service_steps_ = new QStackedWidget(body);
     order_service_steps_->setObjectName("OSStepStack");
     order_service_steps_->setMinimumWidth(250);
-    body->addWidget(order_service_steps_, 4);
+    body->addWidget(order_service_steps_);
 
     auto* material_page = new QWidget(order_service_steps_);
     auto* material_layout = new QVBoxLayout(material_page);
@@ -1183,7 +1189,7 @@ void MainWindow::create_order_service_page() {
     auto* preview_panel = new QFrame(page);
     preview_panel->setObjectName("OSPreviewPanel");
     preview_panel->setStyleSheet(
-        "QFrame#OSPreviewPanel { background: #14202d; border: 1px solid #304861; border-radius: 8px; }");
+        "QFrame#OSPreviewPanel { background: #1f1f1f; border: 1px solid #2b2b2b; border-radius: 8px; }");
     auto* preview_layout = new QVBoxLayout(preview_panel);
     preview_layout->setContentsMargins(10, 9, 10, 9);
     preview_layout->setSpacing(7);
@@ -1198,7 +1204,7 @@ void MainWindow::create_order_service_page() {
     preview_heading->addWidget(change_origin);
     preview_layout->addLayout(preview_heading);
     auto* image_frame = new QFrame(preview_panel);
-    image_frame->setStyleSheet("background: #0b1521; border: 1px solid #344a62; border-radius: 6px;");
+    image_frame->setStyleSheet("background: #181818; border: 1px solid #2b2b2b; border-radius: 6px;");
     auto* image_layout = new QVBoxLayout(image_frame);
     image_layout->setContentsMargins(4, 4, 4, 4);
     order_service_preview_label_ = new AspectPixmapLabel(image_frame);
@@ -1224,15 +1230,15 @@ void MainWindow::create_order_service_page() {
     metrics->setSpacing(6);
     auto make_metric = [preview_panel](const QString& title_text, const QColor& accent) {
         auto* card = new QFrame(preview_panel);
-        card->setStyleSheet(QString("background:#202f41; border:1px solid #344a62; border-top:3px solid %1; border-radius:6px;")
+        card->setStyleSheet(QString("background:#252526; border:1px solid #2b2b2b; border-top:3px solid %1; border-radius:6px;")
                                 .arg(accent.name()));
         auto* card_layout = new QVBoxLayout(card);
         card_layout->setContentsMargins(8, 5, 8, 5);
         card_layout->setSpacing(1);
         auto* label = new QLabel(title_text.toUpper(), card);
-        label->setStyleSheet("color:#9db0c4; font-size:8pt; font-weight:700; border:none; background:transparent;");
+        label->setStyleSheet("color:#858585; font-size:8pt; font-weight:700; border:none; background:transparent;");
         auto* value = new QLabel("—", card);
-        value->setStyleSheet("color:#f0f7ff; font-size:12pt; font-weight:700; border:none; background:transparent;");
+        value->setStyleSheet("color:#cccccc; font-size:12pt; font-weight:700; border:none; background:transparent;");
         card_layout->addWidget(label);
         card_layout->addWidget(value);
         return std::pair{card, value};
@@ -1247,8 +1253,10 @@ void MainWindow::create_order_service_page() {
     metrics->addWidget(cut_card, 0, 1);
     metrics->addWidget(depth_card, 0, 2);
     preview_layout->addLayout(metrics);
-    body->addWidget(preview_panel, 7);
-    root->addLayout(body, 1);
+    body->addWidget(preview_panel);
+    body->setStretchFactor(0, 4);
+    body->setStretchFactor(1, 7);
+    root->addWidget(body, 1);
 
     auto* footer = new QHBoxLayout();
     auto* step_hint = new QLabel("Confira cotas e fixação antes de usinar.", page);
@@ -1328,11 +1336,21 @@ bool MainWindow::recalculate_order_service_if_geometry_changed() {
         current_versions == order_service_geometry_versions_)
         return false;
 
+    static bool in_recalculate = false;
+    if (in_recalculate) return false;
+    in_recalculate = true;
+
     const std::vector<std::string> errors = document_.recalculate_toolpaths();
+    current_versions.clear();
+    for (const auto& entity : document_.entities) {
+        if (entity) current_versions.emplace_back(entity->id, entity->version);
+    }
     order_service_geometry_versions_ = std::move(current_versions);
     order_service_geometry_snapshot_valid_ = true;
+    in_recalculate = false;
+
     if (!errors.empty())
-        statusBar()->showMessage(QString("OS atualizada; %1 percurso(s) precisam de revisÃ£o.")
+        statusBar()->showMessage(QString("OS atualizada; %1 percurso(s) precisam de revisão.")
                                      .arg(errors.size()));
     return true;
 }
@@ -1621,6 +1639,15 @@ void MainWindow::create_toolpath_panel() {
     gallery->setToolTip("Abrir os dez desenhos com parâmetros e animação");
     connect(gallery, &QPushButton::clicked, this, [this] { ui::showGuideGallery(this); });
     selection_layout->addWidget(gallery);
+
+    auto* dimension_btn = new QPushButton("Estilo e Edição das Cotas…", selection_page);
+    dimension_btn->setObjectName("OpenDimensionStyle");
+    dimension_btn->setIcon(ui::get_icon("dimension"));
+    dimension_btn->setIconSize(QSize(18, 18));
+    dimension_btn->setToolTip("Configurar estilo, setas, linhas, precisão e tolerâncias das cotas");
+    connect(dimension_btn, &QPushButton::clicked, this, &MainWindow::edit_dimension_style);
+    selection_layout->addWidget(dimension_btn);
+
     selection_layout->addStretch();
     stack->addWidget(selection_page);
 
@@ -1644,7 +1671,7 @@ void MainWindow::create_toolpath_panel() {
     toolpath_origin_label_ = new QLabel(toolpath_page);
     toolpath_origin_label_->setObjectName("MutedText");
     for (auto* label : {toolpath_size_label_, toolpath_origin_label_}) {
-        label->setStyleSheet("color: #96a9c1; font-size: 11px;");
+        label->setStyleSheet("color: #858585; font-size: 11px;");
         label->setWordWrap(true);
         label->setMinimumWidth(0);
         material_info->addWidget(label);
@@ -1699,6 +1726,15 @@ void MainWindow::create_toolpath_panel() {
         operations_grid->addWidget(button);
     }
     layout->addLayout(operations_grid);
+
+    auto* premark_bridges = new QPushButton("Marcar pontes antes de gerar", toolpath_page);
+    premark_bridges->setObjectName("ToolBtn");
+    premark_bridges->setMinimumHeight(36);
+    premark_bridges->setToolTip(
+        "Selecione os contornos, marque as pontes no desenho e depois crie o percurso de perfil.");
+    layout->addWidget(premark_bridges);
+    connect(premark_bridges, &QPushButton::clicked, this,
+            &MainWindow::start_manual_bridge_preparation);
 
     auto* list_sep = new QFrame(toolpath_page);
     list_sep->setObjectName("ToolSep");
@@ -1923,19 +1959,33 @@ void MainWindow::create_toolpath_panel() {
     automatic_layout->setContentsMargins(14, 12, 14, 12);
     automatic_layout->setSpacing(10);
 
+    import_setup_panel_ = new ui::ImportSetupPanel(automatic_page);
+    automatic_layout->addWidget(import_setup_panel_);
+    connect(import_setup_panel_, &ui::ImportSetupPanel::applyRequested, this,
+            [this] { apply_import_preparation(); });
+    connect(import_setup_panel_, &ui::ImportSetupPanel::assignRecessRequested, this,
+            &MainWindow::assign_selected_recess);
+    connect(import_setup_panel_, &ui::ImportSetupPanel::createRecessRequested, this,
+            &MainWindow::generate_prepared_recesses);
+    connect(import_setup_panel_, &ui::ImportSetupPanel::manageLayersRequested, this,
+            &MainWindow::manage_layers);
+    connect(import_setup_panel_, &ui::ImportSetupPanel::openToolpathsRequested, this,
+            [this] { if (apply_import_preparation()) show_right_page(1); });
+
     auto* automatic_title = new QLabel("CORTE AUTOMÁTICO POR MATERIAL", automatic_page);
     automatic_title->setObjectName("SectionHeader");
     automatic_layout->addWidget(automatic_title);
     auto* automatic_intro = new QLabel(
-        "Escolha um dos 9 parâmetros de produção já cadastrados no Python. "
-        "O botão cria e calcula um perfil externo usando os vetores selecionados.", automatic_page);
+        "Escolha material e espessura, confira quais camadas estão visíveis e calcule. "
+        "O programa separa os cortes internos e executa esses primeiro; os contornos externos vêm depois.", automatic_page);
     automatic_intro->setObjectName("MutedText");
     automatic_intro->setWordWrap(true);
     automatic_intro->setText(QString::fromUtf8(
-        "Escolha o preset do material. Sem sele\xC3\xA7\xC3\xA3o, usa todos os contornos edit\xC3\xA1veis vis\xC3\xADveis; textos e linhas de constru\xC3\xA7\xC3\xA3o ficam fora."));
+        "Com vetores selecionados, usa a seleção. Sem seleção, usa os vetores editáveis das camadas visíveis e ignora linhas de construção. Converta textos em vetores se não aparecerem no percurso."));
     automatic_layout->addWidget(automatic_intro);
 
     automatic_cut_combo_ = new QComboBox(automatic_page);
+    automatic_cut_combo_->setObjectName("AutomaticCutPreset");
     automatic_cut_combo_->addItem("— escolher —", -1);
     const auto& presets = cam::house_presets();
     for (int index = 0; index < static_cast<int>(presets.size()); ++index) {
@@ -1951,6 +2001,7 @@ void MainWindow::create_toolpath_panel() {
     auto* automatic_create = new QPushButton("Criar corte automático", automatic_page);
     automatic_create->setToolTip("Criar corte automático com os vetores selecionados");
     automatic_create_button_ = automatic_create;
+    automatic_create->setObjectName("AutomaticCreateCut");
     automatic_create->setProperty("primary", true);
     automatic_create->setMinimumHeight(42);
     automatic_layout->addWidget(automatic_create);
@@ -2104,6 +2155,21 @@ void MainWindow::create_legacy_toolpath_panel() {
 
 void MainWindow::refresh_toolpaths() {
     if (!toolpath_list_) return;
+    static bool in_refresh = false;
+    if (in_refresh) return;
+    in_refresh = true;
+    struct RefreshGuard { ~RefreshGuard() { *flag = false; } bool* flag; } guard{&in_refresh};
+
+    if (import_setup_panel_) {
+        std::set<std::string> marked;
+        const auto registered = document_.preparation.value("recess_jobs", Json::array());
+        if (registered.is_array()) for (const auto& job : document_.toolpaths) {
+            if (job && job->kind == cam::ToolpathType::Pocket &&
+                std::find(registered.begin(), registered.end(), Json(job->id)) != registered.end())
+                marked.insert(job->entity_ids.begin(), job->entity_ids.end());
+        }
+        import_setup_panel_->set_marked_recess_count(static_cast<int>(marked.size()));
+    }
     if (simulation_timer_ && simulation_timer_->isActive()) simulation_timer_->stop();
     simulation_.reset();
     refresh_simulation_status();
@@ -2147,19 +2213,21 @@ void MainWindow::refresh_toolpaths() {
 
 void MainWindow::refresh_bridge_markers() {
     if (!canvas_widget_ || !canvas_widget_->canvas) return;
-    std::shared_ptr<cam::ToolpathJob> selected_job;
+    const cam::ToolpathJob* selected_job = nullptr;
     if (!bridge_target_job_id_.empty()) {
         for (const auto& job : document_.toolpaths) {
             if (job && job->id == bridge_target_job_id_) {
-                selected_job = job;
+                selected_job = job.get();
                 break;
             }
         }
     }
+    if (!selected_job && bridge_preparation_job_ && bridge_target_job_id_.empty())
+        selected_job = &*bridge_preparation_job_;
     if (!selected_job && toolpath_list_) {
         const int row = toolpath_list_->currentRow();
         if (row >= 0 && row < static_cast<int>(document_.toolpaths.size()))
-            selected_job = document_.toolpaths[static_cast<size_t>(row)];
+            selected_job = document_.toolpaths[static_cast<size_t>(row)].get();
     }
 
     const auto* settings = selected_job
@@ -2179,89 +2247,71 @@ void MainWindow::refresh_bridge_markers() {
     canvas_widget_->canvas->set_profile_tab_markers(markers, true);
 }
 
-void MainWindow::add_manual_bridge(double x, double y) {
-    if (bridge_target_job_id_.empty()) return;
-    auto found = std::find_if(document_.toolpaths.begin(), document_.toolpaths.end(),
-                              [&](const auto& job) {
-                                  return job && job->id == bridge_target_job_id_;
-                              });
-    if (found == document_.toolpaths.end()) return;
-    const auto& job = *found;
-    auto* settings = std::get_if<cam::ProfileSettings>(&job->settings);
+void MainWindow::start_manual_bridge_preparation() {
+    if (!canvas_widget_ || !canvas_widget_->canvas) return;
+    if (canvas_widget_->canvas->manual_tab_mode) {
+        statusBar()->showMessage("Conclua a marcação atual antes de iniciar outra.", 3500);
+        return;
+    }
+
+    std::vector<cad::EntityPtr> selected;
+    for (const auto& entity : document_.selected_entities())
+        if (entity && entity->closed()) selected.push_back(entity);
+    if (selected.empty()) {
+        QMessageBox::information(
+            this, "Marcar pontes antes do percurso",
+            "Selecione primeiro os contornos fechados que receberão as pontes.");
+        return;
+    }
+
+    if (bridge_preparation_job_ &&
+        std::get_if<cam::ProfileSettings>(&bridge_preparation_job_->settings) &&
+        !std::get<cam::ProfileSettings>(bridge_preparation_job_->settings).manual_tabs.empty()) {
+        const auto answer = QMessageBox::question(
+            this, "Pontes já marcadas",
+            "Há pontes manuais aguardando um percurso. Substituir essas marcações?",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes) return;
+    }
+
+    cam::ToolpathJob draft;
+    draft.kind = cam::ToolpathType::Profile;
+    draft.name = document_.unique_toolpath_name("Perfil");
+    draft.settings = cam::default_settings(cam::ToolpathType::Profile);
+    auto* settings = std::get_if<cam::ProfileSettings>(&draft.settings);
     if (!settings) return;
-
-    const auto entities = job->entities(document_);
-    const auto existing = cam::profile_tab_preview(entities, *settings, &job->tool);
-    const double tolerance = std::max(1.5, canvas_widget_->canvas->pick_tolerance() * 1.5);
-    int hit_index = -1;
-    double hit_distance = tolerance;
-    for (size_t i = 0; i < existing.size(); ++i) {
-        const double distance = std::hypot(existing[i].x - x, existing[i].y - y);
-        if (distance <= hit_distance) {
-            hit_distance = distance;
-            hit_index = static_cast<int>(i);
-        }
-    }
-    if (hit_index >= 0) {
-        settings->manual_tabs.clear();
-        for (size_t i = 0; i < existing.size(); ++i) {
-            if (i == static_cast<size_t>(hit_index)) continue;
-            settings->manual_tabs.push_back({existing[i].entity_id, existing[i].x, existing[i].y});
-        }
-        settings->tab_manual_only = !settings->manual_tabs.empty();
-        settings->tabs = !settings->manual_tabs.empty();
-        document_.modified = true;
-        const auto errors = document_.recalculate_toolpaths(job);
-        refresh_toolpaths();
-        statusBar()->showMessage(errors.empty()
-                                     ? QString("Ponte removida; as restantes foram preservadas manualmente. Use Redistribuir para voltar ao automático.")
-                                     : QString::fromStdString(errors.front()),
-                                 5000);
-        return;
-    }
-
-    std::optional<cam::TabPreview> best;
-    double best_distance = 1.0e100;
-    for (const auto& entity : entities) {
-        if (!entity || !entity->closed()) continue;
-        cam::ProfileSettings projection = *settings;
-        projection.tabs = true;
-        projection.tab_manual_only = true;
-        projection.manual_tabs = {{entity->id, x, y}};
-        const auto projected = cam::profile_tab_preview({entity}, projection, &job->tool);
-        if (projected.empty()) continue;
-        const double distance = std::hypot(projected.front().x - x, projected.front().y - y);
-        if (distance < best_distance) {
-            best_distance = distance;
-            best = projected.front();
-        }
-    }
-
-    const double placement_tolerance = std::max(1.5, canvas_widget_->canvas->pick_tolerance() * 2.5);
-    if (!best || best_distance > placement_tolerance) {
-        statusBar()->showMessage("Clique perto de um contorno fechado para posicionar a ponte.", 4000);
-        return;
-    }
-    for (const cam::ManualTab& tab : settings->manual_tabs) {
-        if (tab.entity_id == best->entity_id &&
-            std::hypot(tab.x - best->x, tab.y - best->y) < settings->tab_length * 0.65) {
-            statusBar()->showMessage("Ja existe uma ponte manual proxima deste ponto.", 3000);
-            return;
-        }
-    }
-
     settings->tabs = true;
-    settings->manual_tabs.push_back({best->entity_id, best->x, best->y});
-    document_.modified = true;
-    const auto errors = document_.recalculate_toolpaths(job);
-    refresh_toolpaths();
-    statusBar()->showMessage(errors.empty()
-                                 ? QString("Ponte manual posicionada em X %1, Y %2 mm. Arraste para ajustar; Esc encerra.")
-                                       .arg(best->x, 0, 'f', 2).arg(best->y, 0, 'f', 2)
-                                 : QString::fromStdString(errors.front()));
+    settings->tab_manual_only = true;
+    settings->manual_tabs.clear();
+    for (const auto& entity : selected) draft.entity_ids.push_back(entity->id);
+
+    const auto database = cam::ToolDatabase::load();
+    bool found_tool = false;
+    for (const auto& tool : database.tools) {
+        if (!tool) continue;
+        draft.tool = *tool;
+        found_tool = true;
+        break;
+    }
+    if (!found_tool) {
+        const auto tools = cam::default_tools();
+        if (!tools.empty()) draft.tool = tools.front();
+    }
+
+    bridge_preparation_job_ = std::move(draft);
+    bridge_target_job_id_.clear();
+    canvas_widget_->canvas->manual_tab_mode = true;
+    canvas_widget_->canvas->setCursor(Qt::CrossCursor);
+    if (view_tabs_) view_tabs_->setCurrentIndex(0);
+    if (bridge_mode_banner_) bridge_mode_banner_->setVisible(true);
+    refresh_bridge_markers();
+    statusBar()->showMessage(
+        "Marque as pontes nos contornos selecionados. Pressione Esc para terminar; depois crie o percurso Perfil.",
+        6500);
 }
 
-void MainWindow::move_bridge_marker(int index, double x, double y) {
+void MainWindow::delete_bridge_marker(int index) {
+    const bool preparing = bridge_preparation_job_.has_value() && bridge_target_job_id_.empty();
     std::shared_ptr<cam::ToolpathJob> job;
     if (!bridge_target_job_id_.empty()) {
         for (const auto& candidate : document_.toolpaths) {
@@ -2276,22 +2326,172 @@ void MainWindow::move_bridge_marker(int index, double x, double y) {
         if (row >= 0 && row < static_cast<int>(document_.toolpaths.size()))
             job = document_.toolpaths[static_cast<size_t>(row)];
     }
-    auto* settings = job ? std::get_if<cam::ProfileSettings>(&job->settings) : nullptr;
-    if (!job || !settings || !settings->tabs) return;
+    cam::ToolpathJob* target = preparing ? &*bridge_preparation_job_ : job.get();
+    auto* settings = target ? std::get_if<cam::ProfileSettings>(&target->settings) : nullptr;
+    if (!target || !settings || !settings->tabs) return;
 
-    const auto entities = job->entities(document_);
-    const auto placements = cam::profile_tab_preview(entities, *settings, &job->tool);
-    if (index < 0 || index >= static_cast<int>(placements.size())) return;
+    const auto entities = target->entities(document_);
+    const auto existing = cam::profile_tab_preview(entities, *settings, &target->tool);
+    if (index < 0 || index >= static_cast<int>(existing.size())) return;
 
-    std::optional<cam::TabPreview> moved;
+    settings->manual_tabs.clear();
+    for (size_t i = 0; i < existing.size(); ++i) {
+        if (i == static_cast<size_t>(index)) continue;
+        settings->manual_tabs.push_back({existing[i].entity_id, existing[i].x, existing[i].y});
+    }
+    settings->tab_manual_only = true;
+    settings->tabs = !settings->manual_tabs.empty();
+    if (preparing) {
+        document_.modified = true;
+        refresh_bridge_markers();
+        statusBar()->showMessage("Ponte manual removida da preparação do percurso.", 3500);
+        return;
+    }
+    document_.modified = true;
+    const auto errors = document_.recalculate_toolpaths(job);
+    refresh_toolpaths();
+    refresh_bridge_markers();
+    statusBar()->showMessage(errors.empty()
+                                 ? "Ponte apagada com um clique. Clique no contorno para adicionar ou arraste para mover."
+                                 : QString::fromStdString(errors.front()),
+                             4000);
+}
+
+void MainWindow::add_manual_bridge(double x, double y) {
+    const bool preparing = bridge_preparation_job_.has_value() && bridge_target_job_id_.empty();
+    std::shared_ptr<cam::ToolpathJob> job;
+    if (!bridge_target_job_id_.empty()) {
+        for (const auto& candidate : document_.toolpaths) {
+            if (candidate && candidate->id == bridge_target_job_id_) {
+                job = candidate;
+                break;
+            }
+        }
+    }
+    if (!job && toolpath_list_) {
+        const int row = toolpath_list_->currentRow();
+        if (row >= 0 && row < static_cast<int>(document_.toolpaths.size()))
+            job = document_.toolpaths[static_cast<size_t>(row)];
+    }
+    cam::ToolpathJob* target = preparing ? &*bridge_preparation_job_ : job.get();
+    if (!target) return;
+    auto* settings = std::get_if<cam::ProfileSettings>(&target->settings);
+    if (!settings) return;
+
+    const auto entities = target->entities(document_);
+    const auto existing = cam::profile_tab_preview(entities, *settings, &target->tool);
+    const double pick_tol = canvas_widget_ && canvas_widget_->canvas
+                                ? canvas_widget_->canvas->pick_tolerance()
+                                : 1.0;
+    // Clique em cima ou proximo de uma ponte existente: apaga com um clique
+    const double delete_tolerance = std::max(6.0, pick_tol * 16.0);
+    int hit_index = -1;
+    double hit_distance = delete_tolerance;
+    for (size_t i = 0; i < existing.size(); ++i) {
+        const double distance = std::hypot(existing[i].x - x, existing[i].y - y);
+        if (distance <= hit_distance) {
+            hit_distance = distance;
+            hit_index = static_cast<int>(i);
+        }
+    }
+    if (hit_index >= 0) {
+        delete_bridge_marker(hit_index);
+        return;
+    }
+
+    std::optional<cam::TabPreview> best;
     double best_distance = 1.0e100;
     for (const auto& entity : entities) {
-        if (!entity || !entity->closed()) continue;
+        if (!entity) continue;
         cam::ProfileSettings projection = *settings;
         projection.tabs = true;
         projection.tab_manual_only = true;
         projection.manual_tabs = {{entity->id, x, y}};
-        const auto projected = cam::profile_tab_preview({entity}, projection, &job->tool);
+        const auto projected = cam::profile_tab_preview({entity}, projection, &target->tool);
+        if (projected.empty()) continue;
+        const double distance = std::hypot(projected.front().x - x, projected.front().y - y);
+        if (distance < best_distance) {
+            best_distance = distance;
+            best = projected.front();
+        }
+    }
+
+    const double placement_tolerance = std::max(25.0, pick_tol * 40.0);
+    if (!best || best_distance > placement_tolerance) {
+        statusBar()->showMessage("Clique perto do contorno da peça para posicionar a ponte.", 4000);
+        return;
+    }
+    for (const cam::ManualTab& tab : settings->manual_tabs) {
+        if (tab.entity_id == best->entity_id &&
+            std::hypot(tab.x - best->x, tab.y - best->y) < std::max(2.0, settings->tab_length * 0.4)) {
+            statusBar()->showMessage("Já existe uma ponte nesta posição. Clique sobre ela para apagar.", 3000);
+            return;
+        }
+    }
+
+    if (!settings->tab_manual_only && !existing.empty() && settings->manual_tabs.empty()) {
+        for (const auto& tab : existing) {
+            settings->manual_tabs.push_back({tab.entity_id, tab.x, tab.y});
+        }
+    }
+
+    settings->tabs = true;
+    settings->tab_manual_only = true;
+    settings->manual_tabs.push_back({best->entity_id, best->x, best->y});
+    if (preparing) {
+        document_.modified = true;
+        refresh_bridge_markers();
+        statusBar()->showMessage(
+            QString("Ponte pré-marcada em X %1, Y %2 mm. As marcações entrarão no próximo percurso Perfil.")
+                .arg(best->x, 0, 'f', 2).arg(best->y, 0, 'f', 2),
+            4500);
+        return;
+    }
+    document_.modified = true;
+    const auto errors = document_.recalculate_toolpaths(job);
+    refresh_toolpaths();
+    refresh_bridge_markers();
+    statusBar()->showMessage(errors.empty()
+                                 ? QString("Ponte adicionada em X %1, Y %2 mm. Clique nela para apagar ou arraste para mover.")
+                                       .arg(best->x, 0, 'f', 2).arg(best->y, 0, 'f', 2)
+                                 : QString::fromStdString(errors.front()),
+                             4000);
+}
+
+void MainWindow::move_bridge_marker(int index, double x, double y) {
+    const bool preparing = bridge_preparation_job_.has_value() && bridge_target_job_id_.empty();
+    std::shared_ptr<cam::ToolpathJob> job;
+    if (!bridge_target_job_id_.empty()) {
+        for (const auto& candidate : document_.toolpaths) {
+            if (candidate && candidate->id == bridge_target_job_id_) {
+                job = candidate;
+                break;
+            }
+        }
+    }
+    if (!job && toolpath_list_) {
+        const int row = toolpath_list_->currentRow();
+        if (row >= 0 && row < static_cast<int>(document_.toolpaths.size()))
+            job = document_.toolpaths[static_cast<size_t>(row)];
+    }
+    cam::ToolpathJob* target = preparing ? &*bridge_preparation_job_ : job.get();
+    auto* settings = target ? std::get_if<cam::ProfileSettings>(&target->settings) : nullptr;
+    if (!target || !settings || !settings->tabs) return;
+
+    const auto entities = target->entities(document_);
+    const auto placements = cam::profile_tab_preview(entities, *settings, &target->tool);
+    if (index < 0 || index >= static_cast<int>(placements.size())) return;
+
+    // Encontra a projeção no contorno mais próximo (movimentação livre sem limitações de pixels)
+    std::optional<cam::TabPreview> moved;
+    double best_distance = 1.0e100;
+    for (const auto& entity : entities) {
+        if (!entity) continue;
+        cam::ProfileSettings projection = *settings;
+        projection.tabs = true;
+        projection.tab_manual_only = true;
+        projection.manual_tabs = {{entity->id, x, y}};
+        const auto projected = cam::profile_tab_preview({entity}, projection, &target->tool);
         if (projected.empty()) continue;
         const double distance = std::hypot(projected.front().x - x, projected.front().y - y);
         if (distance < best_distance) {
@@ -2299,35 +2499,91 @@ void MainWindow::move_bridge_marker(int index, double x, double y) {
             moved = projected.front();
         }
     }
-    const double tolerance = std::max(1.5, canvas_widget_->canvas->pick_tolerance() * 2.5);
-    if (!moved || best_distance > tolerance) {
+    if (!moved) {
         refresh_bridge_markers();
-        statusBar()->showMessage("Solte a ponte sobre um contorno fechado.", 3000);
         return;
     }
 
     settings->manual_tabs.clear();
     settings->manual_tabs.reserve(placements.size());
     for (size_t i = 0; i < placements.size(); ++i) {
-        const cam::TabPreview& tab = i == static_cast<size_t>(index) ? *moved : placements[i];
+        const cam::TabPreview& tab = (i == static_cast<size_t>(index)) ? *moved : placements[i];
         settings->manual_tabs.push_back({tab.entity_id, tab.x, tab.y});
     }
     settings->tabs = true;
     settings->tab_manual_only = true;
+    if (preparing) {
+        document_.modified = true;
+        refresh_bridge_markers();
+        statusBar()->showMessage(
+            QString("Ponte pré-marcada reposicionada para X %1, Y %2 mm.")
+                .arg(moved->x, 0, 'f', 2).arg(moved->y, 0, 'f', 2),
+            3500);
+        return;
+    }
     document_.modified = true;
     const auto errors = document_.recalculate_toolpaths(job);
     refresh_toolpaths();
-    if (!errors.empty()) statusBar()->showMessage(QString::fromStdString(errors.front()));
+    refresh_bridge_markers();
+    statusBar()->showMessage(errors.empty()
+                                 ? QString("Ponte reposicionada para X %1, Y %2 mm.")
+                                       .arg(moved->x, 0, 'f', 2).arg(moved->y, 0, 'f', 2)
+                                 : QString::fromStdString(errors.front()),
+                             3000);
 }
 
 void MainWindow::stop_manual_bridge_mode() {
     if (!canvas_widget_ || !canvas_widget_->canvas || !canvas_widget_->canvas->manual_tab_mode) return;
+    const bool preparing = bridge_preparation_job_.has_value() && bridge_target_job_id_.empty();
     canvas_widget_->canvas->manual_tab_mode = false;
     canvas_widget_->canvas->setCursor(Qt::ArrowCursor);
     bridge_target_job_id_.clear();
     if (bridge_mode_banner_) bridge_mode_banner_->setVisible(false);
     refresh_bridge_markers();
-    statusBar()->showMessage("Marcacao manual de pontes encerrada.", 3500);
+    statusBar()->showMessage(preparing
+                                 ? "Pontes pré-marcadas guardadas. Crie um percurso Perfil nos mesmos contornos para incluí-las no G-code."
+                                 : "Marcacao manual de pontes encerrada.",
+                             5000);
+}
+
+bool MainWindow::apply_bridge_preparation(cam::ToolpathJob& job) {
+    if (!bridge_preparation_job_) return true;
+    if (canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
+        QMessageBox::information(this, "Pontes em marcação",
+                                 "Conclua a marcação das pontes antes de gerar o percurso.");
+        return false;
+    }
+    if (job.kind != cam::ToolpathType::Profile) {
+        QMessageBox::information(this, "Pontes manuais",
+                                 "As pontes pré-marcadas podem ser usadas em um percurso Perfil.");
+        return false;
+    }
+
+    auto expected = bridge_preparation_job_->entity_ids;
+    auto requested = job.entity_ids;
+    if (requested.empty()) requested = expected;
+    std::sort(expected.begin(), expected.end());
+    std::sort(requested.begin(), requested.end());
+    expected.erase(std::unique(expected.begin(), expected.end()), expected.end());
+    requested.erase(std::unique(requested.begin(), requested.end()), requested.end());
+    if (requested != expected) {
+        QMessageBox::warning(
+            this, "Seleção diferente das pontes",
+            "Selecione os mesmos contornos usados na pré-marcação. As pontes continuam guardadas e o percurso não foi criado.");
+        return false;
+    }
+    job.entity_ids = bridge_preparation_job_->entity_ids;
+
+    auto* destination = std::get_if<cam::ProfileSettings>(&job.settings);
+    const auto* prepared = std::get_if<cam::ProfileSettings>(&bridge_preparation_job_->settings);
+    if (!destination || !prepared) return false;
+    destination->tabs = true;
+    destination->tab_length = prepared->tab_length;
+    destination->tab_thickness = prepared->tab_thickness;
+    destination->tabs_3d = prepared->tabs_3d;
+    destination->manual_tabs = prepared->manual_tabs;
+    destination->tab_manual_only = true;
+    return true;
 }
 
 void MainWindow::refresh_3d_view() {
@@ -2442,7 +2698,7 @@ bool MainWindow::edit_tool_database(const std::string& preselected_tool_name, ca
     header_text->setSpacing(1);
     auto* title = new QLabel("BANCO DE FERRAMENTAS", header);
     title->setObjectName("SectionHeader");
-    title->setStyleSheet("font-size: 15px; color: #d9ecff;");
+    title->setStyleSheet("font-size: 15px; color: #cccccc;");
     header_text->addWidget(title);
     auto* subtitle = new QLabel("Geometria e parametros de corte em milimetros", header);
     subtitle->setObjectName("MutedText");
@@ -2905,6 +3161,23 @@ void MainWindow::edit_material_setup() {
     zero_z->addItem("Base", "bottom");
     zero_z->setCurrentIndex(zero_z->findData(QString::fromStdString(document_.material.zero_z)));
 
+    auto* sheet_preset = new QComboBox(&dialog);
+    sheet_preset->addItem("— Personalizado / Atual —");
+    for (const auto& p : cad::standard_sheet_presets()) {
+        sheet_preset->addItem(QString::fromStdString(p.label));
+    }
+    form->addRow("Chapa padrão", sheet_preset);
+    connect(sheet_preset, qOverload<int>(&QComboBox::currentIndexChanged), [&dialog, width, height, thickness](int idx) {
+        if (idx <= 0) return;
+        const auto& presets = cad::standard_sheet_presets();
+        if (idx - 1 < static_cast<int>(presets.size())) {
+            const auto& p = presets[static_cast<size_t>(idx - 1)];
+            width->setValue(p.width);
+            height->setValue(p.height);
+            thickness->setValue(p.default_thickness);
+        }
+    });
+
     form->addRow("Largura", width);
     form->addRow("Altura", height);
     form->addRow("Espessura", thickness);
@@ -2957,6 +3230,7 @@ void MainWindow::edit_material_setup() {
         job->error.clear();
     }
     refresh_document_view();
+    if (import_setup_panel_) import_setup_panel_->set_material(document_.material);
     statusBar()->showMessage("Definições do material atualizadas; recalcule os percursos");
 }
 
@@ -2981,7 +3255,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
 
     auto* selection = new QLabel(
         QString("%1 vetor(es) selecionado(s)").arg(job.entity_ids.size()), top_bar);
-    selection->setStyleSheet("color: #96a9c1; padding: 2px 0; font-weight: 500;");
+    selection->setStyleSheet("color: #858585; padding: 2px 0; font-weight: 500;");
     top_bar_layout->addWidget(selection);
     top_bar_layout->addStretch();
 
@@ -3182,15 +3456,19 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         box->setObjectName("CamConfigGroup");
         box->setProperty("sectionTitle", title);
         auto* box_layout = new QVBoxLayout(box);
-        box_layout->setContentsMargins(10, 4, 10, 8);
-        box_layout->setSpacing(4);
+        box_layout->setContentsMargins(0, 0, 0, 6);
+        box_layout->setSpacing(0);
 
         QToolButton* toggle_btn = nullptr;
         if (collapsible) {
             auto* header_bar = new QWidget(box);
+            header_bar->setObjectName("CamConfigHeader");
             auto* header_layout = new QHBoxLayout(header_bar);
-            header_layout->setContentsMargins(0, 0, 0, 0);
+            header_layout->setContentsMargins(10, 5, 8, 5);
             header_layout->setSpacing(6);
+            auto* header_title = new QLabel(title, header_bar);
+            header_title->setObjectName("CamConfigHeaderTitle");
+            header_layout->addWidget(header_title);
             header_layout->addStretch();
             toggle_btn = new QToolButton(header_bar);
             toggle_btn->setObjectName("GroupCollapseBtn");
@@ -3203,7 +3481,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
 
         auto* content = new QWidget(box);
         auto* section = new QHBoxLayout(content);
-        section->setContentsMargins(0, 0, 0, 0);
+        section->setContentsMargins(10, 6, 10, 2);
         section->setSpacing(14);
         // The scroll viewport is the actual available width. A section can
         // otherwise keep its wide minimum size and never switch to one column.
@@ -3470,17 +3748,32 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
 
     auto add_pass_summary = [&](QDoubleSpinBox* depth, QCheckBox* exact_step = nullptr) {
         auto* box = new QGroupBox("Passagens", body);
-        auto* layout = new QHBoxLayout(box);
-        layout->setContentsMargins(12, 8, 12, 8);
+        box->setObjectName("CamConfigGroup");
+        auto* box_layout = new QVBoxLayout(box);
+        box_layout->setContentsMargins(0, 0, 0, 6);
+        box_layout->setSpacing(0);
+        auto* header_bar = new QWidget(box);
+        header_bar->setObjectName("CamConfigHeader");
+        auto* header_layout = new QHBoxLayout(header_bar);
+        header_layout->setContentsMargins(10, 5, 8, 5);
+        auto* header_title = new QLabel("Passagens", header_bar);
+        header_title->setObjectName("CamConfigHeaderTitle");
+        header_layout->addWidget(header_title);
+        box_layout->addWidget(header_bar);
+
+        auto* content = new QWidget(box);
+        auto* layout = new QHBoxLayout(content);
+        layout->setContentsMargins(10, 6, 10, 2);
         layout->setSpacing(8);
-        auto* label = new QLabel(box);
+        auto* label = new QLabel(content);
         label->setObjectName("PropHint");
         label->setWordWrap(true);
         layout->addWidget(label, 1);
-        auto* edit_passes_button = new QPushButton("Editar passagens...", box);
+        auto* edit_passes_button = new QPushButton("Editar passagens...", content);
         edit_passes_button->setIcon(ui::get_icon("tp_edit"));
         edit_passes_button->setToolTip("Alterar o número de passagens ou o passo Z para este percurso");
         layout->addWidget(edit_passes_button);
+        box_layout->addWidget(content);
         body_layout->addWidget(box);
         auto refresh = [depth, label, &job, exact_step] {
             const auto passes = cam::compute_passes(
@@ -3511,7 +3804,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             pass_form->setSpacing(8);
 
             auto* total_depth_lbl = new QLabel(QString("%1 mm").arg(depth->value(), 0, 'f', 3), &pass_dlg);
-            total_depth_lbl->setStyleSheet("font-weight: bold; color: #d9ecff;");
+            total_depth_lbl->setStyleSheet("font-weight: bold; color: #cccccc;");
             pass_form->addRow("Profundidade total (C):", total_depth_lbl);
 
             auto* step_input = new ui::SafeDoubleSpinBox(&pass_dlg);
@@ -3655,11 +3948,10 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             profile_tabs->setExpanding(true);
             profile_tabs->setDrawBase(false);
             profile_tabs->setStyleSheet(
-                "QTabBar::tab { background:#182536; color:#a9bfd6; border:1px solid #304861; "
-                "border-bottom:0; border-top-left-radius:6px; border-top-right-radius:6px; "
-                "padding:7px 10px; min-height:20px; }"
-                "QTabBar::tab:selected { background:#1d4567; color:#f3f8ff; border-color:#168be0; }"
-                "QTabBar::tab:hover:!selected { background:#24384d; color:#ffffff; }");
+                "QTabBar::tab { background:#181818; color:#969696; border:none; "
+                "border-bottom:2px solid transparent; padding:9px 8px; min-height:22px; font-weight:600; }"
+                "QTabBar::tab:selected { background:#1f1f1f; color:#ffffff; border-bottom:2px solid #0078d4; }"
+                "QTabBar::tab:hover:!selected { background:#2a2d2e; color:#e0e0e0; }");
             body_layout->addWidget(profile_tabs);
             std::array<QGroupBox*, 4> profile_pages{};
             int profile_page_count = 0;
@@ -3722,24 +4014,24 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             bridge_actions->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
             bridge_actions->setStyleSheet(
                 "QWidget#ProfileBridgeActions QPushButton { "
-                "  background-color: #203144; color: #d7e4f2; border: 1px solid #36506d; "
+                "  background-color: #313131; color: #cccccc; border: 1px solid #3c3c3c; "
                 "  border-radius: 4px; min-height: 28px; padding: 4px 6px; font-size: 11px; "
                 "} "
                 "QWidget#ProfileBridgeActions QPushButton:hover { "
-                "  background-color: #2a415a; color: #ffffff; border-color: #4b6e96; "
+                "  background-color: #3c3c3c; color: #ffffff; border-color: #0078d4; "
                 "} "
                 "QWidget#ProfileBridgeActions QPushButton:disabled { "
-                "  background-color: #162230; color: #556b82; border-color: #243547; "
+                "  background-color: #252526; color: #5a5a5a; border-color: #2b2b2b; "
                 "} "
                 "QWidget#ProfileBridgeActions QPushButton[primary=\"true\"] { "
-                "  background-color: #1976d2; color: #ffffff; border: 1px solid #42a5f5; "
+                "  background-color: #0078d4; color: #ffffff; border: 1px solid #0078d4; "
                 "  border-radius: 4px; min-height: 32px; padding: 6px 12px; font-size: 12px; font-weight: bold; "
                 "} "
                 "QWidget#ProfileBridgeActions QPushButton[primary=\"true\"]:hover { "
-                "  background-color: #1e88e5; border-color: #64b5f6; "
+                "  background-color: #1a85ff; border-color: #1a85ff; "
                 "} "
                 "QWidget#ProfileBridgeActions QPushButton[primary=\"true\"]:pressed { "
-                "  background-color: #1565c0; "
+                "  background-color: #005fb8; "
                 "}");
             auto* bridge_actions_layout = new QGridLayout(bridge_actions);
             bridge_actions_layout->setContentsMargins(0, 4, 0, 4);
@@ -4248,9 +4540,16 @@ void MainWindow::add_toolpath_from_panel() {
             }
         }
     }
+    if (kind != cam::ToolpathType::Drill && document_.preparation.contains("tool")) {
+        try { job->tool = cam::Tool::from_json(document_.preparation.at("tool")); }
+        catch (const std::exception&) { }
+    }
+    if (!apply_bridge_preparation(*job)) return;
+    const bool consume_prepared_bridges = bridge_preparation_job_.has_value();
     if (!configure_toolpath(*job)) return;
     document_.add_toolpath(job);
     const auto errors = document_.recalculate_toolpaths(job);
+    if (consume_prepared_bridges && errors.empty()) bridge_preparation_job_.reset();
     refresh_toolpaths();
     if (canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
         if (view_tabs_) view_tabs_->setCurrentIndex(0);
@@ -4405,6 +4704,7 @@ void MainWindow::recalculate_toolpaths() {
         return;
     }
     const auto errors = document_.recalculate_toolpaths();
+    if (canvas_widget_ && canvas_widget_->canvas) canvas_widget_->canvas->refresh_entities();
     refresh_toolpaths();
     if (errors.empty()) statusBar()->showMessage("Percursos recalculados");
     else statusBar()->showMessage(QString::fromStdString(errors.front()));
@@ -4573,6 +4873,9 @@ void MainWindow::refresh_simulation_status() {
 void MainWindow::set_right_panel_collapsed(bool collapsed) {
     if (!toolpath_dock_ || !right_panel_scroll_) return;
     if (collapsed) {
+        if (toolpath_dock_->width() > 100) {
+            last_expanded_dock_width_ = toolpath_dock_->width();
+        }
         right_panel_scroll_->setVisible(false);
         toolpath_dock_->setFixedWidth(44);
         if (selection_nav_button_) selection_nav_button_->setChecked(false);
@@ -4580,9 +4883,12 @@ void MainWindow::set_right_panel_collapsed(bool collapsed) {
         if (simulation_nav_button_) simulation_nav_button_->setChecked(false);
         if (automatic_nav_button_) automatic_nav_button_->setChecked(false);
     } else {
-        const int dock_width = std::clamp(width() / 4, 240, 370);
-        toolpath_dock_->setMinimumWidth(246);
-        toolpath_dock_->setMaximumWidth(370);
+        const int preferred_width = (last_expanded_dock_width_ > 100)
+                                        ? last_expanded_dock_width_
+                                        : std::clamp(width() / 4, 340, 480);
+        const int dock_width = std::clamp(preferred_width, 310, std::max(310, width() - 100));
+        toolpath_dock_->setMinimumWidth(310);
+        toolpath_dock_->setMaximumWidth(QWIDGETSIZE_MAX);
         resizeDocks({toolpath_dock_}, {dock_width}, Qt::Horizontal);
         toolpath_dock_->resize(dock_width, toolpath_dock_->height());
         right_panel_scroll_->setVisible(true);
@@ -4616,27 +4922,18 @@ void MainWindow::refresh_automatic_cut_panel() {
     const auto& presets = cam::house_presets();
     const double thickness = document_.material.thickness;
     size_t target_count = 0;
-    for (const auto& entity : document_.entities)
-        if (entity->selected && document_.is_editable(*entity)) ++target_count;
-    if (target_count == 0) {
-        for (const cad::EntityPtr& entity : document_.entities) {
-            if (!cad::is_vector(*entity) || cad::is_a<cad::Text>(*entity) ||
-                cad::is_a<cad::ConstructionLine>(*entity) ||
-                !document_.is_editable(*entity)) continue;
-            const cad::Layer* layer = document_.get_layer(entity->layer);
-            if (layer && !layer->visible) continue;
-            ++target_count;
-        }
+    const bool has_selection = !document_.selected_entities().empty();
+    const Json roles = document_.preparation.value("roles", Json::object());
+    for (const auto& entity : document_.entities) {
+        if ((has_selection && !entity->selected) || !entity->closed() ||
+            !cad::is_vector(*entity) || cad::is_a<cad::Text>(*entity) || !document_.is_editable(*entity)) continue;
+        const std::string role = roles.is_object() ? jget<std::string>(roles, entity->id.c_str(), "") : "";
+        if (role == "recess" || role == "open" || role == "review") continue;
+        ++target_count;
     }
-    int matching_count = 0;
-    int matching_combo_index = -1;
     for (int index = 0; index < static_cast<int>(presets.size()); ++index) {
         const auto& preset = presets[static_cast<size_t>(index)];
         const bool matches = std::fabs(preset.thickness - thickness) < 0.01;
-        if (matches) {
-            ++matching_count;
-            matching_combo_index = index + 1;
-        }
         automatic_cut_combo_->setItemText(
             index + 1, QString("%1 %2 mm%3")
                            .arg(QString::fromStdString(preset.material))
@@ -4654,8 +4951,6 @@ void MainWindow::refresh_automatic_cut_panel() {
                     break;
                 }
             }
-        } else if (matching_count == 1) {
-            automatic_cut_combo_->setCurrentIndex(matching_combo_index);
         }
     }
 
@@ -4683,11 +4978,15 @@ void MainWindow::refresh_automatic_cut_panel() {
 
 void MainWindow::create_automatic_cut() {
     if (!automatic_cut_combo_) return;
+    if ((import_preparation_pending_ || (import_setup_panel_ && import_setup_panel_->recess_answered())) &&
+        !apply_import_preparation()) return;
     const int preset_index = automatic_cut_combo_->currentData().toInt();
     const auto& presets = cam::house_presets();
     if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) return;
 
     std::vector<cad::EntityPtr> selected = document_.selected_entities();
+    std::vector<std::string> scope;
+    for (const auto& entity : selected) scope.push_back(entity->id);
     if (selected.empty()) {
         for (const cad::EntityPtr& entity : document_.entities) {
             if (!cad::is_vector(*entity) || cad::is_a<cad::Text>(*entity) ||
@@ -4698,12 +4997,47 @@ void MainWindow::create_automatic_cut() {
             selected.push_back(entity);
         }
     }
+    // Depois de posicionar/editar pecas, refaz a classificacao sem converter rebaixos em cortes.
+    const Json previous_roles = document_.preparation.value("roles", Json::object());
+    std::vector<cad::EntityPtr> contours_to_review;
+    for (const auto& entity : selected) {
+        const std::string role = previous_roles.is_object() ? jget<std::string>(previous_roles, entity->id.c_str(), "") : "";
+        if (role != "recess") contours_to_review.push_back(entity);
+    }
+    classify_imported_entities(contours_to_review);
+    const Json roles = document_.preparation.value("roles", Json::object());
+    selected.erase(std::remove_if(selected.begin(), selected.end(), [&](const auto& entity) {
+        if (!entity || !entity->closed() || !cad::is_vector(*entity) || cad::is_a<cad::Text>(*entity) ||
+            !document_.is_editable(*entity)) return true;
+        const std::string role = roles.is_object() ? jget<std::string>(roles, entity->id.c_str(), "") : "";
+        return role == "recess" || role == "open" || role == "review";
+    }), selected.end());
+    if (document_.preparation.value("has_recess", false) &&
+        (!document_.preparation.contains("recess_jobs") || document_.preparation["recess_jobs"].empty())) {
+        import_setup_panel_->set_status("Você informou que há rebaixo. Marque as áreas antes de gerar o ciclo de corte.");
+        show_right_page(3);
+        return;
+    }
+    if (!calculate_prepared_recesses(scope)) { refresh_toolpaths(); return; }
+    if (selected.empty() && document_.preparation.contains("recess_jobs") &&
+        !document_.preparation["recess_jobs"].empty()) {
+        refresh_toolpaths();
+        import_setup_panel_->set_status("Rebaixos calculados. Selecione os contornos internos e externos para gerar os cortes.");
+        return;
+    }
     if (selected.empty()) {
         QMessageBox::information(this, "Corte automático",
-                                 "Selecione os vetores que devem receber o corte.");
+                                 "Selecione contornos fechados de corte. Rebaixos, vetores abertos e geometrias em revisão não entram no corte automático.");
         return;
     }
     const auto& preset = presets[static_cast<size_t>(preset_index)];
+    if (!cam::find_preset(document_.material.material_profile, preset.thickness)) {
+        const QString warning = QString("A chapa está configurada como %1 e o programa escolhido é %2.\n\n"
+            "Confira a fresa e os parâmetros. Deseja usar esse programa neste material?")
+            .arg(QString::fromStdString(document_.material.material_profile))
+            .arg(QString::fromStdString(preset.name()));
+        if (QMessageBox::question(this, "Programa de outro material", warning) != QMessageBox::Yes) return;
+    }
     if (std::fabs(preset.thickness - document_.material.thickness) >= 0.01) {
         const QString warning =
             QString("A chapa do trabalho está com %1 mm, mas %2 foi programado para %3 mm.\n\n"
@@ -4719,11 +5053,18 @@ void MainWindow::create_automatic_cut() {
     job->kind = cam::ToolpathType::Profile;
     job->name = document_.unique_toolpath_name(preset.name());
     job->tool = preset.tool();
+    if (document_.preparation.contains("tool")) {
+        try { job->tool = cam::Tool::from_json(document_.preparation.at("tool")); }
+        catch (const std::exception&) { }
+    }
     job->settings = preset.settings();
     cam::set_settings_name(job->settings, job->name);
     for (const auto& entity : selected) job->entity_ids.push_back(entity->id);
+    if (!apply_bridge_preparation(*job)) return;
+    const bool consume_prepared_bridges = bridge_preparation_job_.has_value();
     document_.add_toolpath(job);
     const auto errors = document_.recalculate_toolpaths(job);
+    if (consume_prepared_bridges && errors.empty()) bridge_preparation_job_.reset();
     refresh_toolpaths();
     if (toolpath_list_) toolpath_list_->setCurrentRow(toolpath_list_->count() - 1);
     show_right_page(1);
@@ -4973,7 +5314,7 @@ void MainWindow::export_setup_sheet() {
     dialog.setObjectName("WorkOrderDialog");
     dialog.resize(960, 700);
     dialog.setMinimumSize(860, 580);
-    dialog.setStyleSheet("QDialog#WorkOrderDialog { background: #101923; }");
+    dialog.setStyleSheet("QDialog#WorkOrderDialog { background: #181818; }");
     dialog.installEventFilter(new ui::SafeWheelFilter(&dialog));
 
     auto* main_layout = new QVBoxLayout(&dialog);
@@ -4988,7 +5329,7 @@ void MainWindow::export_setup_sheet() {
     auto* title_box = new QVBoxLayout();
     title_box->setSpacing(2);
     auto* title_lbl = new QLabel("📋 CENTRAL DE ORDENS DE SERVIÇO & G-CODE", header_widget);
-    title_lbl->setStyleSheet("font-size: 16pt; font-weight: 700; color: #8cc8ff;");
+    title_lbl->setStyleSheet("font-size: 16pt; font-weight: 700; color: #75beff;");
     auto* subtitle_lbl = new QLabel(
         QString("Projeto: %1 · %2 percurso(s) acumulados no histórico")
             .arg(QString::fromStdString(document_.title().empty() ? "Sem título" : document_.title()))
@@ -4999,20 +5340,20 @@ void MainWindow::export_setup_sheet() {
     header_layout->addLayout(title_box, 1);
 
     auto* logo_badge = new QLabel(logo_path.isEmpty() ? "UNY CV" : QFileInfo(logo_path).fileName(), header_widget);
-    logo_badge->setStyleSheet("background: #1d2d40; color: #d8eaff; border: 1px solid #385573; font-weight: 700; padding: 8px 14px; border-radius: 7px;");
+    logo_badge->setStyleSheet("background: #252526; color: #cccccc; border: 1px solid #2b2b2b; font-weight: 700; padding: 8px 14px; border-radius: 7px;");
     header_layout->addWidget(logo_badge);
     main_layout->addWidget(header_widget);
 
     // Job Selector Bar (History Accumulation Bar)
     auto* selector_card = new QFrame(&dialog);
     selector_card->setObjectName("OSSelectorCard");
-    selector_card->setStyleSheet("QFrame#OSSelectorCard { background: #172535; border: 1px solid #304861; border-radius: 8px; }");
+    selector_card->setStyleSheet("QFrame#OSSelectorCard { background: #1f1f1f; border: 1px solid #2b2b2b; border-radius: 8px; }");
     auto* selector_layout = new QHBoxLayout(selector_card);
     selector_layout->setContentsMargins(4, 4, 4, 4);
     selector_layout->setSpacing(8);
 
     auto* sel_lbl = new QLabel("Folha / Percurso Ativo:", selector_card);
-    sel_lbl->setStyleSheet("font-weight: 700; color: #b9d8f4; font-size: 9pt; padding: 0 8px;");
+    sel_lbl->setStyleSheet("font-weight: 700; color: #cccccc; font-size: 9pt; padding: 0 8px;");
     auto* job_combo = new ui::SafeComboBox(selector_card);
     job_combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
@@ -5046,59 +5387,53 @@ void MainWindow::export_setup_sheet() {
         auto* card = new QFrame(metrics_widget);
         card->setObjectName("OSMetricCard");
         card->setStyleSheet(QString(
-            "QFrame#OSMetricCard { background: #172535; border: 1px solid #304861; border-top: 3px solid %1; border-radius: 8px; padding: 4px 8px; }"
+            "QFrame#OSMetricCard { background: #1f1f1f; border: 1px solid #2b2b2b; border-top: 3px solid %1; border-radius: 8px; padding: 4px 8px; }"
         ).arg(accent_color));
         auto* cl = new QVBoxLayout(card);
         cl->setSpacing(1);
         cl->setContentsMargins(4, 3, 4, 3);
         auto* l = new QLabel(label_text, card);
-        l->setStyleSheet("font-size: 7.5pt; font-weight: 700; color: #9cb4cc; text-transform: uppercase;");
+        l->setStyleSheet("font-size: 7.5pt; font-weight: 700; color: #858585; text-transform: uppercase;");
         auto* v = new QLabel("—", card);
-        v->setStyleSheet("font-size: 12pt; font-weight: 700; color: #f0f7ff;");
+        v->setStyleSheet("font-size: 12pt; font-weight: 700; color: #cccccc;");
         cl->addWidget(l);
         cl->addWidget(v);
         metrics_layout->addWidget(card);
         return v;
     };
 
-    QLabel* area_card_val = create_card("Área da Chapa (m²)", "#0284c7");
-    QLabel* dims_card_val = create_card("Dimensões Chapa (X × Y × Z)", "#10b981");
-    QLabel* time_card_val = create_card("Tempo de Corte Estimado", "#f59e0b");
-    QLabel* cut_card_val = create_card("Comprimento de Corte", "#8b5cf6");
+    QLabel* area_card_val = create_card("Área da Chapa (m²)", "#0078d4");
+    QLabel* dims_card_val = create_card("Dimensões Chapa (X × Y × Z)", "#107c41");
+    QLabel* time_card_val = create_card("Tempo de Corte Estimado", "#d8a110");
+    QLabel* cut_card_val = create_card("Comprimento de Corte", "#8f63ea");
     main_layout->addWidget(metrics_widget);
 
     auto* tabs = new QTabWidget(&dialog);
     tabs->setStyleSheet(R"QSS(
         QTabWidget::pane {
-            border: 1px solid #334a64;
-            background: #141d27;
+            border: 1px solid #2b2b2b;
+            background: #1f1f1f;
             border-radius: 8px;
-            top: -1px;
+            top: 0px;
         }
         QTabBar::tab {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #223244, stop:1 #192533);
-            color: #b8c9dc;
-            border: 1px solid #364e6b;
-            border-bottom: none;
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            padding: 9px 20px;
-            margin-right: 5px;
+            background: #181818;
+            color: #969696;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 10px 20px;
             font-weight: 700;
             font-size: 9.5pt;
         }
         QTabBar::tab:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2e435c, stop:1 #213346);
-            color: #ffffff;
-            border-color: #52759e;
+            background: #2a2d2e;
+            color: #e0e0e0;
         }
         QTabBar::tab:selected {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1e3a5f, stop:1 #142232);
-            color: #60a5fa;
-            border: 1px solid #3b82f6;
-            border-top: 3px solid #60a5fa;
-            border-bottom: 2px solid #142232;
-            font-weight: 800;
+            background: #1f1f1f;
+            color: #ffffff;
+            border-bottom: 2px solid #0078d4;
+            font-weight: 700;
         }
     )QSS");
 
@@ -5121,36 +5456,36 @@ void MainWindow::export_setup_sheet() {
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setStyleSheet(R"QSS(
         QTableWidget {
-            background-color: #17212d;
-            color: #e2e8f0;
-            gridline-color: #27374b;
-            border: 1px solid #334a64;
+            background-color: #1f1f1f;
+            color: #cccccc;
+            gridline-color: #2b2b2b;
+            border: 1px solid #2b2b2b;
             border-radius: 8px;
-            selection-background-color: #e2e8f0;
-            selection-color: #0f172a;
+            selection-background-color: #04395e;
+            selection-color: #ffffff;
             outline: none;
             font-size: 9pt;
         }
         QTableWidget::item {
             padding: 7px 5px;
-            border-bottom: 1px solid #202d3e;
+            border-bottom: 1px solid #2b2b2b;
         }
         QTableWidget::item:selected {
-            background-color: #e2e8f0;
-            color: #0f172a;
+            background-color: #04395e;
+            color: #ffffff;
             font-weight: 700;
         }
         QTableWidget::item:hover:!selected {
-            background-color: #223245;
+            background-color: #2a2d2e;
             color: #ffffff;
         }
         QHeaderView::section {
-            background-color: #0d1520;
-            color: #94a3b8;
+            background-color: #181818;
+            color: #858585;
             font-weight: 700;
             font-size: 8.5pt;
             padding: 7px 4px;
-            border: 1px solid #1a2636;
+            border: 1px solid #2b2b2b;
             border-top: none;
         }
     )QSS");
@@ -5168,7 +5503,7 @@ void MainWindow::export_setup_sheet() {
     pt_layout->setContentsMargins(0, 0, 0, 0);
 
     auto* pt_title = new QLabel("📐 Ilustração Técnica do Percurso e Posicionamento na Chapa", preview_toolbar);
-    pt_title->setStyleSheet("font-weight: bold; color: #60a5fa; font-size: 9pt;");
+    pt_title->setStyleSheet("font-weight: bold; color: #75beff; font-size: 9pt;");
     auto* copy_img_btn = new QPushButton("📋 Copiar Ilustração", preview_toolbar);
     copy_img_btn->setIcon(ui::get_icon("copy"));
     auto* save_img_btn = new QPushButton("💾 Salvar Imagem HD (.png)...", preview_toolbar);
@@ -5181,7 +5516,7 @@ void MainWindow::export_setup_sheet() {
 
     auto* preview_scroll = new QScrollArea(tab_preview);
     preview_scroll->setWidgetResizable(true);
-    preview_scroll->setStyleSheet("QScrollArea { background-color: #0b1118; border: 1px solid #233448; border-radius: 8px; }");
+    preview_scroll->setStyleSheet("QScrollArea { background-color: #181818; border: 1px solid #2b2b2b; border-radius: 8px; }");
     auto* preview_label = new QLabel(preview_scroll);
     preview_label->setAlignment(Qt::AlignCenter);
     preview_scroll->setWidget(preview_label);
@@ -5199,7 +5534,7 @@ void MainWindow::export_setup_sheet() {
     gcode_status_layout->setContentsMargins(0, 0, 0, 0);
 
     auto* gcode_status_lbl = new QLabel("✓ Cópia do G-Code gravada e pronta para uso", gcode_status_bar);
-    gcode_status_lbl->setStyleSheet("font-weight: bold; color: #0284c7;");
+    gcode_status_lbl->setStyleSheet("font-weight: bold; color: #0078d4;");
     auto* copy_gcode_btn = new QPushButton("📋 Copiar G-Code", gcode_status_bar);
     copy_gcode_btn->setIcon(ui::get_icon("copy"));
     auto* save_gcode_btn = new QPushButton("💾 Salvar Cópia do G-Code (.nc)...", gcode_status_bar);
@@ -5212,7 +5547,7 @@ void MainWindow::export_setup_sheet() {
 
     auto* gcode_editor = new QPlainTextEdit(tab_gcode);
     gcode_editor->setReadOnly(true);
-    gcode_editor->setStyleSheet("font-family: Consolas, monospace; font-size: 9pt; background: #0f172a; color: #38bdf8;");
+    gcode_editor->setStyleSheet("font-family: Consolas, monospace; font-size: 9pt; background: #181818; color: #9cdcfe; border: 1px solid #2b2b2b; border-radius: 6px;");
     gcode_layout->addWidget(gcode_editor, 1);
     tabs->addTab(tab_gcode, "💾 Cópia do G-Code Guardada");
 
@@ -5696,11 +6031,14 @@ void MainWindow::import_files(const QStringList& paths) {
     }
 
     if (!all_entities.empty()) {
+        classify_imported_entities(all_entities);
         tool_context_.add(all_entities, QString("Importar %1 arquivos").arg(success_count).toStdString(), true);
         refresh_document_view();
         canvas_widget_->canvas->fit_view();
     }
     QApplication::restoreOverrideCursor();
+
+    if (!all_entities.empty()) begin_import_preparation();
 
     if (!failed_files.isEmpty()) {
         QMessageBox::warning(this, "Avisos na importação",
@@ -5732,9 +6070,11 @@ void MainWindow::import_file(const QString& path) {
         }
 
         const QString suffix = QFileInfo(path).suffix().toUpper();
+        classify_imported_entities(entities);
         tool_context_.add(entities, QString("Importar %1").arg(suffix).toStdString(), true);
         refresh_document_view();
         canvas_widget_->canvas->fit_view();
+        begin_import_preparation();
         statusBar()->showMessage(QString("%1 vetor(es) importado(s) de %2")
                                      .arg(static_cast<qlonglong>(entities.size()))
                                      .arg(QFileInfo(path).fileName()));
@@ -5767,6 +6107,7 @@ void MainWindow::import_folder() {
                 entities.push_back(label);
             }
         }
+        classify_imported_entities(entities);
         tool_context_.add(entities, "Importar em lote", true);
         refresh_document_view();
         canvas_widget_->canvas->fit_view();
@@ -5775,6 +6116,7 @@ void MainWindow::import_folder() {
                              .arg(static_cast<qlonglong>(result.total_files));
         if (!result.failed.empty()) status += QString(" · %1 com erro").arg(static_cast<qlonglong>(result.failed.size()));
         statusBar()->showMessage(status);
+        begin_import_preparation();
     } catch (const std::exception& error) {
         QMessageBox::critical(this, "Erro na importação em lote", QString::fromUtf8(error.what()));
     }
@@ -6271,6 +6613,18 @@ void MainWindow::manage_layers() {
     ui::LayerManagerDialog dialog(document_.layers, tool_context_.current_layer, this);
     if (dialog.exec() != QDialog::Accepted) return;
 
+    const auto renamed = dialog.renamed_layers();
+    for (const auto& entity : document_.entities) {
+        for (const auto& [old_name, new_name] : renamed) {
+            if (entity && entity->layer == old_name) {
+                entity->layer = new_name;
+                break;
+            }
+        }
+    }
+    for (const auto& [old_name, new_name] : renamed) {
+        if (tool_context_.current_layer == old_name) { tool_context_.current_layer = new_name; break; }
+    }
     document_.layers = dialog.result_layers();
     if (document_.layers.empty()) document_.layers.push_back(cad::Layer{});
     const std::string fallback = document_.layers.front().name;
@@ -6494,6 +6848,12 @@ void MainWindow::show_canvas_context_menu(const QPoint& global_pos, double wx, d
     action("Propriedades do objeto...", [this, selected] {
         if (!selected.empty()) quick_edit_entity(QString::fromStdString(selected.front()->id));
     }, has_selection && ui::QuickEditPopup::supports(*selected.front()));
+    for (const auto& entity : selected) {
+        if (cad::is_a<cad::Dimension>(entity)) {
+            action("Editar estilo das cotas...", [this] { edit_dimension_style(); });
+            break;
+        }
+    }
 
     auto* copy_layer = menu->addMenu("Copiar para camada");
     auto* move_layer = menu->addMenu("Mover para camada");
@@ -6715,6 +7075,36 @@ void MainWindow::activate_dimension(const QString& mode) {
         dimension->set_mode(mode.toStdString());
 }
 
+void MainWindow::edit_dimension_style() {
+    std::vector<std::shared_ptr<cad::Dimension>> selected_dimensions;
+    for (const auto& entity : document_.selected_entities()) {
+        if (auto dim = std::dynamic_pointer_cast<cad::Dimension>(entity)) {
+            selected_dimensions.push_back(dim);
+        }
+    }
+    const cad::DimensionStyle initial_style = !selected_dimensions.empty()
+        ? selected_dimensions.front()->style
+        : document_.dimension_style;
+
+    ui::DimensionStyleDialog dialog(initial_style, static_cast<int>(selected_dimensions.size()), this);
+    if (dialog.exec() == QDialog::Accepted) {
+        const cad::DimensionStyle new_style = dialog.result_style();
+        document_.dimension_style = new_style;
+        document_.modified = true;
+        if (dialog.apply_to_selected() && !selected_dimensions.empty()) {
+            std::vector<cad::EntityPtr> targets;
+            for (const auto& d : selected_dimensions) targets.push_back(d);
+            tool_context_.transform(targets, [new_style](cad::Entity& e) {
+                if (auto* dim = dynamic_cast<cad::Dimension*>(&e)) {
+                    dim->style = new_style;
+                }
+            }, "Alterar estilo das cotas");
+        }
+        canvas_widget_->canvas->refresh_entities();
+        statusBar()->showMessage("Estilo das cotas atualizado");
+    }
+}
+
 void MainWindow::create_actions() {
     QMenu* file_menu = menuBar()->addMenu("Arquivo");
 
@@ -6722,9 +7112,13 @@ void MainWindow::create_actions() {
     new_action->setShortcut(QKeySequence::New);
     connect(new_action, &QAction::triggered, this, [this] {
         document_ = cad::Document();
+        import_preparation_pending_ = false;
+        bridge_preparation_job_.reset();
+        bridge_target_job_id_.clear();
         document_.material.width = 1220.0;
         document_.material.height = 2440.0;
         refresh_document_view();
+        refresh_import_preparation();
         statusBar()->showMessage("Novo projeto");
     });
 
@@ -6864,6 +7258,8 @@ void MainWindow::create_actions() {
     };
     for (const auto& [mode, label] : dimensions)
         dimensions_menu->addAction(label, QKeySequence(), this, [this, mode] { activate_dimension(mode); });
+    dimensions_menu->addSeparator();
+    dimensions_menu->addAction("Estilo das cotas...", QKeySequence(), this, [this] { edit_dimension_style(); });
 
     QMenu* cam_menu = menuBar()->addMenu("Percursos de ferramenta");
     const std::vector<std::pair<QString, cam::ToolpathType>> operations = {
@@ -6906,6 +7302,12 @@ void MainWindow::create_actions() {
 }
 
 void MainWindow::schedule_selection_previews() {
+    if (import_setup_panel_) {
+        int count = 0;
+        for (const auto& entity : document_.selected_entities())
+            if (entity && entity->closed() && cad::is_vector(*entity) && !cad::is_a<cad::Text>(*entity)) ++count;
+        import_setup_panel_->set_recess_selection_count(count);
+    }
     selection_guide_dirty_ = true;
     material_guide_dirty_ = true;
     automatic_cut_panel_dirty_ = true;
@@ -7008,7 +7410,11 @@ void MainWindow::refresh_document_view() {
 bool MainWindow::open_file(const QString& path) {
     try {
         document_.load(std::filesystem::path(path.toStdWString()));
+        import_preparation_pending_ = false;
+        bridge_preparation_job_.reset();
+        bridge_target_job_id_.clear();
         refresh_document_view();
+        refresh_import_preparation();
         canvas_widget_->canvas->fit_view();
         statusBar()->showMessage(QString("Projeto aberto: %1").arg(path));
         return true;

@@ -58,11 +58,12 @@ QString ruler_label(double v);
 
 class Canvas2D;
 
-// Ponte arrastavel; informa a nova posicao ao soltar o mouse.
+// Ponte arrastavel; informa a nova posicao ao soltar o mouse ou exclusao com clique.
 class TabMarker : public QGraphicsEllipseItem {
 public:
     using MovedFn = std::function<void(int, const QPointF&)>;
-    TabMarker(int index, MovedFn callback, bool manual);
+    using DeletedFn = std::function<void(int)>;
+    TabMarker(int index, MovedFn callback, DeletedFn delete_callback, bool manual);
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
@@ -71,6 +72,8 @@ protected:
 private:
     int index_;
     MovedFn callback_;
+    DeletedFn delete_callback_;
+    QPointF press_scene_pos_{};
 };
 
 // Regua que cria linha de construcao quando se arrasta dela para dentro do desenho.
@@ -175,6 +178,9 @@ public:
 
     // -- entidades --
     void refresh_entities() override;
+    void preview_translation(const std::vector<cad::EntityPtr>& entities, double dx, double dy) override;
+    void clear_translation_preview() override;
+    void commit_translation_preview() override;
     void set_fit_warning_entities(const std::set<std::string>& entity_ids);
     void show_layout_preview(const std::vector<cad::Placement>& placements, const std::set<std::string>& unfit_ids);
     void clear_layout_preview();
@@ -222,6 +228,7 @@ signals:
     void shortcut_requested(const QString& action);
     void cancel_requested();
     void tab_marker_moved(int index, double x, double y);
+    void tab_marker_deleted(int index);
     void files_dropped(const QStringList& paths, double wx, double wy);
     void manual_tab_clicked(double wx, double wy);
     void manual_drill_clicked(double wx, double wy);
@@ -275,6 +282,7 @@ private:
     std::vector<QGraphicsItem*> bg_items_;
     std::vector<EntityItem*> ent_items_;
     std::unordered_map<const cad::Entity*, EntityItem*> ent_item_index_;
+    std::vector<std::pair<EntityItem*, QPointF>> translation_preview_items_;
     std::set<std::string> fit_warning_ids_;
     std::vector<QGraphicsItem*> fit_warning_items_;
     std::vector<QGraphicsItem*> layout_preview_items_;

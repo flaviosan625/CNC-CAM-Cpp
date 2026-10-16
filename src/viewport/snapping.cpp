@@ -563,6 +563,15 @@ MovingSnap SnapEngine::snap_moving(const std::vector<cad::EntityPtr>& moving, do
     for (const cad::EntityPtr& e : moving) ids.insert(e->id);
     auto& cache = geometry_cache();
 
+    // Arrastar a selecao inteira nao tem alvos fixos. Detectar isso antes de extrair
+    // vertices/pontos de todas as entidades evita trabalho inutil em desenhos densos.
+    const bool has_targets = std::any_of(cache.entries.begin(), cache.entries.end(), [&](const auto& entry) {
+        if (ids.count(entry.entity->id)) return false;
+        const auto* layer = document->get_layer(entry.entity->layer);
+        return !layer || layer->visible;
+    });
+    if (!has_targets) return {dx, dy, std::nullopt};
+
     std::vector<NotablePoint> todos;
     for (const cad::EntityPtr& e : moving) {
         auto append = [&](const auto& points) {
@@ -580,20 +589,17 @@ MovingSnap SnapEngine::snap_moving(const std::vector<cad::EntityPtr>& moving, do
     for (const auto& [p, t] : todos) only_points.push_back(p);
     const BBox caixa = bbox_of(only_points);
     std::vector<NotablePoint> fixos;
-    bool has_targets = false;
     for (auto& entry : cache.entries) {
         const auto& e = entry.entity;
         if (ids.count(e->id)) continue;
         const auto* layer = document->get_layer(e->layer);
         if (layer && !layer->visible) continue;
-        has_targets = true;
         const BBox& b = entry.bounds;
         if (b.x1 + raio < caixa.x0 || b.x0 - raio > caixa.x1 || b.y1 + raio < caixa.y0 || b.y0 - raio > caixa.y1) continue;
         for (const auto& np : entry.points()) {
             if (wants(np.second)) fixos.push_back(np);
         }
     }
-    if (!has_targets) return {dx, dy, std::nullopt};
     if (s.material && document) {
         for (const Pt& p : material_points()) fixos.push_back({p, SnapKind::Material});
     }

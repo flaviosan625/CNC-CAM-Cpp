@@ -48,6 +48,9 @@ public:
     std::string notes;
     // Variaveis do documento: nome -> valor, para carimbar em textos.
     OrderedStrMap variables;
+    // Preparacao da importacao: ferramenta sugerida e papeis dos vetores.
+    // Os percursos continuam guardando suas proprias ferramentas e parametros.
+    Json preparation = Json::object();
     std::optional<std::filesystem::path> file_path;
     bool modified = false;
     std::string units = "mm";

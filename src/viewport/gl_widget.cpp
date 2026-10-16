@@ -163,14 +163,14 @@ void Viewport3D::initializeGL() {
     vtk_render_window_->AddObserver(vtkCommand::WindowFrameEvent, vtk_render_callback_);
     vtk_render_window_->vtkOpenGLRenderWindow::OpenGLInit();
     vtk_render_window_->OpenGLInitContext();
-    vtk_renderer_->SetBackground(0.078, 0.106, 0.145);
+    vtk_renderer_->SetBackground(31.0 / 255.0, 31.0 / 255.0, 31.0 / 255.0);
     vtk_renderer_->SetViewport(0.0, 0.0, 1.0, 1.0);
     update_vtk_axes();
     return;
 #else
     gl_ = context()->extraFunctions();
     gl_->initializeOpenGLFunctions();
-    gl_->glClearColor(20.0f / 255.0f, 27.0f / 255.0f, 37.0f / 255.0f, 1.0f);
+    gl_->glClearColor(31.0f / 255.0f, 31.0f / 255.0f, 31.0f / 255.0f, 1.0f);
     gl_->glEnable(GL_DEPTH_TEST);
     gl_->glEnable(GL_LINE_SMOOTH);
     gl_->glEnable(GL_BLEND);
@@ -219,7 +219,7 @@ void Viewport3D::paintGL() {
     functions->glViewport(0, 0, device_size.width(), device_size.height());
     functions->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     functions->glDepthMask(GL_TRUE);
-    functions->glClearColor(20.0f / 255.0f, 27.0f / 255.0f, 37.0f / 255.0f, 1.0f);
+    functions->glClearColor(31.0f / 255.0f, 31.0f / 255.0f, 31.0f / 255.0f, 1.0f);
     functions->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     sync_vtk_camera();
     vtk_render_window_->Render();

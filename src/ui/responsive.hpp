@@ -9,7 +9,8 @@ namespace cnc::ui {
 // Screen/DPI aware dialogs, with scrolling as a fallback instead of clipped fields.
 class ResponsiveDialog : public QDialog {
 public:
-    explicit ResponsiveDialog(QWidget* parent = nullptr) : QDialog(parent) {}
+    explicit ResponsiveDialog(QWidget* parent = nullptr);
+    ~ResponsiveDialog() override = default;
     // Keep the synchronous form flow while leaving the drawing workspace interactive.
     int exec();
 protected:
@@ -17,6 +18,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 private:
     bool prepared_ = false;
+    bool positioned_ = false;
 };
 
 class AdaptiveSection final : public QObject {

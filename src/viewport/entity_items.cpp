@@ -227,13 +227,14 @@ bool EntityItem::hit_test_world(double x, double y, double tolerance) const {
         cached_hit_path_ = stroker.createStroke(hit_path);
         hit_tolerance_ = tolerance;
     }
-    return cached_hit_path_->contains(QPointF(x, mh_ - y));
+    return cached_hit_path_->contains(QPointF(x - pos().x(), mh_ - y - pos().y()));
 }
 
 void EntityItem::refresh() {
     const bool geometry_changed = cached_version_ != entity_->version ||
                                   std::fabs(cached_mh_ - mh_) > 1e-6 || context_dirty_;
     if (geometry_changed) {
+        setPos(0.0, 0.0);
         cached_hit_path_.reset();
         cached_version_ = entity_->version;
         cached_mh_ = mh_;
@@ -271,12 +272,28 @@ void EntityItem::refresh() {
     }
 }
 
+void EntityItem::adopt_preview_translation() {
+    // O caminho local mais a posicao de pre-visualizacao ja representam a geometria movida.
+    // Atualizar a versao evita reconstruir milhares de segmentos no mouse-up.
+    cached_version_ = entity_->version;
+    cached_bounds_.reset();
+    cached_hit_path_.reset();
+    hit_tolerance_ = -1.0;
+}
+
 QColor EntityItem::layer_qcolor() const {
     bool is_default = true;
     for (size_t i = 0; i < 3; ++i) {
         if (std::fabs(layer_color_[i] - kDefaultLayerColor[i]) >= 1e-6) is_default = false;
     }
     if (is_default) return QColor(ui::color("drawing"));
+    // Padrao AutoCAD / Dark CAD: se a cor da camada for excessivamente escura
+    // (preto ou quase preto), adapta dinamicamente para alto contraste garantindo
+    // que nenhum desenho fora ou dentro da chapa se perca no fundo escuro.
+    const double luminance = 0.299 * layer_color_[0] + 0.587 * layer_color_[1] + 0.114 * layer_color_[2];
+    if (luminance < 0.20) {
+        return QColor(ui::color("drawing"));
+    }
     return QColor::fromRgbF(layer_color_[0], layer_color_[1], layer_color_[2]);
 }
 

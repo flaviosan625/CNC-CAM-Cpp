@@ -25,6 +25,12 @@ T jget(const Json& j, const char* key, const T& fallback) {
     return it->template get<T>();
 }
 
+inline std::string jget(const Json& j, const char* key, const char* fallback) {
+    auto it = j.find(key);
+    if (it == j.end() || it->is_null() || !it->is_string()) return fallback ? fallback : "";
+    return it->get<std::string>();
+}
+
 inline Json points_to_json(const Points& pts) {
     Json arr = Json::array();
     for (const Pt& p : pts) arr.push_back(Json::array({p.x, p.y}));

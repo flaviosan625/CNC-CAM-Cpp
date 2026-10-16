@@ -13,6 +13,11 @@
 #include <QSplitter>
 
 namespace cnc::ui {
+ResponsiveDialog::ResponsiveDialog(QWidget* parent) : QDialog(parent) {
+    setWindowFlags(windowFlags() | Qt::WindowMinMaxButtonsHint);
+    setSizeGripEnabled(true);
+}
+
 int ResponsiveDialog::exec() {
     setWindowModality(Qt::NonModal);
     QEventLoop loop;
@@ -53,7 +58,8 @@ void ResponsiveDialog::showEvent(QShowEvent* event) {
         if (minimumWidth() <= 0) setMinimumSize(340, 280);
         setSizeGripEnabled(true);
     }
-    if (screen()) {
+    if (screen() && !positioned_) {
+        positioned_ = true;
         const QRect available = screen()->availableGeometry().adjusted(8, 34, -8, -8);
         QWidget* host = parentWidget() ? parentWidget()->window() : nullptr;
         if (!host || host == this) host = nullptr;
@@ -70,6 +76,7 @@ void ResponsiveDialog::showEvent(QShowEvent* event) {
             const int dock_width = std::clamp(host_rect.width() / 4, 340, 420);
             const int dock_height = std::min(host_rect.height(), available.height());
             setMinimumSize(std::min(320, dock_width), std::min(280, dock_height));
+            setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
             resize(dock_width, dock_height);
             const int right = host_rect.right() + 1;
             const int x = std::clamp(right - dock_width, available.left(),
@@ -80,6 +87,7 @@ void ResponsiveDialog::showEvent(QShowEvent* event) {
         } else {
             const int target_w = std::min(std::max(width(), minimumWidth()), available.width());
             const int target_h = std::min(std::max(height(), minimumHeight()), available.height());
+            setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
             resize(target_w, target_h);
             const int cx = host_rect.center().x() - target_w / 2;
             const int cy = host_rect.center().y() - target_h / 2;

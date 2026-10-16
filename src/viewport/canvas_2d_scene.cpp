@@ -14,7 +14,38 @@ namespace cnc::vp {
 
 // -- entidades --
 
+void Canvas2D::preview_translation(const std::vector<cad::EntityPtr>& entities, double dx, double dy) {
+    if (translation_preview_items_.empty()) {
+        translation_preview_items_.reserve(entities.size());
+        for (const auto& entity : entities) {
+            const auto found = ent_item_index_.find(entity.get());
+            if (found != ent_item_index_.end())
+                translation_preview_items_.emplace_back(found->second, found->second->pos());
+        }
+        handles.clear();
+    }
+    const QPointF offset(dx, -dy);
+    for (const auto& [item, origin] : translation_preview_items_) item->setPos(origin + offset);
+}
+
+void Canvas2D::clear_translation_preview() {
+    if (translation_preview_items_.empty()) return;
+    for (const auto& [item, origin] : translation_preview_items_) item->setPos(origin);
+    translation_preview_items_.clear();
+    refresh_selection_handles(false);
+}
+
+void Canvas2D::commit_translation_preview() {
+    if (translation_preview_items_.empty()) return;
+    for (const auto& [item, origin] : translation_preview_items_) {
+        (void)origin;
+        item->adopt_preview_translation();
+    }
+    translation_preview_items_.clear();
+}
+
 void Canvas2D::refresh_entities() {
+    clear_translation_preview();
     clear_layout_preview();
     clear_fit_warning_items();
     fit_warning_ids_.clear();
@@ -44,11 +75,19 @@ void Canvas2D::refresh_entities() {
             }
         }
         if (match) {
+            constexpr Rgb kDefColor{0.1, 0.1, 0.1};
+            auto resolve_col = [&](const cad::EntityPtr& ent, const cad::Layer* lay) -> Rgb {
+                const bool custom = (std::fabs(ent->color[0] - kDefColor[0]) > 1e-3 ||
+                                     std::fabs(ent->color[1] - kDefColor[1]) > 1e-3 ||
+                                     std::fabs(ent->color[2] - kDefColor[2]) > 1e-3);
+                if (custom) return ent->color;
+                return lay ? lay->color : ent->color;
+            };
             for (EntityItem* item : ent_items_) {
                 const auto& entity = item->entity();
                 const cad::Layer* layer = document_->get_layer(entity->layer);
                 item->update_context(material_height, document_->material.unit_factor(),
-                                     document_->material.units, layer ? layer->color : entity->color);
+                                     document_->material.units, resolve_col(entity, layer));
                 item->refresh();
             }
             rebuild_fit_warning_items();
@@ -67,9 +106,17 @@ void Canvas2D::refresh_entities() {
 
     const double mh = material_height;
     const cad::MaterialSetup& mat = document_->material;
+    constexpr Rgb kDefColor{0.1, 0.1, 0.1};
+    auto resolve_col = [&](const cad::EntityPtr& ent, const cad::Layer* lay) -> Rgb {
+        const bool custom = (std::fabs(ent->color[0] - kDefColor[0]) > 1e-3 ||
+                             std::fabs(ent->color[1] - kDefColor[1]) > 1e-3 ||
+                             std::fabs(ent->color[2] - kDefColor[2]) > 1e-3);
+        if (custom) return ent->color;
+        return lay ? lay->color : ent->color;
+    };
     for (const cad::EntityPtr& e : visible) {
         const cad::Layer* lay = document_->get_layer(e->layer);
-        const Rgb layer_color = lay ? lay->color : e->color;
+        const Rgb layer_color = resolve_col(e, lay);
         EntityItem* item = nullptr;
         if (const auto found = reusable.find(e.get()); found != reusable.end()) {
             item = found->second;

@@ -300,15 +300,15 @@ private:
 
 // Aparencia das cotas; medidas graficas sao em milimetros no papel.
 struct DimensionStyle {
-    std::optional<std::string> line_color;
-    std::optional<std::string> extension_color;
-    std::optional<std::string> text_color;
-    double text_height = 2.5;
-    double arrow_size = 2.5;
-    double line_width = 0.18;
-    double extension_gap = 1.0;
-    double extension_overshoot = 1.5;
-    double text_gap = 1.0;
+    std::optional<std::string> line_color = "#00e5ff";
+    std::optional<std::string> extension_color = "#00e5ff";
+    std::optional<std::string> text_color = "#00e5ff";
+    double text_height = 20.0;
+    double arrow_size = 8.0;
+    double line_width = 0.25;
+    double extension_gap = 2.0;
+    double extension_overshoot = 3.0;
+    double text_gap = 2.0;
     std::string arrow_style = "closed";
     std::string arrow_fit = "auto";
     int precision = 2;

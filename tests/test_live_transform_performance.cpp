@@ -19,6 +19,7 @@ class LiveTransformCanvas : public cnc::tools::ICanvas {
 public:
     cnc::vp::EntityItem* item = nullptr;
     int refreshes = 0;
+    int previews = 0;
     void refresh_entities() override {
         ++refreshes;
         if (item) item->refresh();
@@ -26,12 +27,19 @@ public:
     void set_preview(const cnc::Points&, bool, bool) override {}
     void show_dimension_preview(const std::shared_ptr<cnc::cad::Dimension>&) override {}
     void clear_preview() override {}
+    void preview_translation(const std::vector<cnc::cad::EntityPtr>&, double dx, double dy) override {
+        ++previews;
+        if (item) item->setPos(dx, -dy);
+    }
+    void clear_translation_preview() override {
+        if (item) item->setPos(0, 0);
+    }
     double pick_tolerance() const override { return 1.0; }
 };
 
 } // namespace
 
-TEST_CASE("performance: arrastar reutiliza snapshot e repinta uma vez por movimento") {
+TEST_CASE("performance: arrastar atualiza pre-visualizacao e confirma uma vez ao soltar") {
     cnc::cad::Document document;
     cnc::UndoStack undo;
     cnc::tools::ToolContext context(document, undo);
@@ -49,24 +57,26 @@ TEST_CASE("performance: arrastar reutiliza snapshot e repinta uma vez por movime
     const double original_x = item.path().boundingRect().x();
 
     REQUIRE(select.on_press(50, 0, Qt::LeftButton, Qt::NoModifier));
-    REQUIRE(copies == 1);
+    CHECK(copies == 0);
     for (int frame = 1; frame <= 8; ++frame) {
         CAPTURE(frame);
         const int refreshes = canvas.refreshes;
         const auto version = polyline->version;
         REQUIRE(select.on_move(50 + frame * 10, 0, Qt::NoModifier));
-        CHECK(polyline->points.front().x == doctest::Approx(frame * 10));
-        CHECK(item.path().boundingRect().x() == doctest::Approx(original_x + frame * 10));
-        CHECK(polyline->version > version);
-        CHECK(canvas.refreshes == refreshes + 1);
-        CHECK(copies == 1);
+        CHECK(polyline->points.front().x == doctest::Approx(0));
+        CHECK(item.path().boundingRect().x() == doctest::Approx(original_x));
+        CHECK(item.pos().x() == doctest::Approx(frame * 10));
+        CHECK(polyline->version == version);
+        CHECK(canvas.refreshes == refreshes);
+        CHECK(canvas.previews == frame);
+        CHECK(copies == 0);
     }
     const auto preview_version = polyline->version;
     REQUIRE(select.on_release(130, 0, Qt::LeftButton, Qt::NoModifier));
     REQUIRE(undo.can_undo());
     CHECK(polyline->version > preview_version);
     CHECK(polyline->points.front().x == doctest::Approx(80));
-    CHECK(copies == 3); // One drag snapshot plus the undo command's before/after.
+    CHECK(copies == 2); // Apenas os snapshots anterior e posterior do comando de desfazer.
     const auto committed_version = polyline->version;
     REQUIRE(undo.undo());
     canvas.refresh_entities();
@@ -83,7 +93,7 @@ TEST_CASE("performance: arrastar reutiliza snapshot e repinta uma vez por movime
     CHECK(polyline->points.front().x == doctest::Approx(80));
 }
 
-TEST_CASE("performance: cancelar arrasto restaura geometria e invalida o ultimo quadro") {
+TEST_CASE("performance: cancelar arrasto limpa a pre-visualizacao sem editar a geometria") {
     cnc::cad::Document document;
     cnc::UndoStack undo;
     cnc::tools::ToolContext context(document, undo);
@@ -98,13 +108,15 @@ TEST_CASE("performance: cancelar arrasto restaura geometria e invalida o ultimo 
     cnc::vp::EntityItem item(rectangle, document.material.height);
     canvas.item = &item;
     const QPainterPath original = item.path();
+    const auto version = rectangle->version;
     REQUIRE(select.on_press(50, 0, Qt::LeftButton, Qt::NoModifier));
     REQUIRE(select.on_move(65, 0, Qt::NoModifier));
     REQUIRE(select.on_move(80, 0, Qt::NoModifier));
-    CHECK(item.path() != original);
-    const auto version = rectangle->version;
+    CHECK(item.path() == original);
+    CHECK(item.pos().x() == doctest::Approx(30));
     REQUIRE(select.on_key(Qt::Key_Escape));
-    CHECK(rectangle->version > version);
+    CHECK(rectangle->version == version);
+    CHECK(item.pos().x() == doctest::Approx(0));
     CHECK(item.path() == original);
     CHECK_FALSE(undo.can_undo());
 }

@@ -175,13 +175,13 @@ void ToolContext::replace(const std::vector<cad::EntityPtr>& old_ents, std::vect
 }
 
 void ToolContext::transform(const std::vector<cad::EntityPtr>& entities, TransformCommand::ApplyFn fn,
-                            const std::string& label) {
+                            const std::string& label, bool refresh) {
     if (entities.empty()) {
         status("Nenhum objeto selecionado");
         return;
     }
     undo_stack->push(std::make_shared<TransformCommand>(*document, entities, std::move(fn), label));
-    refresh();
+    if (refresh) this->refresh();
 }
 
 // ----------------------------------------------------------------------

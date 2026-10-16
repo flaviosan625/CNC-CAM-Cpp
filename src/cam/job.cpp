@@ -123,7 +123,16 @@ const std::vector<Toolpath>& ToolpathJob::calculate(const cad::Document& documen
         error = std::string("Exception: ") + ex.what();
         results.clear();
     }
-    for (Toolpath& tp : results) tp.visible = visible;
+    for (Toolpath& tp : results) {
+        tp.visible = visible;
+        tp.kind = kind;
+        if (kind == ToolpathType::Profile && std::holds_alternative<ProfileSettings>(settings)) {
+            const auto& ps = std::get<ProfileSettings>(settings);
+            if (tp.name.find("internos") != std::string::npos) tp.profile_side = ProfileSide::Inside;
+            else if (tp.name.find("externos") != std::string::npos) tp.profile_side = ProfileSide::Outside;
+            else tp.profile_side = ps.side;
+        }
+    }
     return results;
 }
 

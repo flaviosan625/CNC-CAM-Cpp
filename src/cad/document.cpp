@@ -201,7 +201,43 @@ std::vector<std::string> Document::recalculate_toolpaths(const std::shared_ptr<c
     }
     for (const auto& job : jobs) {
         job->calculate(*this);
-        if (!job->error.empty()) errors.push_back(job->name + ": " + job->error);
+        if (!job->error.empty()) {
+            errors.push_back(job->name + ": " + job->error);
+        } else {
+            // Padrão de cores para os vetores após gerar/calcular o percurso:
+            // Rebaixo: Laranja/Âmbar (#f59e0b)
+            // Corte fora: Magenta (#e040fb)
+            // Corte dentro: Verde esmeralda (#10b981)
+            // Corte sobre linha: Ciano (#00e5ff)
+            // Furação: Azul claro (#38bdf8)
+            // VCarve: Roxo (#a855f7)
+            Rgb col = {0.2, 0.65, 1.0};
+            if (job->kind == cam::ToolpathType::Pocket) {
+                col = {0.96, 0.62, 0.04};
+            } else if (job->kind == cam::ToolpathType::Profile) {
+                if (std::holds_alternative<cam::ProfileSettings>(job->settings)) {
+                    const auto& ps = std::get<cam::ProfileSettings>(job->settings);
+                    if (ps.side == cam::ProfileSide::Inside) {
+                        col = {0.06, 0.72, 0.51};
+                    } else if (ps.side == cam::ProfileSide::On) {
+                        col = {0.0, 0.90, 1.0};
+                    } else {
+                        col = {0.88, 0.25, 0.98};
+                    }
+                } else {
+                    col = {0.88, 0.25, 0.98};
+                }
+            } else if (job->kind == cam::ToolpathType::Drill) {
+                col = {0.22, 0.74, 0.97};
+            } else if (job->kind == cam::ToolpathType::VCarve) {
+                col = {0.66, 0.33, 0.97};
+            }
+            for (auto& entity : job->entities(*this)) {
+                if (entity) {
+                    entity->color = col;
+                }
+            }
+        }
     }
     return errors;
 }
@@ -322,11 +358,14 @@ Json Document::to_json() const {
     out["layers"] = std::move(lays);
     out["entities"] = std::move(ents);
     out["toolpaths"] = std::move(jobs);
+    if (!preparation.empty()) out["preparation"] = preparation;
     return out;
 }
 
 void Document::from_json(const Json& data) {
     selection_order_.clear();
+    preparation = data.contains("preparation") && data.at("preparation").is_object()
+                      ? data.at("preparation") : Json::object();
     units = jget<std::string>(data, "units", "mm");
     dimension_style = dimension_style_from_json(data.contains("dimension_style") ? data.at("dimension_style") : Json());
     notes.clear();

@@ -21,6 +21,7 @@ std::string SelectTool::hint() const {
 }
 
 void SelectTool::deactivate() {
+    if (ctx->canvas) ctx->canvas->clear_translation_preview();
     mode_.clear();
     cmd_targets_.clear();
     BaseTool::deactivate();
@@ -109,7 +110,7 @@ bool SelectTool::press_move(double wx, double wy, Qt::KeyboardModifiers mods, co
     grab_ = grab ? std::optional<Pt>(grab->point) : std::nullopt;
     copying_ = has(mods, Qt::ControlModifier);
     cmd_targets_ = ctx->selection();
-    begin_live_transform(cmd_targets_);
+    // O modelo fica intacto durante o arrasto; o canvas mostra uma translacao temporaria.
     if (grab) ctx->status("Agarrado pelo " + grab->label + " — encoste na peça ao lado");
     return true;
 }
@@ -183,15 +184,11 @@ bool SelectTool::on_move(double wx, double wy, Qt::KeyboardModifiers mods) {
     if (mode_ == "move") {
         const double tol = ctx->canvas ? ctx->canvas->pick_tolerance() : 1.0;
         if (!moved_ && hypot(wx - start_.x, wy - start_.y) < 3 * tol) return true;
-        // Cada evento recoloca a peca no estado do clique e aplica o deslocamento inteiro de novo.
-        // Mover por incremento enquanto o encaixe raciocina sobre o total faria o ima contar duas
-        // vezes o que ja tinha andado.
-        restore_live_transform(false, true);
+        // O deslocamento e absoluto desde o clique. A geometria CAD so muda ao soltar o mouse.
         const auto [ddx, ddy] = move_delta(wx, wy, mods);
-        for (const cad::EntityPtr& e : cmd_targets_) e->translate(ddx, ddy);
+        if (ctx->canvas) ctx->canvas->preview_translation(cmd_targets_, ddx, ddy);
         last_ = {start_.x + ddx, start_.y + ddy};
         moved_ = true;
-        ctx->refresh();
         return true;
     }
     return false;
@@ -291,15 +288,20 @@ bool SelectTool::on_release(double wx, double wy, Qt::MouseButton button, Qt::Ke
         const bool moveu = moved_, copiar = copying_;
         const double tx = last_.x - start_.x, ty = last_.y - start_.y;
         const auto targets = cmd_targets_;
-        restore_live_transform(false);
         if (moveu && copiar) {
+            if (ctx->canvas) ctx->canvas->clear_translation_preview();
             std::vector<cad::EntityPtr> copias;
             for (const cad::EntityPtr& e : targets) copias.push_back(e->clone());
             for (const cad::EntityPtr& c : copias) c->translate(tx, ty);
             ctx->add(copias, "Arrastar cópia", true);
         } else if (moveu) {
-            ctx->transform(targets, [tx, ty](cad::Entity& e) { e.translate(tx, ty); }, "Mover");
-        } else ctx->refresh();
+            ctx->transform(targets, [tx, ty](cad::Entity& e) { e.translate(tx, ty); }, "Mover", false);
+            if (ctx->canvas) ctx->canvas->commit_translation_preview();
+            ctx->refresh();
+        } else {
+            if (ctx->canvas) ctx->canvas->clear_translation_preview();
+            ctx->refresh();
+        }
         mode_.clear();
         grab_.reset();
         copying_ = false;

@@ -60,4 +60,18 @@ struct MaterialSetup {
     static MaterialSetup from_json(const Json& j, const std::string& fallback_units = "mm");
 };
 
+// Chapas comerciais e padroes de mercado para cada material (medidas em mm).
+struct SheetPreset {
+    std::string name;             // Ex: "MDF", "PVC", "Acrílico", "ACM"
+    std::string label;            // Ex: "MDF (1850 × 2750 mm)"
+    double width = 1220.0;        // Largura (X), mm
+    double height = 2440.0;       // Comprimento (Y), mm
+    double default_thickness = 15.0; // Espessura típica, mm
+    double tool_diameter = 6.0;   // Diâmetro de fresa sugerido, mm
+    std::string note;
+};
+
+const std::vector<SheetPreset>& standard_sheet_presets();
+const SheetPreset* find_sheet_preset(const std::string& material_name);
+
 }  // namespace cnc::cad

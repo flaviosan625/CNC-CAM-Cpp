@@ -3,6 +3,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMetaObject>
 #include <QToolButton>
 
@@ -81,15 +82,15 @@ TEST_CASE("gerenciador de camadas preserva cor visibilidade e bloqueio") {
     layers[1].color = {0.2, 0.4, 0.8};
 
     cnc::ui::LayerManagerDialog dialog(layers, "Acabamento");
-    auto* combo = dialog.findChild<QComboBox*>("LayerManagerCombo");
-    auto* visible = dialog.findChild<QCheckBox*>("LayerManagerVisible");
+    auto* list = dialog.findChild<QListWidget*>("LayerManagerList");
     auto* locked = dialog.findChild<QCheckBox*>("LayerManagerLocked");
-    REQUIRE(combo != nullptr);
-    REQUIRE(visible != nullptr);
+    REQUIRE(list != nullptr);
     REQUIRE(locked != nullptr);
-    CHECK(combo->currentText().toStdString() == "Acabamento");
+    REQUIRE(list->count() == 2);
+    REQUIRE(list->currentItem() != nullptr);
+    CHECK(list->currentItem()->text().toStdString() == "Acabamento");
 
-    visible->setChecked(false);
+    list->currentItem()->setCheckState(Qt::Unchecked);
     locked->setChecked(true);
     const auto result = dialog.result_layers();
     REQUIRE(result.size() == 2);
