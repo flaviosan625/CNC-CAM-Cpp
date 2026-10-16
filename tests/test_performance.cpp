@@ -270,6 +270,12 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         canvas.set_tool(&select);
         canvas.fit_view();
         QApplication::processEvents();
+        size_t display_lod_elements = 0;
+        for (const auto& entity : document.entities) {
+            if (auto* item = item_for(canvas, entity)) display_lod_elements += item->display_lod_element_count();
+        }
+        CHECK(display_lod_elements > 0);
+        CHECK(display_lod_elements < points);
 
         const auto queries = cursor_queries(document);
         REQUIRE_FALSE(queries.empty());
@@ -524,6 +530,7 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
 
         cnc::Json report = {{"copies", copies}, {"entities", document.entities.size()},
                             {"polyline_points", points}, {"texts", texts},
+                            {"display_lod_elements", display_lod_elements},
                             {"iterations", iterations}, {"viewport", {1280, 800}},
                             {"snap_hits", snap_hits}, {"moving_snap_hits", moving_hits},
                             {"interactive_group_move_frame_ms", group_frame_ms},

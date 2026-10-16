@@ -165,3 +165,15 @@ TEST_CASE("viewport: texto desenhado com curvas mantem a caixa dos contornos CAM
     CHECK(std::fabs(actual.top() - expected.top()) < 0.1);
     CHECK(std::fabs(actual.bottom() - expected.bottom()) < 0.1);
 }
+
+TEST_CASE("viewport: LOD simplifica polilinha somente na pintura") {
+    auto contour = std::make_shared<cnc::cad::Polyline>();
+    for (int i = 0; i < 128; ++i)
+        contour->points.push_back({static_cast<double>(i), 50.0 + std::sin(i * 0.1)});
+
+    cnc::vp::EntityItem item(contour, 100.0);
+    REQUIRE(item.display_lod_element_count() > 0);
+    CHECK(item.display_lod_element_count() < contour->points.size());
+    CHECK(item.path().elementCount() == contour->points.size());
+    CHECK(item.hit_test_world(64.0, contour->points[64].y, 0.1));
+}

@@ -1,11 +1,13 @@
 // Porte de src/viewport/entity_items.py.
 #include "viewport/entity_items.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
 #include <QFont>
 #include <QFontMetricsF>
+#include <QPainter>
 #include <QPainterPathStroker>
 #include <QPen>
 #include <QPolygonF>
@@ -24,6 +26,84 @@ constexpr Rgb kDefaultLayerColor{0.1, 0.1, 0.1};
 bool dense_contour(const cad::Entity& entity) {
     const auto* polyline = cad::as<cad::Polyline>(entity);
     return cad::is_a<cad::Text>(entity) || (polyline && polyline->points.size() >= 64);
+}
+
+QPainterPath simplify_polyline_for_display(const cad::Polyline& polyline, double mh, double tolerance) {
+    std::vector<Pt> points = polyline.points;
+    if (polyline.is_closed && points.size() > 2 && points.front() != points.back())
+        points.push_back(points.front());
+    if (points.size() < 3) return {};
+
+    std::vector<bool> keep(points.size(), false);
+    keep.front() = true;
+    keep.back() = true;
+    std::vector<std::pair<size_t, size_t>> pending;
+    if (polyline.is_closed) {
+        size_t farthest = 1;
+        double farthest_distance = -1.0;
+        for (size_t i = 1; i + 1 < points.size(); ++i) {
+            const double dx = points[i].x - points.front().x;
+            const double dy = points[i].y - points.front().y;
+            const double distance = dx * dx + dy * dy;
+            if (distance > farthest_distance) {
+                farthest_distance = distance;
+                farthest = i;
+            }
+        }
+        keep[farthest] = true;
+        pending.emplace_back(0, farthest);
+        pending.emplace_back(farthest, points.size() - 1);
+    } else {
+        pending.emplace_back(0, points.size() - 1);
+    }
+
+    const double tolerance_squared = tolerance * tolerance;
+    while (!pending.empty()) {
+        const auto [first, last] = pending.back();
+        pending.pop_back();
+        if (last <= first + 1) continue;
+        const Pt a = points[first], b = points[last];
+        const double dx = b.x - a.x, dy = b.y - a.y;
+        const double length_squared = dx * dx + dy * dy;
+        double max_distance_squared = tolerance_squared;
+        size_t split = last;
+        for (size_t i = first + 1; i < last; ++i) {
+            double t = 0.0;
+            if (length_squared > 1e-18)
+                t = std::clamp(((points[i].x - a.x) * dx + (points[i].y - a.y) * dy) / length_squared, 0.0, 1.0);
+            const double nearest_x = a.x + t * dx, nearest_y = a.y + t * dy;
+            const double offset_x = points[i].x - nearest_x, offset_y = points[i].y - nearest_y;
+            const double distance_squared = offset_x * offset_x + offset_y * offset_y;
+            if (distance_squared > max_distance_squared) {
+                max_distance_squared = distance_squared;
+                split = i;
+            }
+        }
+        if (split != last) {
+            keep[split] = true;
+            pending.emplace_back(first, split);
+            pending.emplace_back(split, last);
+        }
+    }
+
+    size_t retained = 0;
+    for (const bool selected : keep) retained += selected ? 1 : 0;
+    if (retained * 5 >= points.size() * 4) return {};
+
+    QPainterPath path;
+    bool first = true;
+    for (size_t i = 0; i < points.size(); ++i) {
+        if (!keep[i] || (polyline.is_closed && i + 1 == points.size())) continue;
+        const QPointF point(points[i].x, mh - points[i].y);
+        if (first) {
+            path.moveTo(point);
+            first = false;
+        } else {
+            path.lineTo(point);
+        }
+    }
+    if (polyline.is_closed) path.closeSubpath();
+    return path;
 }
 
 void poly_to_path(QPainterPath& p, const Points& pts, double mh, bool close) {
@@ -277,6 +357,14 @@ void EntityItem::refresh() {
             if (extension_item_) extension_item_->setPath(extension_path);
         } else {
             setPath(build_path(*entity_, mh_));
+            if (const auto* polyline = cad::as<cad::Polyline>(*entity_); polyline && polyline->points.size() >= 64) {
+                // At up to 1.5 screen pixels per unit, this stays below 0.375 px.
+                // The full path above remains the source for bounds, hit tests and CAM.
+                constexpr double kDisplayErrorMm = 0.25;
+                display_lod_path_ = simplify_polyline_for_display(*polyline, mh_, kDisplayErrorMm / unit_factor_);
+            } else {
+                display_lod_path_ = {};
+            }
         }
         if (dimension_label_) {
             const auto* e = cad::as<cad::Dimension>(entity_);
@@ -303,6 +391,17 @@ void EntityItem::refresh() {
         style_dirty_ = false;
         cached_selected_ = visual_selected;
     }
+}
+
+void EntityItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+    if (display_lod_path_.isEmpty() ||
+        QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform()) > 1.5) {
+        QGraphicsPathItem::paint(painter, option, widget);
+        return;
+    }
+    painter->setPen(pen());
+    painter->setBrush(brush());
+    painter->drawPath(display_lod_path_);
 }
 
 void EntityItem::adopt_preview_translation() {

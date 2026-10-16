@@ -12,6 +12,7 @@
 #include <QGraphicsPathItem>
 #include <QGraphicsSimpleTextItem>
 #include <QPainterPath>
+#include <QStyleOptionGraphicsItem>
 
 #include "cad/entities.hpp"
 
@@ -47,9 +48,12 @@ public:
     void refresh();
     void adopt_preview_translation();
     void apply_style();
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
+    size_t display_lod_element_count() const { return static_cast<size_t>(display_lod_path_.elementCount()); }
 
 private:
     QColor layer_qcolor() const;
+    QPainterPath display_lod_path_;
 
     cad::EntityPtr entity_;
     double mh_;
