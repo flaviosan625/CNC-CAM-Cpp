@@ -193,6 +193,7 @@ TEST_CASE("pontes: botao marcar no desenho ativa modo interativo na tela 2D com 
 
     bool banner_seen = false;
     bool mode_activated = false;
+    bool dialog_stayed_visible = false;
     const QString capture_dir = QString::fromUtf8(qgetenv("CNC_GUIDE_CAPTURE_DIR"));
 
     QTimer::singleShot(20, [&] {
@@ -220,6 +221,37 @@ TEST_CASE("pontes: botao marcar no desenho ativa modo interativo na tela 2D com 
                 }
             }
         }
+        QApplication::processEvents();
+
+        auto* banner = window.findChild<QWidget*>("BridgeModeBanner");
+        auto* view_tabs = window.findChild<QTabBar*>("ViewTabs");
+        auto* canvas = window.findChild<cnc::vp::Canvas2D*>();
+
+        REQUIRE(banner != nullptr);
+        REQUIRE(view_tabs != nullptr);
+        REQUIRE(canvas != nullptr);
+
+        // A aba/diálogo NÃO se fecha ao clicar em marcar no desenho!
+        dialog_stayed_visible = dialog->isVisible();
+        CHECK(dialog_stayed_visible == true);
+        CHECK(view_tabs->currentIndex() == 0); // Vista 2D continua ativa
+        CHECK(canvas->manual_tab_mode == true);
+        CHECK(banner->isVisible());
+        banner_seen = banner->isVisible();
+        mode_activated = canvas->manual_tab_mode;
+
+        if (!capture_dir.isEmpty()) {
+            QApplication::processEvents();
+            window.grab().save(capture_dir + "/modo_marcar_pontes_ativo.png");
+        }
+
+        // Clicar em Calcular diretamente conclui o modo de pontes e calcula o percurso aberto
+        for (auto* btn : dialog->findChildren<QPushButton*>()) {
+            if (btn->text() == "Calcular") {
+                btn->click();
+                break;
+            }
+        }
     });
 
     for (auto* action : window.findChildren<QAction*>()) {
@@ -230,36 +262,14 @@ TEST_CASE("pontes: botao marcar no desenho ativa modo interativo na tela 2D com 
     }
     QApplication::processEvents();
 
-    auto* banner = window.findChild<QWidget*>("BridgeModeBanner");
-    auto* view_tabs = window.findChild<QTabBar*>("ViewTabs");
     auto* canvas = window.findChild<cnc::vp::Canvas2D*>();
-
-    REQUIRE(banner != nullptr);
-    REQUIRE(view_tabs != nullptr);
+    auto* banner = window.findChild<QWidget*>("BridgeModeBanner");
     REQUIRE(canvas != nullptr);
-
-    CHECK(view_tabs->currentIndex() == 0); // Vista 2D continua ativa (não mudou para OS)
-    CHECK(canvas->manual_tab_mode == true);
-    CHECK(banner->isVisible());
-    banner_seen = banner->isVisible();
-    mode_activated = canvas->manual_tab_mode;
-
-    if (!capture_dir.isEmpty()) {
-        QApplication::processEvents();
-        window.grab().save(capture_dir + "/modo_marcar_pontes_ativo.png");
-    }
-
-    // Clicar no botão 'Concluir pontes' encerra o modo e oculta a faixa
-    for (auto* btn : banner->findChildren<QPushButton*>()) {
-        if (btn->text().contains("Concluir")) {
-            btn->click();
-            break;
-        }
-    }
-    QApplication::processEvents();
+    REQUIRE(banner != nullptr);
 
     CHECK(canvas->manual_tab_mode == false);
     CHECK(!banner->isVisible());
     CHECK(banner_seen);
     CHECK(mode_activated);
+    CHECK(dialog_stayed_visible);
 }

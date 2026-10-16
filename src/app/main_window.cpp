@@ -1184,6 +1184,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (watched && watched == active_toolpath_dialog_.data() && event && event->type() == QEvent::KeyPress) {
+        auto* key = static_cast<QKeyEvent*>(event);
+        if (key->key() == Qt::Key_Escape && canvas_widget_ && canvas_widget_->canvas &&
+            canvas_widget_->canvas->manual_tab_mode) {
+            stop_manual_bridge_mode();
+            key->accept();
+            return true;
+        }
+    }
     const bool hidden_bridge_dialog = !active_toolpath_dialog_.isNull() &&
         QApplication::activeModalWidget() == active_toolpath_dialog_.data() &&
         !active_toolpath_dialog_->isVisible();
@@ -2587,6 +2596,7 @@ void MainWindow::delete_bridge_marker(int index) {
     if (preparing) {
         if (active_toolpath_dialog_.isNull()) document_.modified = true;
         refresh_bridge_markers();
+        if (sync_toolpath_bridge_draft_) sync_toolpath_bridge_draft_();
         statusBar()->showMessage(active_toolpath_dialog_.isNull()
                                      ? "Ponte manual removida da preparacao do percurso."
                                      : "Ponte removida do perfil em edicao. Clique em Calcular para salvar.",
@@ -2687,6 +2697,7 @@ void MainWindow::add_manual_bridge(double x, double y) {
     if (preparing) {
         if (active_toolpath_dialog_.isNull()) document_.modified = true;
         refresh_bridge_markers();
+        if (sync_toolpath_bridge_draft_) sync_toolpath_bridge_draft_();
         statusBar()->showMessage(
             QString(active_toolpath_dialog_.isNull()
                         ? "Ponte pre-marcada reposicionada para X %1, Y %2 mm."
@@ -2763,6 +2774,7 @@ void MainWindow::move_bridge_marker(int index, double x, double y) {
     if (preparing) {
         if (active_toolpath_dialog_.isNull()) document_.modified = true;
         refresh_bridge_markers();
+        if (sync_toolpath_bridge_draft_) sync_toolpath_bridge_draft_();
         statusBar()->showMessage(
             QString(active_toolpath_dialog_.isNull()
                         ? "Ponte pre-marcada reposicionada para X %1, Y %2 mm."
@@ -3572,6 +3584,8 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     const std::string previous_bridge_target = bridge_target_job_id_;
     bool manual_bridge_mode_used = false;
     ui::ResponsiveDialog dialog(this);
+    active_toolpath_dialog_ = &dialog;
+    dialog.installEventFilter(this);
     dialog.setWindowTitle(
         QString("Percurso de %1").arg(QString::fromUtf8(cam::toolpath_label(job.kind))));
     const QSize screen_size = screen() ? screen()->availableGeometry().size() : QSize(1280, 800);
@@ -4541,9 +4555,10 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                 if (bridge_mode_banner_) bridge_mode_banner_->setVisible(true);
                 refresh_bridge_markers();
                 statusBar()->showMessage(
-                    "Marque as pontes no desenho. Pressione Esc ou Concluir para voltar ao perfil e clicar em Calcular.",
+                    "Modo de pontes ativo: clique no contorno para marcar ou remover pontes. Ao finalizar, basta clicar em Calcular no painel ao lado.",
                     6000);
-                dialog.hide();
+                dialog.show();
+                dialog.raise();
             });
 
             form = add_profile_tab("Entradas", "Entradas e saídas", "Entradas e saídas", "04_entradas_saidas");
@@ -4889,6 +4904,12 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
     job.error.clear();
     destination = job;
     if (manual_bridge_mode_used) {
+        if (canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
+            canvas_widget_->canvas->manual_tab_mode = false;
+            canvas_widget_->canvas->setCursor(Qt::ArrowCursor);
+        }
+        if (bridge_mode_banner_) bridge_mode_banner_->setVisible(false);
+        refresh_bridge_markers();
         bridge_preparation_job_ = previous_bridge_preparation;
         bridge_target_job_id_ = previous_bridge_target;
     }
