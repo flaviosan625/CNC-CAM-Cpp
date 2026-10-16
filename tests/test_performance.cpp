@@ -244,6 +244,12 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         REQUIRE(original_bounds.has_value());
         measure(measurements, "duplicate", copies, [&] { duplicate_drawing(document, copies); });
         REQUIRE(document.entities.size() == originals * copies);
+        const QString export_path = qEnvironmentVariable("CNC_PERF_EXPORT_PATH");
+        if (!export_path.isEmpty()) {
+            document.save(std::filesystem::path(export_path.toStdWString()));
+            std::cout << "CNC_PERF_EXPORTED {\"path\":\"" << export_path.toStdString()
+                      << "\",\"entities\":" << document.entities.size() << "}\n" << std::flush;
+        }
 
         size_t points = 0, texts = 0;
         for (const auto& entity : document.entities) {
@@ -383,6 +389,13 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
         // Mede o percurso otimizado de pre-visualizacao e confirma que soltar continua desfazivel.
         for (size_t i = 0; i < originals; ++i) document.set_selected(document.entities[i], true);
         canvas.refresh_entities();
+        measure(measurements, "render_selected_group", 3, [&] {
+            for (int frame = 0; frame < 3; ++frame) {
+                image.fill(Qt::transparent);
+                QPainter painter(&image);
+                canvas.viewport()->render(&painter);
+            }
+        });
         const auto before_group_drag = document.to_json().at("entities");
         measure(measurements, "interactive_group_move_8_frames", 8, [&] {
             QTest::mousePress(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, start, 0);
@@ -396,6 +409,14 @@ TEST_CASE("performance: projeto real com muitas pecas no mesmo documento") {
             QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         });
         REQUIRE_MESSAGE(undo.can_undo(), "arrasto em grupo deve criar um comando reversivel");
+        const auto* original_polyline = cnc::cad::as<cnc::cad::Polyline>(*moving_before);
+        REQUIRE(original_polyline != nullptr);
+        const auto* moved_polyline = cnc::cad::as<cnc::cad::Polyline>(*moving);
+        REQUIRE(moved_polyline != nullptr);
+        auto* moved_item = item_for(canvas, moving);
+        REQUIRE(moved_item != nullptr);
+        CHECK(moved_item->pos().x() == doctest::Approx(moved_polyline->points.front().x - original_polyline->points.front().x));
+        CHECK(moved_item->pos().y() == doctest::Approx(-(moved_polyline->points.front().y - original_polyline->points.front().y)));
         undo.undo();
         canvas.refresh_entities();
         document.clear_selection();

@@ -300,7 +300,7 @@ QColor EntityItem::layer_qcolor() const {
 void EntityItem::apply_style() {
     const cad::Entity& e = *entity_;
     const auto* dim = cad::as<cad::Dimension>(e);
-    const bool fast_outline = !e.selected && dense_contour(e);
+    const bool fast_outline = dense_contour(e);
     QColor col;
     double width;
     if (e.selected) {
