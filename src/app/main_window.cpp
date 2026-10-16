@@ -16,6 +16,7 @@
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCompleter>
 #include <QColor>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -860,6 +861,33 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
     });
     view_3d_controls->setVisible(false);
     view_header_layout->addWidget(view_3d_controls);
+
+    bridge_mode_banner_ = new QWidget(view_header);
+    bridge_mode_banner_->setObjectName("BridgeModeBanner");
+    auto* banner_layout = new QHBoxLayout(bridge_mode_banner_);
+    banner_layout->setContentsMargins(10, 2, 8, 2);
+    banner_layout->setSpacing(8);
+    auto* banner_icon = new QLabel(bridge_mode_banner_);
+    banner_icon->setPixmap(ui::get_icon("tp_edit").pixmap(18, 18));
+    banner_layout->addWidget(banner_icon);
+    auto* banner_text = new QLabel(
+        "Modo de pontes ativo — Clique nos contornos para adicionar ou remover · Arraste para mover",
+        bridge_mode_banner_);
+    banner_text->setStyleSheet("font-weight: bold; color: #7ec7ff; font-size: 12px;");
+    banner_layout->addWidget(banner_text, 1);
+    auto* finish_button = new QPushButton("Concluir pontes (Esc)", bridge_mode_banner_);
+    finish_button->setCursor(Qt::PointingHandCursor);
+    finish_button->setStyleSheet(
+        "QPushButton { background-color: #1976d2; color: #ffffff; font-weight: bold; padding: 4px 12px; "
+        "border-radius: 4px; border: 1px solid #42a5f5; font-size: 11px; } "
+        "QPushButton:hover { background-color: #1e88e5; border-color: #64b5f6; }");
+    banner_layout->addWidget(finish_button);
+    connect(finish_button, &QPushButton::clicked, this, &MainWindow::stop_manual_bridge_mode);
+    bridge_mode_banner_->setVisible(false);
+    bridge_mode_banner_->setStyleSheet(
+        "QWidget#BridgeModeBanner { background-color: #0e2238; border: 1px solid #1976d2; border-radius: 5px; margin: 1px 4px; }");
+    view_header_layout->addWidget(bridge_mode_banner_);
+
     layout->addWidget(view_header);
 
     canvas_widget_ = new vp::Canvas2DWidget(document_.material.width, document_.material.height,
@@ -912,6 +940,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
                                                .arg(y, 0, 'f', 2));
             });
     connect(view_tabs_, &QTabBar::currentChanged, this, [this](int index) {
+        if (index != 0 && canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
+            stop_manual_bridge_mode();
+        }
         if (view_stack_) view_stack_->setCurrentIndex(index);
         if (view_3d_controls_) view_3d_controls_->setVisible(index == 1);
         if (index == 1 && viewport_3d_) {
@@ -1065,7 +1096,7 @@ void MainWindow::create_order_service_page() {
     origin_hint->setObjectName("MutedText");
     origin_hint->setWordWrap(true);
     origin_layout->addWidget(origin_hint);
-    auto* edit_origin = new QPushButton("Revisar origem e segurança…", origin_page);
+    auto* edit_origin = new QPushButton("Mudar Ponto 0 e segurança…", origin_page);
     origin_layout->addWidget(edit_origin);
     connect(edit_origin, &QPushButton::clicked, this, &MainWindow::edit_material_setup);
     origin_layout->addStretch();
@@ -1156,9 +1187,16 @@ void MainWindow::create_order_service_page() {
     auto* preview_layout = new QVBoxLayout(preview_panel);
     preview_layout->setContentsMargins(10, 9, 10, 9);
     preview_layout->setSpacing(7);
+    auto* preview_heading = new QHBoxLayout();
+    preview_heading->setContentsMargins(0, 0, 0, 0);
     auto* preview_title = new QLabel("DESENHO 3D · PERCURSO REAL", preview_panel);
     preview_title->setObjectName("SectionHeader");
-    preview_layout->addWidget(preview_title);
+    preview_heading->addWidget(preview_title, 1);
+    auto* change_origin = new QPushButton("Alterar Ponto 0", preview_panel);
+    change_origin->setToolTip("Editar a origem XY/Z. A prévia da OS acompanha a origem configurada no desenho 2D.");
+    connect(change_origin, &QPushButton::clicked, this, &MainWindow::edit_material_setup);
+    preview_heading->addWidget(change_origin);
+    preview_layout->addLayout(preview_heading);
     auto* image_frame = new QFrame(preview_panel);
     image_frame->setStyleSheet("background: #0b1521; border: 1px solid #344a62; border-radius: 6px;");
     auto* image_layout = new QVBoxLayout(image_frame);
@@ -2287,6 +2325,7 @@ void MainWindow::stop_manual_bridge_mode() {
     canvas_widget_->canvas->manual_tab_mode = false;
     canvas_widget_->canvas->setCursor(Qt::ArrowCursor);
     bridge_target_job_id_.clear();
+    if (bridge_mode_banner_) bridge_mode_banner_->setVisible(false);
     refresh_bridge_markers();
     statusBar()->showMessage("Marcacao manual de pontes encerrada.", 3500);
 }
@@ -2375,10 +2414,16 @@ void MainWindow::refresh_3d_view() {
 }
 
 void MainWindow::edit_tool_database() {
+    (void)edit_tool_database("", nullptr);
+}
+
+bool MainWindow::edit_tool_database(const std::string& preselected_tool_name, cam::Tool* out_tool) {
     cam::ToolDatabase database = cam::ToolDatabase::load();
 
     ui::ResponsiveDialog dialog(this);
-    dialog.setWindowTitle("Banco de ferramentas");
+    dialog.setWindowTitle(preselected_tool_name.empty()
+        ? "Banco de ferramentas"
+        : QString("Banco de ferramentas — %1").arg(QString::fromStdString(preselected_tool_name)));
     dialog.setMinimumSize(900, 600);
     dialog.resize(1080, 700);
 
@@ -2577,6 +2622,26 @@ void MainWindow::edit_tool_database() {
     root->addWidget(footer);
 
     int current_row = -1;
+    if (!preselected_tool_name.empty()) {
+        for (size_t i = 0; i < database.tools.size(); ++i) {
+            if (database.tools[i]->name == preselected_tool_name) {
+                current_row = static_cast<int>(i);
+                break;
+            }
+        }
+        if (current_row < 0) {
+            const QString search = QString::fromStdString(preselected_tool_name).trimmed().toLower();
+            for (size_t i = 0; i < database.tools.size(); ++i) {
+                if (QString::fromStdString(database.tools[i]->name).trimmed().toLower() == search) {
+                    current_row = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+    }
+    if (current_row < 0 && !database.tools.empty()) {
+        current_row = 0;
+    }
     bool loading = false;
     std::vector<std::pair<QWidget*, QWidget*>> geometry_rows;
     for (const auto& row : special_geometry_rows) geometry_rows.push_back({row.field, row.label});
@@ -2681,6 +2746,7 @@ void MainWindow::edit_tool_database() {
                     auto* item = group->child(i);
                     if (item->data(0, Qt::UserRole).toInt() == current_row) {
                         tree->setCurrentItem(item);
+                        tree->scrollToItem(item);
                         return;
                     }
                 }
@@ -2689,7 +2755,9 @@ void MainWindow::edit_tool_database() {
     };
 
     refresh_tree();
-    if (!database.tools.empty()) load_editor(0);
+    if (current_row >= 0 && current_row < static_cast<int>(database.tools.size())) {
+        load_editor(current_row);
+    }
 
     connect(tree, &QTreeWidget::currentItemChanged, &dialog,
             [&](QTreeWidgetItem* item, QTreeWidgetItem*) {
@@ -2795,9 +2863,11 @@ void MainWindow::edit_tool_database() {
     connect(dialog_buttons, &QDialogButtonBox::accepted, &dialog, [&] {
         if (save_database()) dialog.accept();
     });
-    connect(dialog_buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    dialog.exec();
+    const bool accepted = (dialog.exec() == QDialog::Accepted);
+    if (accepted && out_tool && current_row >= 0 && current_row < static_cast<int>(database.tools.size())) {
+        *out_tool = *database.tools[static_cast<size_t>(current_row)];
+    }
+    return accepted;
 }
 
 void MainWindow::edit_material_setup() {
@@ -3000,13 +3070,13 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         {"Pontes 3D com subida em rampa", "tabs3d"}, {"Tipo de entrada", "lead"},
         {"Comprimento", "leadLength"}, {"Raio do arco", "leadRadius"}, {"Ângulo", "leadAngle"},
         {"Criar saída", "leadOut"}, {"Tipo de rampa", "ramp"}, {"Rampa", "ramp"},
-        {"Distância", "rampDistance"}, {"Distância da rampa", "rampDistance"},
+        {"Distância", "rampDistance"}, {"Distância da rampa", "rampDistance"}, {"Distância da rampa (L)", "rampDistance"},
         {"Preenchimento", "fill"}, {"Ângulo do raster", "rasterAngle"}, {"Passo lateral", "stepover"},
         {"Sobremetal", "allowance"}
     };
     const auto bind_guide_field = [guide_model, guide_keys, &dialog](const QString& label, QWidget* field) {
         QString key = guide_keys.value(label);
-        if (label == "Ângulo" && field->parentWidget()) {
+        if ((label == "Ângulo" || label == "Ângulo da rampa") && field->parentWidget()) {
             const QGroupBox* section = nullptr;
             for (QWidget* p = field->parentWidget(); p; p = p->parentWidget()) {
                 if (auto* gb = qobject_cast<QGroupBox*>(p)) {
@@ -3160,8 +3230,8 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             for (const auto& [label, key] : guides) choice->addItem(label, key);
             auto* image = new InteractiveGuideWidget(guides.front().second, card, guide_model);
             image->setPlaying(true);
-            image->setMinimumHeight(160);
-            image->setMaximumHeight(260);
+            image->setMinimumHeight(75);
+            image->setMaximumHeight(115);
             interactive_guides.push_back(image);
             if (guides.size() > 1) guide_layout->addWidget(choice);
             else choice->hide();
@@ -3183,11 +3253,6 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
 
         return form;
     };
-
-    auto* identity = add_group("Percurso");
-    auto* name = new QLineEdit(QString::fromStdString(job.name), body);
-    identity->addRow("Nome", name);
-    apply.push_back([&job, name] { job.name = name->text().toStdString(); });
 
     auto* tool_form = add_group("Ferramenta", {{"Geometria da fresa", "09_ferramentas"}});
     auto* selected_tool_name = new QLabel(QString::fromStdString(job.tool.name), body);
@@ -3276,13 +3341,18 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         auto refresh_tool_list = [&] {
             QSignalBlocker blocker(tool_list);
             tool_list->clear();
-            for (const auto& tool : database.tools) {
+            int selected_row = 0;
+            for (size_t i = 0; i < database.tools.size(); ++i) {
+                const auto& tool = database.tools[i];
                 auto* item = new QListWidgetItem(QString::fromStdString(tool->name), tool_list);
                 item->setIcon(ui::get_icon(tool->tool_type == cam::ToolType::Drill
                                                ? "tp_drill" : "tp_tools"));
                 item->setToolTip(QString::fromStdString(tool->describe()));
+                if (tool->name == job.tool.name) {
+                    selected_row = static_cast<int>(i);
+                }
             }
-            if (!database.tools.empty()) tool_list->setCurrentRow(0);
+            if (!database.tools.empty()) tool_list->setCurrentRow(selected_row);
         };
         auto update_tool_info = [&] {
             const int row = tool_list->currentRow();
@@ -3306,6 +3376,8 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         update_tool_info();
         connect(tool_list, &QListWidget::currentRowChanged, &chooser,
                 [&](int) { update_tool_info(); });
+        connect(tool_list, &QListWidget::itemDoubleClicked, &chooser,
+                [&](QListWidgetItem*) { if (tool_list->currentRow() >= 0) chooser.accept(); });
 
         auto* chooser_buttons = new QHBoxLayout();
         auto* edit_database_button = new QPushButton("Editar banco...", &chooser);
@@ -3318,7 +3390,10 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         chooser_layout->addLayout(chooser_buttons);
 
         connect(edit_database_button, &QPushButton::clicked, &chooser, [&] {
-            edit_tool_database();
+            const int cur = tool_list->currentRow();
+            const std::string cur_name = (cur >= 0 && cur < static_cast<int>(database.tools.size()))
+                ? database.tools[static_cast<size_t>(cur)]->name : job.tool.name;
+            edit_tool_database(cur_name);
             database = cam::ToolDatabase::load();
             refresh_tool_list();
             update_tool_info();
@@ -3351,18 +3426,29 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         selected_tool_name->setText(QString::fromStdString(job.tool.name));
     };
 #endif
+    auto sync_tool_to_dialog = [&] {
+        selected_tool_name->setText(QString::fromStdString(job.tool.name));
+        selected_tool_name->setToolTip(QString::fromStdString(job.tool.describe()));
+        edit_tools_button->setToolTip(
+            QString("Editar parâmetros da fresa selecionada (%1)").arg(QString::fromStdString(job.tool.name)));
+        guide_model->setValue("diameter", job.tool.diameter);
+        guide_model->setValue("pass", job.tool.pass_depth);
+        guide_model->setValue("toolStepover", job.tool.stepover);
+        guide_model->setValue("toolType", static_cast<int>(job.tool.tool_type));
+        if (refresh_pass_summary) refresh_pass_summary();
+    };
+    sync_tool_to_dialog();
+
     connect(select_tool_button, &QPushButton::clicked, &dialog, [&] {
         if (choose_tool_from_database()) {
-            selected_tool_name->setText(QString::fromStdString(job.tool.name));
-            guide_model->setValue("diameter", job.tool.diameter);
-            guide_model->setValue("pass", job.tool.pass_depth);
-            guide_model->setValue("toolStepover", job.tool.stepover);
-            guide_model->setValue("toolType", static_cast<int>(job.tool.tool_type));
-            if (refresh_pass_summary) refresh_pass_summary();
+            sync_tool_to_dialog();
         }
     });
-    connect(edit_tools_button, &QPushButton::clicked, &dialog,
-            [this] { edit_tool_database(); });
+    connect(edit_tools_button, &QPushButton::clicked, &dialog, [&] {
+        if (edit_tool_database(job.tool.name, &job.tool)) {
+            sync_tool_to_dialog();
+        }
+    });
 
     const std::vector<std::pair<QString, int>> directions = {
         {"Convencional", static_cast<int>(cam::CutDirection::Conventional)},
@@ -3386,10 +3472,15 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
         auto* box = new QGroupBox("Passagens", body);
         auto* layout = new QHBoxLayout(box);
         layout->setContentsMargins(12, 8, 12, 8);
+        layout->setSpacing(8);
         auto* label = new QLabel(box);
         label->setObjectName("PropHint");
         label->setWordWrap(true);
         layout->addWidget(label, 1);
+        auto* edit_passes_button = new QPushButton("Editar passagens...", box);
+        edit_passes_button->setIcon(ui::get_icon("tp_edit"));
+        edit_passes_button->setToolTip("Alterar o número de passagens ou o passo Z para este percurso");
+        layout->addWidget(edit_passes_button);
         body_layout->addWidget(box);
         auto refresh = [depth, label, &job, exact_step] {
             const auto passes = cam::compute_passes(
@@ -3407,6 +3498,67 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                 [refresh](double) { refresh(); });
         if (exact_step)
             connect(exact_step, &QCheckBox::toggled, &dialog, [refresh](bool) { refresh(); });
+
+        connect(edit_passes_button, &QPushButton::clicked, &dialog, [depth, &job, exact_step, refresh, guide_model, &dialog] {
+            ui::ResponsiveDialog pass_dlg(&dialog);
+            pass_dlg.setWindowTitle("Editar passagens do percurso");
+            pass_dlg.setMinimumWidth(320);
+            auto* pass_layout = new QVBoxLayout(&pass_dlg);
+            pass_layout->setContentsMargins(14, 14, 14, 14);
+            pass_layout->setSpacing(10);
+
+            auto* pass_form = new QFormLayout();
+            pass_form->setSpacing(8);
+
+            auto* total_depth_lbl = new QLabel(QString("%1 mm").arg(depth->value(), 0, 'f', 3), &pass_dlg);
+            total_depth_lbl->setStyleSheet("font-weight: bold; color: #d9ecff;");
+            pass_form->addRow("Profundidade total (C):", total_depth_lbl);
+
+            auto* step_input = new ui::SafeDoubleSpinBox(&pass_dlg);
+            step_input->setRange(0.001, 1000.0);
+            step_input->setDecimals(3);
+            step_input->setSuffix(" mm");
+            step_input->setValue(job.tool.pass_depth);
+            pass_form->addRow("Passo Z por nível:", step_input);
+
+            const auto current_passes = cam::compute_passes(
+                depth->value(), job.tool.pass_depth, exact_step && exact_step->isChecked());
+            auto* count_input = new ui::SafeSpinBox(&pass_dlg);
+            count_input->setRange(1, 200);
+            count_input->setValue(std::max(1, static_cast<int>(current_passes.size())));
+            pass_form->addRow("Número de passadas:", count_input);
+
+            pass_layout->addLayout(pass_form);
+
+            auto updating = std::make_shared<bool>(false);
+            connect(count_input, qOverload<int>(&QSpinBox::valueChanged), &pass_dlg, [count_input, step_input, depth, updating](int count) {
+                if (*updating || count <= 0) return;
+                *updating = true;
+                step_input->setValue(depth->value() / static_cast<double>(count));
+                *updating = false;
+            });
+            connect(step_input, qOverload<double>(&QDoubleSpinBox::valueChanged), &pass_dlg, [count_input, step_input, depth, exact_step, updating](double step) {
+                if (*updating || step <= 0.0) return;
+                *updating = true;
+                const auto passes = cam::compute_passes(depth->value(), step, exact_step && exact_step->isChecked());
+                if (!passes.empty()) count_input->setValue(static_cast<int>(passes.size()));
+                *updating = false;
+            });
+
+            auto* pass_btn_box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &pass_dlg);
+            pass_btn_box->button(QDialogButtonBox::Ok)->setText("Aplicar");
+            pass_btn_box->button(QDialogButtonBox::Cancel)->setText("Cancelar");
+            pass_layout->addWidget(pass_btn_box);
+            connect(pass_btn_box, &QDialogButtonBox::accepted, &pass_dlg, &QDialog::accept);
+            connect(pass_btn_box, &QDialogButtonBox::rejected, &pass_dlg, &QDialog::reject);
+
+            if (pass_dlg.exec() == QDialog::Accepted) {
+                job.tool.pass_depth = step_input->value();
+                guide_model->setValue("pass", job.tool.pass_depth);
+                refresh();
+            }
+        });
+
         refresh_pass_summary = refresh;
         refresh();
     };
@@ -3531,40 +3683,24 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                 return page_form;
             };
             form = add_profile_tab("Pontes", "Pontes", "Pontes de fixação", "03_pontes");
-            // Keep the manual bridge controls at the top of the tab. The
-            // parameter list can grow beyond the visible part of the dialog.
-            auto* bridge_actions = new QWidget(body);
-            bridge_actions->setObjectName("ProfileBridgeActions");
-            auto* bridge_actions_layout = new QGridLayout(bridge_actions);
-            bridge_actions_layout->setContentsMargins(0, 0, 0, 0);
-            bridge_actions_layout->setSpacing(6);
-            auto* mark_bridges = new QPushButton("Marcar no desenho", bridge_actions);
-            mark_bridges->setProperty("primary", true);
-            mark_bridges->setToolTip("Adicionar pontes diretamente no desenho");
-            auto* undo_manual_bridge = new QPushButton("Desfazer última", bridge_actions);
-            auto* clear_manual_bridges = new QPushButton("Limpar manuais", bridge_actions);
-            auto* restore_auto_bridges = new QPushButton("Redistribuir", bridge_actions);
-            bridge_actions_layout->addWidget(mark_bridges, 0, 0);
-            bridge_actions_layout->addWidget(undo_manual_bridge, 0, 1);
-            bridge_actions_layout->addWidget(clear_manual_bridges, 1, 0);
-            bridge_actions_layout->addWidget(restore_auto_bridges, 1, 1);
-            form->addRow(bridge_actions);
-            auto* bridge_enabled = add_bool(form, "Pontes de fixação", settings.tabs,
+            auto* bridge_enabled = add_bool(form, "Ativar pontes de fixação da peça", settings.tabs,
                                             [&settings](bool v) { settings.tabs = v; });
             auto* bridge_length = add_double(form, "Comprimento da ponte", settings.tab_length, 0, 1000, " mm",
                                              [&settings](double v) { settings.tab_length = v; });
             auto* bridge_thickness = add_double(form, "Espessura da ponte", settings.tab_thickness, 0, 1000, " mm",
                                                 [&settings](double v) { settings.tab_thickness = v; });
-            auto* bridge_count = add_int(form, "Quantidade de pontes", settings.tab_count, 1, 200,
-                                         [&settings](int v) { settings.tab_count = v; });
-            auto* bridge_spacing = add_double(form, "Espacamento entre pontes", settings.tab_spacing,
-                                              0.5, 5000, " mm",
-                                              [&settings](double v) { settings.tab_spacing = v; });
+            auto* bridges_3d = add_bool(form, "Pontes 3D com subida em rampa", settings.tabs_3d,
+                                        [&settings](bool v) { settings.tabs_3d = v; });
             auto* bridge_distribution = new ui::SafeComboBox(body);
             bridge_distribution->addItem("Quantidade fixa por contorno", 0);
             bridge_distribution->addItem("Uma ponte a cada espacamento", 1);
             bridge_distribution->setCurrentIndex(settings.tab_spacing > 0.0 ? 1 : 0);
             form->addRow("Distribuicao", bridge_distribution);
+            auto* bridge_count = add_int(form, "Quantidade de pontes", settings.tab_count, 1, 200,
+                                         [&settings](int v) { settings.tab_count = v; });
+            auto* bridge_spacing = add_double(form, "Espacamento entre pontes", settings.tab_spacing,
+                                              0.5, 5000, " mm",
+                                              [&settings](double v) { settings.tab_spacing = v; });
             apply.push_back([&settings, bridge_distribution, bridge_spacing] {
                 settings.tab_spacing = bridge_distribution->currentData().toInt() == 0
                                            ? 0.0
@@ -3577,11 +3713,76 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
             auto* first_bridge_at_start = add_bool(
                 form, "Primeira ponte no inicio do vetor", settings.tab_first_at_start,
                 [&settings](bool v) { settings.tab_first_at_start = v; });
-            auto* bridges_3d = add_bool(form, "Pontes 3D com subida em rampa", settings.tabs_3d,
-                                        [&settings](bool v) { settings.tabs_3d = v; });
             auto* manual_only = add_bool(form, "Usar somente pontes posicionadas manualmente",
                                          settings.tab_manual_only,
                                          [&settings](bool v) { settings.tab_manual_only = v; });
+
+            auto* bridge_actions = new QWidget(body);
+            bridge_actions->setObjectName("ProfileBridgeActions");
+            bridge_actions->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            bridge_actions->setStyleSheet(
+                "QWidget#ProfileBridgeActions QPushButton { "
+                "  background-color: #203144; color: #d7e4f2; border: 1px solid #36506d; "
+                "  border-radius: 4px; min-height: 28px; padding: 4px 6px; font-size: 11px; "
+                "} "
+                "QWidget#ProfileBridgeActions QPushButton:hover { "
+                "  background-color: #2a415a; color: #ffffff; border-color: #4b6e96; "
+                "} "
+                "QWidget#ProfileBridgeActions QPushButton:disabled { "
+                "  background-color: #162230; color: #556b82; border-color: #243547; "
+                "} "
+                "QWidget#ProfileBridgeActions QPushButton[primary=\"true\"] { "
+                "  background-color: #1976d2; color: #ffffff; border: 1px solid #42a5f5; "
+                "  border-radius: 4px; min-height: 32px; padding: 6px 12px; font-size: 12px; font-weight: bold; "
+                "} "
+                "QWidget#ProfileBridgeActions QPushButton[primary=\"true\"]:hover { "
+                "  background-color: #1e88e5; border-color: #64b5f6; "
+                "} "
+                "QWidget#ProfileBridgeActions QPushButton[primary=\"true\"]:pressed { "
+                "  background-color: #1565c0; "
+                "}");
+            auto* bridge_actions_layout = new QGridLayout(bridge_actions);
+            bridge_actions_layout->setContentsMargins(0, 4, 0, 4);
+            bridge_actions_layout->setSpacing(6);
+
+            auto* mark_bridges = new QPushButton("Marcar no desenho", bridge_actions);
+            mark_bridges->setProperty("primary", true);
+            mark_bridges->setIcon(ui::get_icon("tp_edit"));
+            mark_bridges->setMinimumHeight(32);
+            mark_bridges->setCursor(Qt::PointingHandCursor);
+            mark_bridges->setToolTip("Ativar modo interativo para adicionar, remover e mover pontes diretamente no desenho");
+            mark_bridges->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+            auto* undo_manual_bridge = new QPushButton("Desfazer", bridge_actions);
+            undo_manual_bridge->setMinimumHeight(28);
+            undo_manual_bridge->setToolTip("Desfazer última ponte manual inserida");
+            undo_manual_bridge->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+            auto* clear_manual_bridges = new QPushButton("Limpar", bridge_actions);
+            clear_manual_bridges->setMinimumHeight(28);
+            clear_manual_bridges->setToolTip("Limpar todas as pontes manuais");
+            clear_manual_bridges->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+            auto* restore_auto_bridges = new QPushButton("Redistribuir", bridge_actions);
+            restore_auto_bridges->setMinimumHeight(28);
+            restore_auto_bridges->setToolTip("Restaurar distribuição automática de pontes");
+            restore_auto_bridges->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+            bridge_actions_layout->addWidget(mark_bridges, 0, 0, 1, 3);
+            bridge_actions_layout->addWidget(undo_manual_bridge, 1, 0);
+            bridge_actions_layout->addWidget(clear_manual_bridges, 1, 1);
+            bridge_actions_layout->addWidget(restore_auto_bridges, 1, 2);
+            // Reserve enough vertical space for both action rows. The old fixed
+            // 70 px minimum was smaller than the styled buttons plus spacing,
+            // so Qt laid the lower row over the primary button on compact docks.
+            bridge_actions_layout->setColumnStretch(0, 1);
+            bridge_actions_layout->setColumnStretch(1, 1);
+            bridge_actions_layout->setColumnStretch(2, 1);
+            bridge_actions_layout->activate();
+            bridge_actions->setMinimumHeight(
+                std::max(bridge_actions_layout->sizeHint().height(), 92));
+            form->addRow(bridge_actions);
+
             auto* bridge_help = new QLabel(
                 "Use Marcar no desenho para adicionar pontes. Arraste os marcadores para ajustar; "
                 "pressione Esc para encerrar a marcacao.", body);
@@ -3597,7 +3798,7 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
                     settings.manual_tabs.pop_back();
                 }
             });
-connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
+            connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
                 request_manual_bridge_mode = true;
                 bridge_enabled->setChecked(true);
                 dialog.accept();
@@ -3722,15 +3923,23 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
             if (auto* guide = guide_for("05_rampas")) {
                 guide->mode_clicked = [ramp_type](int value) { ramp_type->setCurrentIndex(value); };
             }
-            auto* ramp_distance = add_double(form, "Distância", settings.ramp_distance, 0, 10000, " mm",
+            if (settings.ramp_distance <= 0.0) settings.ramp_distance = 50.0;
+            auto* ramp_distance = add_double(form, "Distância da rampa (L)", settings.ramp_distance, 0, 10000, " mm",
                                              [&settings](double v) { settings.ramp_distance = v; });
-            auto* ramp_angle = add_double(form, "Ângulo", settings.ramp_angle, 0, 90, " °",
+            auto* ramp_angle = add_double(form, "Ângulo da rampa", settings.ramp_angle, 0, 90, " °",
                                           [&settings](double v) { settings.ramp_angle = v; });
             auto* ramp_on_lead = add_bool(form, "Aplicar rampa na entrada", settings.ramp_on_lead,
                                           [&settings](bool v) { settings.ramp_on_lead = v; });
-            register_advanced_field(form, ramp_distance);
-            register_advanced_field(form, ramp_angle);
-            register_advanced_field(form, ramp_on_lead);
+
+            auto update_ramp_fields = [ramp_type, ramp_distance, ramp_angle, ramp_on_lead] {
+                const bool has_ramp = ramp_type->currentData().toInt() != static_cast<int>(cam::RampType::None);
+                ramp_distance->setEnabled(has_ramp);
+                ramp_angle->setEnabled(has_ramp);
+                ramp_on_lead->setEnabled(has_ramp);
+            };
+            connect(ramp_type, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+                    [update_ramp_fields](int) { update_ramp_fields(); });
+            update_ramp_fields();
 
             form = add_profile_tab("Ordem", "Ordem", "Ordem de usinagem", "01_usinar_vetores");
             add_enum(form, "Ordenar por", static_cast<int>(settings.order), orders,
@@ -3954,6 +4163,13 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
                     [&settings](int v) { settings.passes = v; });
         }
     }, job.settings);
+
+    auto* identity = add_group("Percurso");
+    auto* name = new QLineEdit(QString::fromStdString(job.name), body);
+    name->setObjectName("ToolpathNameInput");
+    identity->addRow("Nome", name);
+    apply.push_back([&job, name] { job.name = name->text().toStdString(); });
+
     body_layout->addStretch();
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
@@ -3996,9 +4212,8 @@ connect(mark_bridges, &QPushButton::clicked, &dialog, [&, bridge_enabled] {
             bridge_target_job_id_ = job.id;
             canvas_widget_->canvas->manual_tab_mode = true;
             canvas_widget_->canvas->setCursor(Qt::CrossCursor);
-            refresh_bridge_markers();
-            statusBar()->showMessage(
-                "Clique nos contornos para adicionar pontes; arraste marcadores existentes. Esc encerra.");
+            if (view_tabs_) view_tabs_->setCurrentIndex(0);
+            if (bridge_mode_banner_) bridge_mode_banner_->setVisible(true);
         }
     }
     return true;
@@ -4037,7 +4252,13 @@ void MainWindow::add_toolpath_from_panel() {
     document_.add_toolpath(job);
     const auto errors = document_.recalculate_toolpaths(job);
     refresh_toolpaths();
-    if (errors.empty()) {
+    if (canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
+        if (view_tabs_) view_tabs_->setCurrentIndex(0);
+        refresh_bridge_markers();
+        if (bridge_mode_banner_) bridge_mode_banner_->setVisible(true);
+        statusBar()->showMessage(
+            "Modo de pontes ativo: clique no contorno para adicionar ou remover pontes; arraste para mover. Pressione Esc ou Concluir para finalizar.");
+    } else if (errors.empty()) {
         statusBar()->showMessage(QString("Percurso criado: %1").arg(QString::fromStdString(job->name)));
         open_order_service_page();
     } else {
@@ -4056,8 +4277,17 @@ void MainWindow::edit_current_toolpath() {
     document_.modified = true;
     const auto draft_errors = document_.recalculate_toolpaths(job);
     refresh_toolpaths();
-    if (draft_errors.empty()) statusBar()->showMessage("Percurso atualizado");
-    else statusBar()->showMessage(QString::fromStdString(draft_errors.front()));
+    if (canvas_widget_ && canvas_widget_->canvas && canvas_widget_->canvas->manual_tab_mode) {
+        if (view_tabs_) view_tabs_->setCurrentIndex(0);
+        refresh_bridge_markers();
+        if (bridge_mode_banner_) bridge_mode_banner_->setVisible(true);
+        statusBar()->showMessage(
+            "Modo de pontes ativo: clique no contorno para adicionar ou remover pontes; arraste para mover. Pressione Esc ou Concluir para finalizar.");
+    } else if (draft_errors.empty()) {
+        statusBar()->showMessage("Percurso atualizado");
+    } else {
+        statusBar()->showMessage(QString::fromStdString(draft_errors.front()));
+    }
     return;
 
     ui::ResponsiveDialog dialog(this);
@@ -4519,20 +4749,44 @@ void MainWindow::export_gcode() {
     auto* settings_layout = new QVBoxLayout(&settings_dialog);
     auto* settings_form = new QFormLayout();
     auto* post = new QComboBox(&settings_dialog);
+    post->setEditable(true);
+    post->setInsertPolicy(QComboBox::NoInsert);
+    post->completer()->setFilterMode(Qt::MatchContains);
+    post->completer()->setCaseSensitivity(Qt::CaseInsensitive);
     for (const auto profile : {cam::PostProcessor::Grbl, cam::PostProcessor::Mach3,
-                                cam::PostProcessor::LinuxCnc})
+                                cam::PostProcessor::RichAutoA11, cam::PostProcessor::RichAutoA18,
+                                cam::PostProcessor::NcStudio, cam::PostProcessor::LinuxCnc})
         post->addItem(QString::fromUtf8(cam::post_label(profile)), static_cast<int>(profile));
     const int saved_post = preferences.value("gcode/post", static_cast<int>(cam::PostProcessor::Grbl)).toInt();
-    post->setCurrentIndex(std::max(0, post->findData(saved_post)));
+    const auto vectric_posts = cam::installed_vectric_post_files();
+    for (const auto& profile : vectric_posts) {
+        post->addItem(QString::fromStdString(profile.name), QString::fromStdString(profile.path));
+        post->setItemData(post->count() - 1, QString::fromStdString(profile.extension), Qt::UserRole + 1);
+    }
+    const QString saved_vectric_post = preferences.value("gcode/vectricPostFile").toString();
+    const int saved_vectric_index = saved_vectric_post.isEmpty() ? -1 : post->findData(saved_vectric_post);
+    if (saved_vectric_index >= 0) post->setCurrentIndex(saved_vectric_index);
+    else post->setCurrentIndex(std::max(0, post->findData(saved_post)));
+    const auto selected_post = [post] {
+        const QVariant data = post->currentData();
+        return data.metaType().id() == QMetaType::QString
+            ? cam::PostProcessor::VectricAspire
+            : static_cast<cam::PostProcessor>(data.toInt());
+    };
     auto* tool_change = new QCheckBox("Emitir Tn M6 na troca de ferramenta", &settings_dialog);
     auto* line_numbers = new QCheckBox("Numerar linhas", &settings_dialog);
     auto* comments = new QCheckBox("Incluir comentários", &settings_dialog);
     auto* return_home = new QCheckBox("Retornar ao ponto inicial no fim", &settings_dialog);
     connect(post, qOverload<int>(&QComboBox::currentIndexChanged), &settings_dialog,
-            [tool_change, post] {
-        const auto selected = static_cast<cam::PostProcessor>(post->currentData().toInt());
-        tool_change->setEnabled(selected != cam::PostProcessor::Grbl);
-        tool_change->setChecked(selected != cam::PostProcessor::Grbl);
+            [tool_change, line_numbers, comments, return_home, selected_post] {
+        const auto selected = selected_post();
+        const bool vectric = selected == cam::PostProcessor::VectricAspire;
+        tool_change->setEnabled(selected != cam::PostProcessor::Grbl && !vectric);
+        tool_change->setChecked(selected == cam::PostProcessor::Mach3 ||
+                                 selected == cam::PostProcessor::LinuxCnc);
+        line_numbers->setEnabled(!vectric);
+        comments->setEnabled(!vectric);
+        return_home->setEnabled(!vectric);
     });
     settings_form->addRow("Controladora", post);
     settings_form->addRow("Troca de ferramenta", tool_change);
@@ -4541,18 +4795,26 @@ void MainWindow::export_gcode() {
     settings_form->addRow(return_home);
     settings_layout->addLayout(settings_form);
     auto* compatibility = new QLabel(
-        "Ajuste o pós ao modelo e firmware reais. GRBL não recebe M6 neste perfil; em Mach3 e LinuxCNC, "
-        "confirme a macro de troca, origem G54, spindle e limites em simulação antes de cortar.",
+        "RichAuto A11/A18: o arquivo usa XYZ, seleciona G54 e omite G94. Configure o DSP para ler G54 "
+        "e confira G40/G49. A18 aqui não gera movimentos rotativos no eixo A. M6 fica desligado por padrão "
+        "nos perfis RichAuto/NCStudio; ative só se a troca estiver configurada. Simule e faça teste no ar antes do corte.",
         &settings_dialog);
     compatibility->setWordWrap(true);
     compatibility->setObjectName("MutedText");
     settings_layout->addWidget(compatibility);
-    const auto initial_post = static_cast<cam::PostProcessor>(post->currentData().toInt());
+    const auto initial_post = selected_post();
     const QString tool_change_key = QString("gcode/toolChange/%1").arg(static_cast<int>(initial_post));
-    const bool saved_tool_change = preferences.value(tool_change_key,
-                                                      initial_post != cam::PostProcessor::Grbl).toBool();
-    tool_change->setChecked(initial_post != cam::PostProcessor::Grbl && saved_tool_change);
-    tool_change->setEnabled(initial_post != cam::PostProcessor::Grbl);
+    const bool default_tool_change = initial_post == cam::PostProcessor::Mach3 ||
+                                     initial_post == cam::PostProcessor::LinuxCnc;
+    const bool saved_tool_change = preferences.value(tool_change_key, default_tool_change).toBool();
+    tool_change->setChecked(initial_post != cam::PostProcessor::Grbl &&
+                             initial_post != cam::PostProcessor::VectricAspire && saved_tool_change);
+    tool_change->setEnabled(initial_post != cam::PostProcessor::Grbl &&
+                            initial_post != cam::PostProcessor::VectricAspire);
+    const bool initial_vectric = initial_post == cam::PostProcessor::VectricAspire;
+    line_numbers->setEnabled(!initial_vectric);
+    comments->setEnabled(!initial_vectric);
+    return_home->setEnabled(!initial_vectric);
     line_numbers->setChecked(preferences.value("gcode/lineNumbers", false).toBool());
     comments->setChecked(preferences.value("gcode/comments", true).toBool());
     return_home->setChecked(preferences.value("gcode/returnHome", true).toBool());
@@ -4563,28 +4825,49 @@ void MainWindow::export_gcode() {
     connect(settings_buttons, &QDialogButtonBox::rejected, &settings_dialog, &QDialog::reject);
     settings_layout->addWidget(settings_buttons);
     if (settings_dialog.exec() != QDialog::Accepted) return;
+    if (post->currentIndex() < 0 || !post->currentData().isValid()) {
+        QMessageBox::warning(this, "Pós-processador", "Selecione um pós-processador válido da lista.");
+        return;
+    }
 
     cam::GCodeSettings settings;
-    settings.post = static_cast<cam::PostProcessor>(post->currentData().toInt());
+    settings.post = selected_post();
+    if (settings.post == cam::PostProcessor::VectricAspire)
+        settings.vectric_post_file = post->currentData().toString().toStdString();
+    if (settings.post == cam::PostProcessor::VectricAspire)
+        settings.vectric_post_extension = post->currentData(Qt::UserRole + 1).toString().toStdString();
     settings.tool_change = tool_change->isChecked();
     settings.line_numbers = line_numbers->isChecked();
     settings.comments = comments->isChecked();
     settings.home_at_end = return_home->isChecked();
     preferences.setValue("gcode/post", static_cast<int>(settings.post));
+    if (!settings.vectric_post_file.empty())
+        preferences.setValue("gcode/vectricPostFile", QString::fromStdString(settings.vectric_post_file));
+    if (!settings.vectric_post_extension.empty())
+        preferences.setValue("gcode/vectricPostExtension", QString::fromStdString(settings.vectric_post_extension));
     preferences.setValue(QString("gcode/toolChange/%1").arg(static_cast<int>(settings.post)), settings.tool_change);
     preferences.setValue("gcode/lineNumbers", settings.line_numbers);
     preferences.setValue("gcode/comments", settings.comments);
     preferences.setValue("gcode/returnHome", settings.home_at_end);
 
-    const QString path = QFileDialog::getSaveFileName(this, "Salvar G-Code", {},
-                                                       "G-Code (*.nc *.tap *.gcode);;Todos os arquivos (*)");
+    QString file_filter = "G-Code (*.nc *.tap *.gcode);;Todos os arquivos (*)";
+    if (!settings.vectric_post_extension.empty())
+        file_filter = QString("Pós Aspire (*.%1);;Todos os arquivos (*)")
+                          .arg(QString::fromStdString(settings.vectric_post_extension));
+    const QString path = QFileDialog::getSaveFileName(this, "Salvar G-Code", {}, file_filter);
     if (path.isEmpty()) return;
     QFile output(path);
     if (!output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         QMessageBox::critical(this, "Erro ao salvar G-Code", output.errorString());
         return;
     }
-    const std::string code = cam::generate_gcode(paths, document_.material, settings, document_.title());
+    std::string code;
+    try {
+        code = cam::generate_gcode(paths, document_.material, settings, document_.title());
+    } catch (const std::exception& error) {
+        QMessageBox::critical(this, "Pós-processador Aspire", QString::fromUtf8(error.what()));
+        return;
+    }
     output.write(QByteArray::fromStdString(code));
     output.close();
     statusBar()->showMessage(QString("G-Code salvo: %1").arg(path));
@@ -4596,6 +4879,8 @@ void MainWindow::export_setup_sheet() {
     cam::GCodeSettings gcode_settings;
     QSettings preferences;
     gcode_settings.post = static_cast<cam::PostProcessor>(preferences.value("gcode/post", 0).toInt());
+    gcode_settings.vectric_post_file = preferences.value("gcode/vectricPostFile").toString().toStdString();
+    gcode_settings.vectric_post_extension = preferences.value("gcode/vectricPostExtension").toString().toStdString();
     gcode_settings.tool_change = preferences.value(QString("gcode/toolChange/%1").arg(static_cast<int>(gcode_settings.post)), false).toBool();
     gcode_settings.line_numbers = preferences.value("gcode/lineNumbers", true).toBool();
     gcode_settings.comments = preferences.value("gcode/comments", true).toBool();
@@ -4624,7 +4909,12 @@ void MainWindow::export_setup_sheet() {
 
         std::string code;
         if (!job_paths.empty()) {
-            code = cam::generate_gcode(job_paths, document_.material, gcode_settings, job->name);
+            try {
+                code = cam::generate_gcode(job_paths, document_.material, gcode_settings, job->name);
+            } catch (const std::exception& error) {
+                QMessageBox::critical(this, "Pós-processador Aspire", QString::fromUtf8(error.what()));
+                return;
+            }
         }
 
         if (it != job_history_.end()) {
@@ -6598,7 +6888,7 @@ void MainWindow::create_actions() {
     }
     cam_menu->addSeparator();
     cam_menu->addAction("Banco de ferramentas...", QKeySequence(), this,
-                        &MainWindow::edit_tool_database);
+                        [this] { edit_tool_database(); });
     cam_menu->addSeparator();
     cam_menu->addAction("Recalcular todos os percursos", QKeySequence(Qt::Key_F9), this,
                         &MainWindow::recalculate_toolpaths);

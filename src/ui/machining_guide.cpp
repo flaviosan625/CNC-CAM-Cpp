@@ -214,7 +214,7 @@ QString MachiningGuide::title(const QString& k) {
 MachiningGuide::MachiningGuide(const QString& kind, QWidget* parent, GuideModel* model)
     : QWidget(parent), model_(model ? model : new GuideModel(this)), kind_(kind) {
     setObjectName("CamGuideImage");
-    setMinimumSize(240, 185); setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setMinimumSize(180, 75); setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setAccessibleName("Desenho renderizado: " + title(kind));
     setToolTip("Prévia didática dos parâmetros. O percurso calculado e a simulação validam a usinagem.");
     timer_.setInterval(33);

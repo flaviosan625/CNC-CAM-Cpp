@@ -52,8 +52,8 @@ std::string bridge_summary(const ToolpathJob* job) {
 
 namespace {
 
-// The sheet is laid out for A4 landscape: the identification and machine setup
-// stack in a narrow left column so the drawing can take the full right half.
+// The sheet is laid out for A4 landscape: identification and machine setup stay
+// compact on the left while the drawing gets most of the page width.
 const char* kPage = R"HTML(<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <title>Ordem de serviço - @@TITLE@@</title>
@@ -97,7 +97,7 @@ thead { display: table-header-group; }
 <h1>ORDEM DE SERVIÇO</h1><div class="muted">Projeto: @@TITLE@@ · Emitida em @@NOW@@</div></td></tr></table>
 @@STATS@@
 <table class="split"><tr>
-<td width="41%" valign="top" style="padding-right:10px;">
+<td width="34%" valign="top" style="padding-right:8px;">
 <h2>Cliente e identificação</h2>
 <table class="grid"><tr><td><div class="label">Cliente</div><div class="value">@@CUSTOMER@@</div></td>
 <td><div class="label">Contato</div><div class="value">@@CONTACT@@</div></td>
@@ -118,7 +118,7 @@ thead { display: table-header-group; }
 <tr><td><div class="label">Envelope usinado X × Y</div><div class="value">@@CUT_W@@ × @@CUT_H@@ mm</div></td>
 <td colspan="2"><div class="label">Limites do percurso</div><div class="value">X @@X0@@–@@X1@@ · Y @@Y0@@–@@Y1@@ mm</div></td></tr></table>
 </td>
-<td width="59%" valign="top">
+<td width="66%" valign="top">
 <h2>Desenho geral do percurso e cotas</h2>
 <table class="drawing"><tr><td>
 <img src="job-layout.png" width="@@DRAW_W@@" height="@@DRAW_H@@" />
@@ -384,11 +384,11 @@ JobSheetDrawing drawing_metrics(const QPdfWriter& pdf,
                                 const std::vector<QImage>& operation_previews) {
     const QSizeF page = sheet_page_size(pdf);
     JobSheetDrawing drawing;
-    // The summary drawing shares the page with the setup tables: it gets the
-    // right column, minus the cell padding.
+    // The summary drawing shares the page with the setup tables, but the right
+    // column is deliberately wider so the overall toolpath is easy to inspect.
     const double resolution = pdf.resolution();
-    const QSize summary = fit_drawing(summary_preview, static_cast<int>(page.width() * 0.56),
-                                      static_cast<int>(page.height() * 0.45), resolution);
+    const QSize summary = fit_drawing(summary_preview, static_cast<int>(page.width() * 0.63),
+                                      static_cast<int>(page.height() * 0.50), resolution);
     drawing.summary_width = summary.width();
     drawing.summary_height = summary.height();
     // A per-toolpath sheet carries only its drawing and its parameters, so the

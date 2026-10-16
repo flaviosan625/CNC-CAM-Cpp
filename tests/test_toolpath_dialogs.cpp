@@ -10,6 +10,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QScrollArea>
 #include <QScreen>
 #include <QTabBar>
@@ -17,7 +18,9 @@
 #include <QVBoxLayout>
 
 #include "app/main_window.hpp"
+#include "cad/entities.hpp"
 #include "ui/machining_guide.hpp"
+#include "viewport/canvas_2d.hpp"
 
 TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia contextual") {
     cnc::app::MainWindow window;
@@ -95,6 +98,55 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
                 for (auto* button : bridge_buttons) CHECK(button->isVisible());
                 for (auto* button : bridge_buttons)
                     if (button->text() == "Marcar no desenho") CHECK(button->isEnabled());
+
+                if (!capture_dir.isEmpty()) {
+                    auto* scroll_widget = scroll ? scroll->widget() : nullptr;
+                    if (scroll && scroll_widget) {
+                        scroll->verticalScrollBar()->setValue(0);
+                        QApplication::processEvents();
+                        dialog->grab().save(capture_dir + "/etapas_topo_profundidade_ferramenta.png");
+
+                        if (actions) {
+                            const int target_y = std::max(0, actions->mapTo(scroll_widget, QPoint(0, 0)).y() - 170);
+                            scroll->verticalScrollBar()->setValue(target_y);
+                            QApplication::processEvents();
+                            dialog->grab().save(capture_dir + "/etapa5_pontes_ajustadas.png");
+                        }
+                    }
+
+                    tabs->setCurrentIndex(2);
+                    QApplication::processEvents();
+                    auto* ramp_combo = dialog->findChild<QComboBox*>("CamParameter_ramp");
+                    if (ramp_combo && ramp_combo->count() > 1) {
+                        ramp_combo->setCurrentIndex(1);
+                        QApplication::processEvents();
+                    }
+                    if (scroll && scroll_widget) {
+                        const int target_y = std::max(0, tabs->mapTo(scroll_widget, QPoint(0, 0)).y() - 10);
+                        scroll->verticalScrollBar()->setValue(target_y);
+                        QApplication::processEvents();
+                        dialog->grab().save(capture_dir + "/etapa5_rampas_caixa_valor.png");
+                        scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
+                        QApplication::processEvents();
+                        dialog->grab().save(capture_dir + "/etapa6_nome_percurso_calcular.png");
+                    }
+
+                    for (auto* btn : dialog->findChildren<QPushButton*>()) {
+                        if (btn->text() == "Editar passagens...") {
+                            QTimer::singleShot(20, [&] {
+                                for (auto* sub_dlg : dialog->findChildren<QDialog*>()) {
+                                    if (sub_dlg->isVisible() && sub_dlg->windowTitle().contains("Editar passagens")) {
+                                        sub_dlg->grab().save(capture_dir + "/modal_editar_passagens.png");
+                                        sub_dlg->reject();
+                                        break;
+                                    }
+                                }
+                            });
+                            btn->click();
+                            break;
+                        }
+                    }
+                }
             }
             for (QComboBox* topic : dialog->findChildren<QComboBox*>("CamGuideTopic")) {
                 if (topic->count() == 0) continue;
@@ -113,7 +165,7 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
 
     const QStringList profile_sections = {
         "Profundidades de corte", "Ferramenta", "Passagens", "Usinar vetores...",
-        "Último passe",
+        "Último passe", "Percurso",
     };
     int previous = -1;
     for (const QString& expected : profile_sections) {
@@ -122,4 +174,92 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
         CHECK(index > previous);
         previous = index;
     }
+}
+
+TEST_CASE("pontes: botao marcar no desenho ativa modo interativo na tela 2D com faixa informativa") {
+    cnc::app::MainWindow window;
+    window.resize(1280, 800);
+    window.show();
+    QApplication::processEvents();
+
+    auto rect = std::make_shared<cnc::cad::Rectangle>();
+    rect->x = 20;
+    rect->y = 20;
+    rect->width = 160;
+    rect->height = 100;
+    window.document().add_entity(rect);
+    window.document().select_all();
+    QApplication::processEvents();
+
+    bool banner_seen = false;
+    bool mode_activated = false;
+    const QString capture_dir = QString::fromUtf8(qgetenv("CNC_GUIDE_CAPTURE_DIR"));
+
+    QTimer::singleShot(20, [&] {
+        QDialog* dialog = nullptr;
+        for (auto* candidate : window.findChildren<QDialog*>()) {
+            if (candidate->isVisible() && candidate->windowTitle().startsWith("Percurso de ")) {
+                dialog = candidate;
+                break;
+            }
+        }
+        if (!dialog) return;
+
+        auto* profile_tabs = dialog->findChild<QTabBar*>("ProfileOptionTabs");
+        if (profile_tabs) {
+            profile_tabs->setCurrentIndex(0); // Pontes
+            QApplication::processEvents();
+        }
+
+        auto* actions = dialog->findChild<QWidget*>("ProfileBridgeActions");
+        if (actions) {
+            for (auto* btn : actions->findChildren<QPushButton*>()) {
+                if (btn->text() == "Marcar no desenho") {
+                    btn->click();
+                    break;
+                }
+            }
+        }
+    });
+
+    for (auto* action : window.findChildren<QAction*>()) {
+        if (action->text() == "Percurso de perfil") {
+            action->trigger();
+            break;
+        }
+    }
+    QApplication::processEvents();
+
+    auto* banner = window.findChild<QWidget*>("BridgeModeBanner");
+    auto* view_tabs = window.findChild<QTabBar*>("ViewTabs");
+    auto* canvas = window.findChild<cnc::vp::Canvas2D*>();
+
+    REQUIRE(banner != nullptr);
+    REQUIRE(view_tabs != nullptr);
+    REQUIRE(canvas != nullptr);
+
+    CHECK(view_tabs->currentIndex() == 0); // Vista 2D continua ativa (não mudou para OS)
+    CHECK(canvas->manual_tab_mode == true);
+    CHECK(banner->isVisible());
+    banner_seen = banner->isVisible();
+    mode_activated = canvas->manual_tab_mode;
+
+    if (!capture_dir.isEmpty()) {
+        QApplication::processEvents();
+        window.grab().save(capture_dir + "/modo_marcar_pontes_ativo.png");
+    }
+
+    // Clicar no botão 'Concluir pontes' encerra o modo e oculta a faixa
+    for (auto* btn : banner->findChildren<QPushButton*>()) {
+        if (btn->text().contains("Concluir")) {
+            btn->click();
+            break;
+        }
+    }
+    QApplication::processEvents();
+
+    CHECK(canvas->manual_tab_mode == false);
+    CHECK(!banner->isVisible());
+    CHECK(banner_seen);
+    CHECK(mode_activated);
 }

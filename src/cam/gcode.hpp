@@ -1,9 +1,9 @@
 // Pos-processador: percursos internos -> G-Code (porte de src/cam/gcode.py).
 //
-// Tres controladoras cobertas, com as diferencas que realmente importam:
+// Perfis de controladora cobertos, com as diferencas que realmente importam:
 //  * GRBL nao tem ciclo fixo de furacao (G81/G83). O ciclo peck sai expandido em G0/G1.
-//  * Mach3 e LinuxCNC aceitam G83, mas aqui tambem sai expandido: o mesmo arquivo roda nas
-//    tres e a simulacao bate com o que a maquina faz.
+//  * Os ciclos de furacao saem expandidos em G0/G1 para evitar depender de ciclos fixos.
+//  * RichAuto A11/A18 usa G54 e nao recebe G94 neste perfil; alimentacao fica em mm/min.
 // Saida modal: cada eixo so aparece quando muda, e o avanco so quando muda.
 #pragma once
 
@@ -16,14 +16,25 @@
 
 namespace cnc::cam {
 
-enum class PostProcessor { Grbl, Mach3, LinuxCnc };
+enum class PostProcessor { Grbl, Mach3, RichAutoA11, RichAutoA18, NcStudio, LinuxCnc, VectricAspire };
 const char* post_label(PostProcessor p);
+
+struct VectricPostFile {
+    std::string name;
+    std::string path;
+    std::string extension;
+};
+std::vector<VectricPostFile> installed_vectric_post_files();
 
 }  // namespace cnc::cam
 
 namespace cnc {
 CNC_ENUM(cam::PostProcessor, {cam::PostProcessor::Grbl, "grbl"}, {cam::PostProcessor::Mach3, "mach3"},
-         {cam::PostProcessor::LinuxCnc, "linuxcnc"});
+         {cam::PostProcessor::RichAutoA11, "richauto_a11"},
+         {cam::PostProcessor::RichAutoA18, "richauto_a18"},
+         {cam::PostProcessor::NcStudio, "ncstudio"},
+         {cam::PostProcessor::LinuxCnc, "linuxcnc"},
+         {cam::PostProcessor::VectricAspire, "vectric_aspire"});
 }  // namespace cnc
 
 namespace cnc::cam {
@@ -41,6 +52,8 @@ struct GCodeSettings {
     bool tool_change = false; // default seguro para GRBL; habilitar M6 conforme controladora
     bool comments = true;
     bool home_at_end = true;
+    std::string vectric_post_file;
+    std::string vectric_post_extension;
 
     std::string end_command() const;
 };

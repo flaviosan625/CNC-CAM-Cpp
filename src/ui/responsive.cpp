@@ -50,7 +50,8 @@ void ResponsiveDialog::showEvent(QShowEvent* event) {
             area->setWidgetResizable(true); area->setFrameShape(QFrame::NoFrame);
             area->setWidget(body); outer->addWidget(area);
         }
-        setMinimumSize(340, 280); setSizeGripEnabled(true);
+        if (minimumWidth() <= 0) setMinimumSize(340, 280);
+        setSizeGripEnabled(true);
     }
     if (screen()) {
         const QRect available = screen()->availableGeometry().adjusted(8, 34, -8, -8);
@@ -59,16 +60,33 @@ void ResponsiveDialog::showEvent(QShowEvent* event) {
         const QRect host_rect = host
             ? QRect(host->mapToGlobal(QPoint(0, 0)), host->size())
             : available;
-        const int dock_width = std::clamp(host_rect.width() / 4, 340, 420);
-        const int dock_height = std::min(host_rect.height(), available.height());
-        setMinimumSize(std::min(320, dock_width), std::min(280, dock_height));
-        resize(dock_width, dock_height);
-        const int right = host_rect.right() + 1;
-        const int x = std::clamp(right - dock_width, available.left(),
-                                 std::max(available.left(), available.right() - dock_width + 1));
-        const int y = std::clamp(host_rect.top(), available.top(),
-                                 std::max(available.top(), available.bottom() - dock_height + 1));
-        move(x, y);
+
+        const bool is_docked = property("dockRight").toBool()
+            || (!property("centerModal").toBool()
+                && (windowTitle().startsWith("Percurso de ")
+                    || (windowTitle().isEmpty() && minimumWidth() <= 420)));
+
+        if (is_docked) {
+            const int dock_width = std::clamp(host_rect.width() / 4, 340, 420);
+            const int dock_height = std::min(host_rect.height(), available.height());
+            setMinimumSize(std::min(320, dock_width), std::min(280, dock_height));
+            resize(dock_width, dock_height);
+            const int right = host_rect.right() + 1;
+            const int x = std::clamp(right - dock_width, available.left(),
+                                     std::max(available.left(), available.right() - dock_width + 1));
+            const int y = std::clamp(host_rect.top(), available.top(),
+                                     std::max(available.top(), available.bottom() - dock_height + 1));
+            move(x, y);
+        } else {
+            const int target_w = std::min(std::max(width(), minimumWidth()), available.width());
+            const int target_h = std::min(std::max(height(), minimumHeight()), available.height());
+            resize(target_w, target_h);
+            const int cx = host_rect.center().x() - target_w / 2;
+            const int cy = host_rect.center().y() - target_h / 2;
+            const int x = std::clamp(cx, available.left(), std::max(available.left(), available.right() - target_w + 1));
+            const int y = std::clamp(cy, available.top(), std::max(available.top(), available.bottom() - target_h + 1));
+            move(x, y);
+        }
     }
     QDialog::showEvent(event);
 }

@@ -79,6 +79,8 @@ public:
 
     bool open_file(const QString& path);
     void show_3d_view();
+    cad::Document& document() noexcept { return document_; }
+    const cad::Document& document() const noexcept { return document_; }
 
 private:
     void create_actions();
@@ -110,6 +112,7 @@ private:
     void move_bridge_marker(int index, double x, double y);
     void stop_manual_bridge_mode();
     void edit_tool_database();
+    bool edit_tool_database(const std::string& preselected_tool_name, cam::Tool* out_tool = nullptr);
     void add_toolpath_from_panel();
     bool configure_toolpath(cam::ToolpathJob& job);
     void edit_current_toolpath();
@@ -241,6 +244,7 @@ private:
     QTimer* simulation_timer_ = nullptr;
     std::unique_ptr<sim::ToolpathSimulation> simulation_;
     std::string bridge_target_job_id_;
+    QWidget* bridge_mode_banner_ = nullptr;
     std::chrono::steady_clock::time_point simulation_last_tick_{};
 };
 
