@@ -149,6 +149,8 @@ private:
     void assign_selected_recess();
     bool calculate_prepared_recesses(const std::vector<std::string>& scope = {});
     void generate_prepared_recesses();
+    void align_imported_to_zero();
+    void center_imported_on_material();
     void show_guides_gallery();
     void export_gcode();
     void export_setup_sheet();

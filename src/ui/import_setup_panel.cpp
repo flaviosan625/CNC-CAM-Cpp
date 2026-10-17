@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -116,16 +117,84 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
     connect(inch_convert_button_, &QPushButton::clicked, this, &ImportSetupPanel::convertInchesRequested);
     root->addWidget(inch_convert_button_);
 
+    // 1.1 Botões de alinhamento rápido no Zero da chapa
+    auto* align_row = new QWidget(this);
+    auto* align_layout = new QHBoxLayout(align_row);
+    align_layout->setContentsMargins(0, 0, 0, 0);
+    align_layout->setSpacing(6);
+
+    align_zero_button_ = new QPushButton("📍 Zero da Peça (X10, Y10)", align_row);
+    align_zero_button_->setObjectName("ImportAlignZero");
+    align_zero_button_->setToolTip("Posiciona a peça no ponto zero da chapa com 10 mm de margem");
+    align_zero_button_->setStyleSheet("padding: 4px 8px; font-size: 11px;");
+    connect(align_zero_button_, &QPushButton::clicked, this, &ImportSetupPanel::alignToZeroRequested);
+
+    center_material_button_ = new QPushButton("🎯 Centralizar", align_row);
+    center_material_button_->setObjectName("ImportCenterMaterial");
+    center_material_button_->setToolTip("Centraliza a peça no meio da chapa configurada");
+    center_material_button_->setStyleSheet("padding: 4px 8px; font-size: 11px;");
+    connect(center_material_button_, &QPushButton::clicked, this, &ImportSetupPanel::centerOnMaterialRequested);
+
+    align_layout->addWidget(align_zero_button_);
+    align_layout->addWidget(center_material_button_);
+    root->addWidget(align_row);
+
     // 2. Seção de Presets Rápidos da Oficina (1 Clique)
-    auto* preset_header = new QLabel("⚡ PRESET RÁPIDO DO MATERIAL", this);
+    auto* preset_header = new QLabel("⚡ PRESET RÁPIDO DO MATERIAL (1 CLIQUE)", this);
     preset_header->setStyleSheet("font-weight: 600; color: #e0e0e0; font-size: 8.5pt; margin-top: 4px;");
     root->addWidget(preset_header);
+
+    auto* chips_grid = new QWidget(this);
+    auto* chips_layout = new QGridLayout(chips_grid);
+    chips_layout->setContentsMargins(0, 0, 0, 0);
+    chips_layout->setSpacing(5);
+
+    struct QuickChip { QString label; QString mat; double thick; };
+    const std::vector<QuickChip> quick_chips = {
+        {"MDF 15 mm", "MDF", 15.0},
+        {"MDF 6 mm", "MDF", 6.0},
+        {"Acrílico 4 mm", "Acrílico", 4.0},
+        {"ACM 4 mm", "ACM", 4.0},
+        {"PVC 10 mm", "PVC", 10.0},
+        {"PS 2 mm", "PS", 2.0}
+    };
+
+    preset_chips_.clear();
+    const auto& house_presets = cam::house_presets();
+    for (size_t c = 0; c < quick_chips.size(); ++c) {
+        const auto& chip_info = quick_chips[c];
+        auto* chip = new QPushButton(chip_info.label, chips_grid);
+        chip->setCursor(Qt::PointingHandCursor);
+        chip->setMinimumHeight(28);
+        chip->setStyleSheet(
+            "QPushButton { background: #252526; color: #cccccc; border: 1px solid #3c3c3c; border-radius: 4px; font-weight: 600; font-size: 11px; } "
+            "QPushButton:hover { background: #2a2d2e; border-color: #0078d4; color: #ffffff; } "
+            "QPushButton[active=\"true\"] { background: #0078d4; border-color: #1a85ff; color: #ffffff; }");
+
+        int target_index = -1;
+        for (size_t i = 0; i < house_presets.size(); ++i) {
+            if (QString::fromStdString(house_presets[i].material).compare(chip_info.mat, Qt::CaseInsensitive) == 0 &&
+                std::fabs(house_presets[i].thickness - chip_info.thick) < 0.05) {
+                target_index = static_cast<int>(i);
+                break;
+            }
+        }
+        chip->setProperty("presetIndex", target_index);
+        connect(chip, &QPushButton::clicked, this, [this, target_index] {
+            if (target_index >= 0) {
+                select_house_preset(target_index);
+                apply_house_preset(target_index);
+            }
+        });
+        chips_layout->addWidget(chip, static_cast<int>(c / 3), static_cast<int>(c % 3));
+        preset_chips_.push_back(chip);
+    }
+    root->addWidget(chips_grid);
 
     house_preset_combo_ = new SafeComboBox(this);
     house_preset_combo_->setObjectName("ImportPresetCombo");
     prepare_combo(house_preset_combo_);
     house_preset_combo_->addItem("— Selecionar Preset da Casa —", -1);
-    const auto& house_presets = cam::house_presets();
     for (int i = 0; i < static_cast<int>(house_presets.size()); ++i) {
         const auto& p = house_presets[static_cast<size_t>(i)];
         house_preset_combo_->addItem(
@@ -370,6 +439,7 @@ ImportSetupPanel::ImportSetupPanel(QWidget* parent) : QWidget(parent) {
     connect(house_preset_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int idx) {
         if (idx < 0) return;
         const int preset_idx = house_preset_combo_->currentData().toInt();
+        update_preset_chips_selection(preset_idx);
         if (preset_idx >= 0) {
             apply_house_preset(preset_idx);
         }
@@ -619,15 +689,31 @@ int ImportSetupPanel::selected_preset_index() const {
     return house_preset_combo_->currentData().toInt();
 }
 
+void ImportSetupPanel::update_preset_chips_selection(int selected_index) {
+    for (auto* chip : preset_chips_) {
+        if (!chip) continue;
+        const int chip_idx = chip->property("presetIndex").toInt();
+        const bool active = (chip_idx >= 0 && chip_idx == selected_index);
+        chip->setProperty("active", active ? "true" : "false");
+        if (chip->style()) {
+            chip->style()->unpolish(chip);
+            chip->style()->polish(chip);
+        }
+        chip->update();
+    }
+}
+
 void ImportSetupPanel::select_house_preset(int preset_index) {
     if (!house_preset_combo_) return;
     const int combo_idx = house_preset_combo_->findData(preset_index);
     if (combo_idx >= 0) {
         house_preset_combo_->setCurrentIndex(combo_idx);
     }
+    update_preset_chips_selection(preset_index);
 }
 
 void ImportSetupPanel::apply_house_preset(int preset_index) {
+    update_preset_chips_selection(preset_index);
     const auto& presets = cam::house_presets();
     if (preset_index < 0 || preset_index >= static_cast<int>(presets.size())) return;
     const auto& preset = presets[static_cast<size_t>(preset_index)];

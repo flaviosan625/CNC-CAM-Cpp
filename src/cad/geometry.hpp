@@ -35,6 +35,9 @@ Points fillet_corner(const Points& pts, int idx, double radius, int seg = 12, bo
 // Une polilinhas/linhas abertas cujas extremidades estejam a <= tol.
 std::vector<EntityPtr> join_open_vectors(const std::vector<EntityPtr>& entities, double tol = 0.1);
 
+// Une automaticamente vetores abertos agrupando por camada (preserva entidades fechadas, textos e pontos).
+std::vector<EntityPtr> join_open_vectors_by_layer(const std::vector<EntityPtr>& entities, double tol = 0.1);
+
 // Estende a extremidade mais proxima da linha ate o primeiro cruzamento ("start", "end" ou nada).
 bool extend_line_to(Line& line, const std::vector<EntityPtr>& targets,
                     const std::optional<std::string>& endpoint = std::nullopt);

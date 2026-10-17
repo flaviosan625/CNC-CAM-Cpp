@@ -37,7 +37,7 @@ TEST_CASE("toolpaths: todas as fichas mostram profundidade, ferramenta e guia co
     REQUIRE(operations != nullptr);
 
     const QStringList kinds = {
-        "Percurso de perfil", "Percurso de bolso", "Percurso de furação", "Entalhe V",
+        "Percurso de perfil", "Percurso de desbaste", "Percurso de furação", "Entalhe V",
         "Canais (Fluting)", "Textura", "Rasgo Keyhole", "Inlay", "Faca de arraste",
     };
     QStringList profile_order;

@@ -59,6 +59,8 @@ signals:
     void manageLayersRequested();
     void openToolpathsRequested();
     void convertInchesRequested();
+    void alignToZeroRequested();
+    void centerOnMaterialRequested();
 
 private:
     void refresh_recess_controls();
@@ -76,9 +78,13 @@ private:
     // Banner de dimensões reais da peça
     QLabel* geometry_banner_ = nullptr;
     QPushButton* inch_convert_button_ = nullptr;
+    QPushButton* align_zero_button_ = nullptr;
+    QPushButton* center_material_button_ = nullptr;
 
-    // Presets rápidos da oficina
+    // Presets rápidos da oficina (Pills de 1 clique + combo)
+    std::vector<QPushButton*> preset_chips_;
     QComboBox* house_preset_combo_ = nullptr;
+    void update_preset_chips_selection(int selected_index);
 
     // Modo da chapa
     QComboBox* stock_mode_combo_ = nullptr;

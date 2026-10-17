@@ -19,6 +19,7 @@
 #include <QToolButton>
 
 #include "app/main_window.hpp"
+#include "cad/geometry.hpp"
 #include "cam/presets.hpp"
 #include "ui/import_setup_panel.hpp"
 #include "ui/layer_manager_dialog.hpp"
@@ -170,7 +171,7 @@ TEST_CASE("import preparation: explicit recess answer and material do not restri
     bool pocket_available = false;
     for (auto* button : window.findChildren<QToolButton*>()) {
         if (button->text() == "Perfil") profile_available = button->isEnabled();
-        if (button->text() == "Bolso") pocket_available = button->isEnabled();
+        if (button->text() == "Bolso" || button->text() == "Desbaste") pocket_available = button->isEnabled();
     }
     CHECK(profile_available);
     CHECK(pocket_available);
@@ -384,4 +385,68 @@ TEST_CASE("import preparation: automatic MDF cycle calculates recesses without c
     CHECK(through_cut_found);
     CHECK(deepest_cut == doctest::Approx(-16.0));
     CHECK(document.preparation.at("roles").at(recess->id) == "recess");
+}
+
+TEST_CASE("import preparation: quick preset chips and zero / center alignment") {
+    cnc::app::MainWindow window;
+    auto* panel = preparation_panel(window);
+    REQUIRE(panel != nullptr);
+
+    QPushButton* mdf15_chip = nullptr;
+    for (auto* btn : panel->findChildren<QPushButton*>()) {
+        if (btn->text() == "MDF 15 mm") mdf15_chip = btn;
+    }
+    REQUIRE(mdf15_chip != nullptr);
+    mdf15_chip->click();
+
+    auto* thickness = panel->findChild<QDoubleSpinBox*>("ImportThickness");
+    REQUIRE(thickness != nullptr);
+    CHECK(thickness->value() == doctest::Approx(15.0));
+
+    auto* combo = panel->findChild<QComboBox*>("ImportPresetCombo");
+    REQUIRE(combo != nullptr);
+    CHECK(combo->currentData().toInt() >= 0);
+
+    auto& doc = window.document();
+    doc.material.width = 1000.0;
+    doc.material.height = 800.0;
+    const auto rect = preparation_rectangle(500.0, 300.0, 100.0, 80.0);
+    doc.add_entity(rect);
+
+    auto* align_zero = panel->findChild<QPushButton*>("ImportAlignZero");
+    REQUIRE(align_zero != nullptr);
+    align_zero->click();
+
+    auto bbox_zero = doc.bounding_box();
+    REQUIRE(bbox_zero.has_value());
+    CHECK(bbox_zero->x0 == doctest::Approx(10.0));
+    CHECK(bbox_zero->y0 == doctest::Approx(10.0));
+
+    auto* center_btn = panel->findChild<QPushButton*>("ImportCenterMaterial");
+    REQUIRE(center_btn != nullptr);
+    center_btn->click();
+
+    auto bbox_center = doc.bounding_box();
+    REQUIRE(bbox_center.has_value());
+    const double cx = (bbox_center->x0 + bbox_center->x1) / 2.0;
+    const double cy = (bbox_center->y0 + bbox_center->y1) / 2.0;
+    CHECK(cx == doctest::Approx(500.0));
+    CHECK(cy == doctest::Approx(400.0));
+}
+
+TEST_CASE("geometry: join_open_vectors_by_layer connects open lines into closed polyline on import") {
+    auto l1 = std::make_shared<cnc::cad::Line>();
+    l1->x1 = 0; l1->y1 = 0; l1->x2 = 100; l1->y2 = 0; l1->layer = "CORTE";
+    auto l2 = std::make_shared<cnc::cad::Line>();
+    l2->x1 = 100; l2->y1 = 0; l2->x2 = 100; l2->y2 = 50; l2->layer = "CORTE";
+    auto l3 = std::make_shared<cnc::cad::Line>();
+    l3->x1 = 100; l3->y1 = 50; l3->x2 = 0; l3->y2 = 50; l3->layer = "CORTE";
+    auto l4 = std::make_shared<cnc::cad::Line>();
+    l4->x1 = 0; l4->y1 = 50; l4->x2 = 0; l4->y2 = 0; l4->layer = "CORTE";
+
+    std::vector<cnc::cad::EntityPtr> entities = {l1, l2, l3, l4};
+    auto joined = cnc::cad::join_open_vectors_by_layer(entities, 0.1);
+    REQUIRE(joined.size() == 1);
+    CHECK(joined.front()->closed());
+    CHECK(joined.front()->layer == "CORTE");
 }

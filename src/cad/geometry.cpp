@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 
 namespace cnc::cad {
 
@@ -288,6 +289,40 @@ std::vector<EntityPtr> join_open_vectors(const std::vector<EntityPtr>& entities,
         const bool closed = hypot(ch.front().x - ch.back().x, ch.front().y - ch.back().y) <= tol;
         if (closed && ch.size() > 2) ch.pop_back();
         out.push_back(make_poly(std::move(ch), closed, tmpl.layer, tmpl.color));
+    }
+    return out;
+}
+
+std::vector<EntityPtr> join_open_vectors_by_layer(const std::vector<EntityPtr>& entities, double tol) {
+    if (entities.empty()) return {};
+
+    std::map<std::string, std::vector<EntityPtr>> open_by_layer;
+    std::vector<EntityPtr> passthrough;
+
+    for (const auto& e : entities) {
+        if (!e) continue;
+        if (is_a<Text>(*e) || is_a<DrillPoint>(*e) || is_a<Dimension>(*e) || e->closed()) {
+            passthrough.push_back(e);
+        } else {
+            open_by_layer[e->layer].push_back(e);
+        }
+    }
+
+    std::vector<EntityPtr> out = std::move(passthrough);
+    for (auto& [layer, layer_entities] : open_by_layer) {
+        if (layer_entities.size() >= 2) {
+            auto joined = join_open_vectors(layer_entities, tol);
+            if (!joined.empty() && joined.size() < layer_entities.size()) {
+                for (auto& je : joined) {
+                    je->layer = layer;
+                    out.push_back(je);
+                }
+                continue;
+            }
+        }
+        for (auto& orig : layer_entities) {
+            out.push_back(orig);
+        }
     }
     return out;
 }

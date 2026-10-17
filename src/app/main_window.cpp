@@ -86,6 +86,7 @@
 #include "ui/safe_inputs.hpp"
 #include "cad/layout.hpp"
 #include "cad/selection.hpp"
+#include "cad/geometry.hpp"
 #include "cam/gcode.hpp"
 #include "cam/job_sheet.hpp"
 #include "cam/presets.hpp"
@@ -2222,6 +2223,10 @@ void MainWindow::create_toolpath_panel() {
         if (canvas_widget_ && canvas_widget_->canvas) canvas_widget_->canvas->zoom_selection();
         begin_import_preparation();
     });
+    connect(import_setup_panel_, &ui::ImportSetupPanel::alignToZeroRequested, this,
+            &MainWindow::align_imported_to_zero);
+    connect(import_setup_panel_, &ui::ImportSetupPanel::centerOnMaterialRequested, this,
+            &MainWindow::center_imported_on_material);
 
     auto* automatic_title = new QLabel("CORTE AUTOMÁTICO POR MATERIAL", automatic_page);
     automatic_title->setObjectName("SectionHeader");
@@ -6459,6 +6464,7 @@ void MainWindow::import_files(const QStringList& paths) {
         try {
             auto entities = io::import_file(std::filesystem::path(path.toStdWString()));
             if (!entities.empty()) {
+                entities = cad::join_open_vectors_by_layer(entities, 0.1);
                 if (auto label = io::create_filename_label(QFileInfo(path).fileName().toStdString(), entities)) {
                     if (!document_.get_layer(label->layer)) {
                         auto& lay = document_.add_layer(label->layer);
@@ -6504,6 +6510,7 @@ void MainWindow::import_file(const QString& path) {
             QMessageBox::information(this, "Importar", "Nenhum vetor encontrado no arquivo.");
             return;
         }
+        entities = cad::join_open_vectors_by_layer(entities, 0.1);
 
         if (auto label = io::create_filename_label(QFileInfo(path).fileName().toStdString(), entities)) {
             if (!document_.get_layer(label->layer)) {

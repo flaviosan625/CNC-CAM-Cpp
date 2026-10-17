@@ -302,4 +302,40 @@ void MainWindow::generate_prepared_recesses() {
     import_setup_panel_->set_status("Desbastes calculados. Posicione e selecione os demais vetores para gerar os cortes.");
 }
 
+void MainWindow::align_imported_to_zero() {
+    auto bbox = document_.bounding_box();
+    if (!bbox) return;
+    const double dx = 10.0 - bbox->x0;
+    const double dy = 10.0 - bbox->y0;
+    for (auto& entity : document_.entities) {
+        if (entity && document_.is_editable(*entity)) {
+            entity->translate(dx, dy);
+        }
+    }
+    document_.modified = true;
+    refresh_document_view();
+    if (canvas_widget_ && canvas_widget_->canvas) canvas_widget_->canvas->zoom_selection();
+    begin_import_preparation();
+}
+
+void MainWindow::center_imported_on_material() {
+    auto bbox = document_.bounding_box();
+    if (!bbox) return;
+    const double center_x = (bbox->x0 + bbox->x1) / 2.0;
+    const double center_y = (bbox->y0 + bbox->y1) / 2.0;
+    const double target_x = document_.material.width / 2.0;
+    const double target_y = document_.material.height / 2.0;
+    const double dx = target_x - center_x;
+    const double dy = target_y - center_y;
+    for (auto& entity : document_.entities) {
+        if (entity && document_.is_editable(*entity)) {
+            entity->translate(dx, dy);
+        }
+    }
+    document_.modified = true;
+    refresh_document_view();
+    if (canvas_widget_ && canvas_widget_->canvas) canvas_widget_->canvas->zoom_selection();
+    begin_import_preparation();
+}
+
 }  // namespace cnc::app
