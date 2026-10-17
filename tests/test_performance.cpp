@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <QApplication>
+#include <QCursor>
 #include <QElapsedTimer>
 #include <QImage>
 #include <QMouseEvent>
@@ -332,6 +333,9 @@ TEST_CASE("performance: roda no arquivo real antes de calcular percursos") {
         canvas.fit_view();
         QTest::qWait(130);
         canvas.viewport()->repaint();
+        const QImage initial_frame = canvas.viewport()->grab().toImage();
+        if (copies == 1 && qEnvironmentVariableIsSet("CNC_PERF_CAPTURE"))
+            initial_frame.save(qEnvironmentVariable("TEMP") + "/cnc-zoom-initial.png");
         auto visible_entity_count = [&] {
             size_t count = 0;
             for (QGraphicsItem* item : canvas.scene()->items())
@@ -342,7 +346,25 @@ TEST_CASE("performance: roda no arquivo real antes de calcular percursos") {
         const size_t initial_visible_entities = visible_entity_count();
         REQUIRE(initial_visible_entities > 0);
 
-        const QPointF pos(canvas.viewport()->width() / 2.0, canvas.viewport()->height() / 2.0);
+        QPoint wheel_pos(canvas.viewport()->width() / 2, canvas.viewport()->height() / 2);
+        if (copies == 1) {
+            int x0 = initial_frame.width(), y0 = initial_frame.height(), x1 = 0, y1 = 0;
+            int white_pixels = 0;
+            for (int y = 0; y < initial_frame.height(); y += 2)
+                for (int x = 0; x < initial_frame.width(); x += 2) {
+                    const QRgb pixel = initial_frame.pixel(x, y);
+                    if (qRed(pixel) < 240 || qGreen(pixel) < 240 || qBlue(pixel) < 240) continue;
+                    ++white_pixels;
+                    x0 = std::min(x0, x); y0 = std::min(y0, y);
+                    x1 = std::max(x1, x); y1 = std::max(y1, y);
+                }
+            REQUIRE(white_pixels > 10);
+            wheel_pos = QPoint((x0 + x1) / 2, (y0 + y1) / 2);
+        }
+        const QPointF pos(wheel_pos);
+        const QPoint previous_cursor = QCursor::pos();
+        QCursor::setPos(canvas.viewport()->mapToGlobal(
+            QPoint(canvas.viewport()->width() - 10, canvas.viewport()->height() - 10)));
         auto wheel_step = [&](QPoint pixels, QPoint angles) {
             QWheelEvent wheel(pos, canvas.viewport()->mapToGlobal(pos.toPoint()), pixels, angles,
                               Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
@@ -353,14 +375,20 @@ TEST_CASE("performance: roda no arquivo real antes de calcular percursos") {
             return timer.nsecsElapsed() / 1.e6;
         };
         const double initial_scale = canvas.transform().m11();
+        const QPointF anchor_scene = canvas.mapToScene(wheel_pos);
         const double first_ms = wheel_step({}, {0, 120});
         const double second_ms = wheel_step({}, {0, 120});
         CHECK(canvas.transform().m11() == doctest::Approx(initial_scale * 1.15 * 1.15));
+        const QPoint anchor_after = canvas.mapFromScene(anchor_scene);
+        CHECK(std::abs(anchor_after.x() - wheel_pos.x()) <= 2);
+        CHECK(std::abs(anchor_after.y() - wheel_pos.y()) <= 2);
         CHECK(canvas.optimizationFlags().testFlag(QGraphicsView::IndirectPainting));
         if (copies == 1) {
             // A pre-visualizacao precisa continuar mostrando o desenho, mesmo
             // quando a pintura dos itens da cena fica suspensa durante a roda.
             const QImage frame = canvas.viewport()->grab().toImage();
+            if (qEnvironmentVariableIsSet("CNC_PERF_CAPTURE"))
+                frame.save(qEnvironmentVariable("TEMP") + "/cnc-zoom-preview.png");
             int white_pixels = 0;
             for (int y = 0; y < frame.height(); y += 2)
                 for (int x = 0; x < frame.width(); x += 2) {
@@ -375,6 +403,8 @@ TEST_CASE("performance: roda no arquivo real antes de calcular percursos") {
         QTest::qWait(170);
         const double settle_ms = settle_timer.nsecsElapsed() / 1.e6;
         CHECK_FALSE(canvas.optimizationFlags().testFlag(QGraphicsView::IndirectPainting));
+        if (copies == 1 && qEnvironmentVariableIsSet("CNC_PERF_CAPTURE"))
+            canvas.viewport()->grab().toImage().save(qEnvironmentVariable("TEMP") + "/cnc-zoom-resting.png");
         QElapsedTimer timer;
         timer.start();
         canvas.viewport()->repaint();
@@ -398,6 +428,7 @@ TEST_CASE("performance: roda no arquivo real antes de calcular percursos") {
                   << ",\"wheel_ms\":[" << first_ms << "," << second_ms << "]"
                   << ",\"resting_ms\":" << resting_ms
                   << ",\"settle_ms\":" << settle_ms << "}\n" << std::flush;
+        QCursor::setPos(previous_cursor);
     }
 }
 

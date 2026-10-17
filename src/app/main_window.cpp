@@ -33,6 +33,7 @@
 #include <QHBoxLayout>
 #include <QImage>
 #include <QImageReader>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineF>
@@ -6888,6 +6889,9 @@ void MainWindow::create_tool_panel() {
     connect(canvas_widget_->canvas, &vp::Canvas2D::shortcut_requested, this,
             [this](const QString& name) {
                 if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
+                else if (name == "copy") copy_selected_entities();
+                else if (name == "cut") cut_selected_entities();
+                else if (name == "paste") paste_clipboard_entities();
                 else activate_tool(name);
             });
     connect(canvas_widget_->canvas, &vp::Canvas2D::cancel_requested, this,
@@ -7003,6 +7007,9 @@ void MainWindow::create_legacy_tool_panel() {
     connect(canvas_widget_->canvas, &vp::Canvas2D::shortcut_requested, this,
             [this](const QString& name) {
                 if (name == "zoom_fit") canvas_widget_->canvas->fit_view();
+                else if (name == "copy") copy_selected_entities();
+                else if (name == "cut") cut_selected_entities();
+                else if (name == "paste") paste_clipboard_entities();
                 else activate_tool(name);
             });
     connect(canvas_widget_->canvas, &vp::Canvas2D::cancel_requested, this,
@@ -7119,6 +7126,33 @@ void MainWindow::quick_edit_entity(const QString& entity_id) {
     popup->show_at(canvas_widget_->canvas->entity_anchor(*entity));
 }
 
+void MainWindow::cut_selected_entities() {
+    const auto selected = document_.selected_entities();
+    if (selected.empty()) return;
+    clipboard_entities_ = tools::clone_entities(selected);
+    tool_context_.remove(selected);
+    statusBar()->showMessage(QString("%1 objeto(s) recortado(s)").arg(selected.size()));
+}
+
+void MainWindow::copy_selected_entities() {
+    const auto selected = document_.selected_entities();
+    if (selected.empty()) return;
+    clipboard_entities_ = tools::clone_entities(selected);
+    statusBar()->showMessage(QString("%1 objeto(s) copiado(s)").arg(selected.size()));
+}
+
+void MainWindow::paste_clipboard_entities() {
+    if (clipboard_entities_.empty()) return;
+    auto copies = tools::clone_entities(clipboard_entities_);
+    for (const auto& entity : copies) {
+        entity->translate(10.0, -10.0);
+        entity->selected = true;
+    }
+    document_.clear_selection();
+    tool_context_.add(copies, "Colar", true);
+    statusBar()->showMessage(QString("%1 objeto(s) colado(s)").arg(copies.size()));
+}
+
 void MainWindow::show_canvas_context_menu(const QPoint& global_pos, double wx, double wy) {
     Q_UNUSED(wx);
     Q_UNUSED(wy);
@@ -7176,27 +7210,9 @@ void MainWindow::show_canvas_context_menu(const QPoint& global_pos, double wx, d
                }
            }, undo_stack_.can_redo(), QKeySequence::Redo);
     menu->addSeparator();
-    action("Cortar", [this, selected] {
-        if (selected.empty()) return;
-        clipboard_entities_ = tools::clone_entities(selected);
-        tool_context_.remove(selected);
-        statusBar()->showMessage(QString("%1 objeto(s) recortado(s)").arg(selected.size()));
-    }, has_selection, QKeySequence::Cut);
-    action("Copiar", [this, selected] {
-        clipboard_entities_ = tools::clone_entities(selected);
-        statusBar()->showMessage(QString("%1 objeto(s) copiado(s)").arg(selected.size()));
-    }, has_selection, QKeySequence::Copy);
-    action("Colar", [this] {
-        if (clipboard_entities_.empty()) return;
-        auto copies = tools::clone_entities(clipboard_entities_);
-        for (const auto& entity : copies) {
-            entity->translate(10.0, -10.0);
-            entity->selected = true;
-        }
-        document_.clear_selection();
-        tool_context_.add(copies, "Colar");
-        statusBar()->showMessage(QString("%1 objeto(s) colado(s)").arg(copies.size()));
-    }, !clipboard_entities_.empty(), QKeySequence::Paste);
+    action("Cortar", [this] { cut_selected_entities(); }, has_selection, QKeySequence::Cut);
+    action("Copiar", [this] { copy_selected_entities(); }, has_selection, QKeySequence::Copy);
+    action("Colar", [this] { paste_clipboard_entities(); }, !clipboard_entities_.empty(), QKeySequence::Paste);
     action("Eliminar", [this, selected] {
         if (!selected.empty()) {
             tool_context_.remove(selected);
@@ -7358,6 +7374,7 @@ void MainWindow::activate_tool(const QString& name) {
     else if (name == "group") active_tool_ = std::make_unique<tools::GroupTool>(tool_context_);
     else if (name == "ungroup") active_tool_ = std::make_unique<tools::UngroupTool>(tool_context_);
     else if (name == "convert_text") active_tool_ = std::make_unique<tools::ConvertTextTool>(tool_context_);
+    else if (name == "text_lines") active_tool_ = std::make_unique<tools::SplitTextLinesTool>(tool_context_);
     else if (name == "close_vectors") active_tool_ = std::make_unique<tools::CloseVectorsTool>(tool_context_);
     else if (name == "weld") active_tool_ = std::make_unique<tools::WeldTool>(tool_context_);
     else if (name == "subtract") active_tool_ = std::make_unique<tools::SubtractTool>(tool_context_);
@@ -7407,6 +7424,24 @@ void MainWindow::activate_tool(const QString& name) {
         star->points = points->value(); star->inner_ratio = ratio->value() / 100;
     }
 
+    if (name == "fillet") {
+        static double s_fillet_radius = 5.0;
+        bool ok = false;
+        const double r = QInputDialog::getDouble(
+            this, "Filete / Arredondamento",
+            "Raio do filete (mm):",
+            s_fillet_radius, 0.1, 500.0, 2, &ok);
+        if (!ok) {
+            active_tool_.reset();
+            activate_tool("select");
+            return;
+        }
+        s_fillet_radius = r;
+        auto* fillet = static_cast<tools::FilletTool*>(active_tool_.get());
+        fillet->radius = r;
+        statusBar()->showMessage(QString("Filete R%1 mm: clique no canto para arredondar").arg(r, 0, 'f', 2));
+    }
+
     // Operações sem interação de canvas usam os valores padrão enquanto o painel de propriedades
     // específico ainda não existe no C++. Assim o botão executa a ferramenta, em vez de apenas
     // mostrar uma dica sem produzir efeito.
@@ -7451,32 +7486,292 @@ void MainWindow::activate_tool(const QString& name) {
         activate_tool("select");
         return;
     }
+    if (name == "quick_edit" || name == "edit_dimensions") {
+        const auto selected = document_.selected_entities();
+        if (!selected.empty() && ui::QuickEditPopup::supports(*selected.front())) {
+            quick_edit_entity(QString::fromStdString(selected.front()->id));
+        } else if (!selected.empty()) {
+            statusBar()->showMessage(QString("%1: use Editar nós para alterar ponto a ponto")
+                                         .arg(ui::QuickEditPopup::entity_name(*selected.front())));
+        } else {
+            statusBar()->showMessage("Selecione um objeto para editar dimensões (ou pressione Enter / F2)");
+        }
+        active_tool_.reset();
+        activate_tool("select");
+        return;
+    }
     if (name == "offset") {
-        static_cast<tools::OffsetTool*>(active_tool_.get())->apply_form();
+        auto* offset_tool = static_cast<tools::OffsetTool*>(active_tool_.get());
+        const auto selected = tool_context_.selection();
+        if (selected.empty()) {
+            statusBar()->showMessage("Offset: selecione pelo menos um vetor antes de aplicar");
+        } else {
+            static double s_last_dist = 5.0;
+            static bool s_last_outward = true;
+            static bool s_last_keep = true;
+            static int s_last_join = 0;
+
+            ui::ResponsiveDialog dialog(this);
+            dialog.setWindowTitle("Offset de vetores");
+            auto* layout = new QVBoxLayout(&dialog);
+            auto* form = new QFormLayout();
+
+            auto* dist_spin = new QDoubleSpinBox(&dialog);
+            dist_spin->setRange(0.01, 5000.0);
+            dist_spin->setDecimals(2);
+            dist_spin->setSuffix(" mm");
+            dist_spin->setValue(s_last_dist);
+            form->addRow("Distância de deslocamento:", dist_spin);
+
+            auto* dir_combo = new QComboBox(&dialog);
+            dir_combo->addItem("Para fora (Externo)", true);
+            dir_combo->addItem("Para dentro (Interno)", false);
+            dir_combo->setCurrentIndex(s_last_outward ? 0 : 1);
+            form->addRow("Direção:", dir_combo);
+
+            auto* join_combo = new QComboBox(&dialog);
+            join_combo->addItem("Arredondado", "round");
+            join_combo->addItem("Em esquadro (Miter)", "miter");
+            join_combo->addItem("Chanfrado (Bevel)", "bevel");
+            join_combo->setCurrentIndex(s_last_join);
+            form->addRow("Estilo dos cantos:", join_combo);
+
+            auto* keep_check = new QCheckBox("Manter os vetores originais", &dialog);
+            keep_check->setChecked(s_last_keep);
+            form->addRow("", keep_check);
+
+            layout->addLayout(form);
+
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            layout->addWidget(buttons);
+
+            if (dialog.exec() == QDialog::Accepted) {
+                s_last_dist = dist_spin->value();
+                s_last_outward = dir_combo->currentData().toBool();
+                s_last_keep = keep_check->isChecked();
+                s_last_join = join_combo->currentIndex();
+
+                offset_tool->distance = s_last_dist;
+                offset_tool->outward = s_last_outward;
+                offset_tool->keep_original = s_last_keep;
+                offset_tool->join_style = join_combo->currentData().toString().toStdString();
+                offset_tool->apply_form();
+            }
+        }
         active_tool_.reset();
         activate_tool("select");
         return;
     }
     if (name == "boundary") {
-        static_cast<tools::BoundaryTool*>(active_tool_.get())->run();
+        auto* boundary_tool = static_cast<tools::BoundaryTool*>(active_tool_.get());
+        const auto selected = tool_context_.selection();
+        if (selected.empty()) {
+            statusBar()->showMessage("Contorno vetorial: selecione os vetores");
+        } else {
+            static double s_boundary_offset = 0.0;
+            static bool s_boundary_rubber = false;
+
+            ui::ResponsiveDialog dialog(this);
+            dialog.setWindowTitle("Contorno vetorial");
+            auto* layout = new QVBoxLayout(&dialog);
+            auto* form = new QFormLayout();
+
+            auto* off_spin = new QDoubleSpinBox(&dialog);
+            off_spin->setRange(-1000.0, 1000.0);
+            off_spin->setDecimals(2);
+            off_spin->setSuffix(" mm");
+            off_spin->setValue(s_boundary_offset);
+            form->addRow("Deslocamento (offset):", off_spin);
+
+            auto* rubber_check = new QCheckBox("Casco convexo (elástico / rubber-band)", &dialog);
+            rubber_check->setChecked(s_boundary_rubber);
+            form->addRow("", rubber_check);
+
+            layout->addLayout(form);
+
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            layout->addWidget(buttons);
+
+            if (dialog.exec() == QDialog::Accepted) {
+                s_boundary_offset = off_spin->value();
+                s_boundary_rubber = rubber_check->isChecked();
+                boundary_tool->offset = s_boundary_offset;
+                boundary_tool->rubber_band = s_boundary_rubber;
+                boundary_tool->run();
+            }
+        }
         active_tool_.reset();
         activate_tool("select");
         return;
     }
     if (name == "fit_curves") {
-        static_cast<tools::FitCurvesTool*>(active_tool_.get())->run();
+        auto* fit_tool = static_cast<tools::FitCurvesTool*>(active_tool_.get());
+        const auto selected = tool_context_.selection();
+        if (selected.empty()) {
+            statusBar()->showMessage("Ajustar curvas: selecione os vetores");
+        } else {
+            static double s_fit_tol = 0.1;
+            static bool s_fit_keep = false;
+
+            ui::ResponsiveDialog dialog(this);
+            dialog.setWindowTitle("Ajustar curvas");
+            auto* layout = new QVBoxLayout(&dialog);
+            auto* form = new QFormLayout();
+
+            auto* tol_spin = new QDoubleSpinBox(&dialog);
+            tol_spin->setRange(0.001, 10.0);
+            tol_spin->setDecimals(3);
+            tol_spin->setSuffix(" mm");
+            tol_spin->setValue(s_fit_tol);
+            form->addRow("Tolerância de aproximação:", tol_spin);
+
+            auto* keep_check = new QCheckBox("Manter vetor original", &dialog);
+            keep_check->setChecked(s_fit_keep);
+            form->addRow("", keep_check);
+
+            layout->addLayout(form);
+
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            layout->addWidget(buttons);
+
+            if (dialog.exec() == QDialog::Accepted) {
+                s_fit_tol = tol_spin->value();
+                s_fit_keep = keep_check->isChecked();
+                fit_tool->tolerance = s_fit_tol;
+                fit_tool->keep_original = s_fit_keep;
+                fit_tool->run();
+            }
+        }
         active_tool_.reset();
         activate_tool("select");
         return;
     }
     if (name == "array_copy") {
-        static_cast<tools::ArrayCopyTool*>(active_tool_.get())->apply_form();
+        auto* array_tool = static_cast<tools::ArrayCopyTool*>(active_tool_.get());
+        const auto selected = tool_context_.selection();
+        if (selected.empty()) {
+            statusBar()->showMessage("Cópia em array: selecione os objetos a copiar");
+        } else {
+            static int s_rows = 2, s_cols = 3;
+            static double s_gap_x = 10.0, s_gap_y = 10.0;
+            static bool s_use_gap = true;
+
+            ui::ResponsiveDialog dialog(this);
+            dialog.setWindowTitle("Cópia em array (Grid)");
+            auto* layout = new QVBoxLayout(&dialog);
+            auto* form = new QFormLayout();
+
+            auto* cols_spin = new QSpinBox(&dialog);
+            cols_spin->setRange(1, 100);
+            cols_spin->setValue(s_cols);
+            form->addRow("Colunas (X):", cols_spin);
+
+            auto* rows_spin = new QSpinBox(&dialog);
+            rows_spin->setRange(1, 100);
+            rows_spin->setValue(s_rows);
+            form->addRow("Linhas (Y):", rows_spin);
+
+            auto* gap_x_spin = new QDoubleSpinBox(&dialog);
+            gap_x_spin->setRange(0.0, 5000.0);
+            gap_x_spin->setDecimals(2);
+            gap_x_spin->setSuffix(" mm");
+            gap_x_spin->setValue(s_gap_x);
+            form->addRow("Espaçamento X:", gap_x_spin);
+
+            auto* gap_y_spin = new QDoubleSpinBox(&dialog);
+            gap_y_spin->setRange(0.0, 5000.0);
+            gap_y_spin->setDecimals(2);
+            gap_y_spin->setSuffix(" mm");
+            gap_y_spin->setValue(s_gap_y);
+            form->addRow("Espaçamento Y:", gap_y_spin);
+
+            auto* type_combo = new QComboBox(&dialog);
+            type_combo->addItem("Espaçamento entre peças (Gap)", true);
+            type_combo->addItem("Distância centro a centro (Passo)", false);
+            type_combo->setCurrentIndex(s_use_gap ? 0 : 1);
+            form->addRow("Tipo de espaçamento:", type_combo);
+
+            layout->addLayout(form);
+
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            layout->addWidget(buttons);
+
+            if (dialog.exec() == QDialog::Accepted) {
+                s_cols = cols_spin->value();
+                s_rows = rows_spin->value();
+                s_gap_x = gap_x_spin->value();
+                s_gap_y = gap_y_spin->value();
+                s_use_gap = type_combo->currentData().toBool();
+
+                array_tool->cols = s_cols;
+                array_tool->rows = s_rows;
+                array_tool->gap_x = s_gap_x;
+                array_tool->gap_y = s_gap_y;
+                array_tool->use_gap = s_use_gap;
+                array_tool->apply_form();
+            }
+        }
         active_tool_.reset();
         activate_tool("select");
         return;
     }
     if (name == "circular_copy") {
-        static_cast<tools::CircularCopyTool*>(active_tool_.get())->apply_form();
+        auto* circ_tool = static_cast<tools::CircularCopyTool*>(active_tool_.get());
+        const auto selected = tool_context_.selection();
+        if (selected.empty()) {
+            statusBar()->showMessage("Cópia circular: selecione os objetos a copiar");
+        } else {
+            static int s_count = 6;
+            static double s_angle = 360.0;
+            static bool s_rotate = true;
+
+            ui::ResponsiveDialog dialog(this);
+            dialog.setWindowTitle("Cópia circular");
+            auto* layout = new QVBoxLayout(&dialog);
+            auto* form = new QFormLayout();
+
+            auto* count_spin = new QSpinBox(&dialog);
+            count_spin->setRange(2, 360);
+            count_spin->setValue(s_count);
+            form->addRow("Quantidade de cópias:", count_spin);
+
+            auto* angle_spin = new QDoubleSpinBox(&dialog);
+            angle_spin->setRange(1.0, 360.0);
+            angle_spin->setDecimals(1);
+            angle_spin->setSuffix(" °");
+            angle_spin->setValue(s_angle);
+            form->addRow("Ângulo total:", angle_spin);
+
+            auto* rot_check = new QCheckBox("Rotacionar cópias no círculo", &dialog);
+            rot_check->setChecked(s_rotate);
+            form->addRow("", rot_check);
+
+            layout->addLayout(form);
+
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+            layout->addWidget(buttons);
+
+            if (dialog.exec() == QDialog::Accepted) {
+                s_count = count_spin->value();
+                s_angle = angle_spin->value();
+                s_rotate = rot_check->isChecked();
+
+                circ_tool->count = s_count;
+                circ_tool->total_angle = s_angle;
+                circ_tool->rotate_copies = s_rotate;
+                circ_tool->apply_form();
+            }
+        }
         active_tool_.reset();
         activate_tool("select");
         return;
@@ -7785,6 +8080,16 @@ void MainWindow::create_actions() {
             statusBar()->showMessage("Refeito");
         }
     });
+    edit_menu->addSeparator();
+    QAction* cut_action = edit_menu->addAction("Recortar");
+    cut_action->setShortcut(QKeySequence::Cut);
+    connect(cut_action, &QAction::triggered, this, [this] { cut_selected_entities(); });
+    QAction* copy_action = edit_menu->addAction("Copiar");
+    copy_action->setShortcut(QKeySequence::Copy);
+    connect(copy_action, &QAction::triggered, this, [this] { copy_selected_entities(); });
+    QAction* paste_action = edit_menu->addAction("Colar");
+    paste_action->setShortcut(QKeySequence::Paste);
+    connect(paste_action, &QAction::triggered, this, [this] { paste_clipboard_entities(); });
     edit_menu->addSeparator();
     edit_menu->addAction("Selecionar todos os vetores", QKeySequence(QKeySequence::SelectAll), this, [this] {
         document_.select_all();

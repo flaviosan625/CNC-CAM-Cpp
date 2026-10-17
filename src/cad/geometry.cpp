@@ -374,6 +374,14 @@ bool extend_line_to(Line& line, const std::vector<EntityPtr>& targets, const std
     return true;
 }
 
+std::optional<Pt> segment_intersection(const Pt& p1, const Pt& p2, const Pt& p3, const Pt& p4) {
+    const auto hit = seg_intersect(p1, p2, p3, p4);
+    if (hit && 0.0 <= hit->t && hit->t <= 1.0 && 0.0 <= hit->u && hit->u <= 1.0) {
+        return hit->point;
+    }
+    return std::nullopt;
+}
+
 namespace {
 
 // Parametro (indice do segmento + fracao) do ponto da polilinha mais proximo de (x, y).

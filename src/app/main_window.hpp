@@ -109,6 +109,9 @@ private:
     void remove_current_layer();
     void manage_layers();
     void quick_edit_entity(const QString& entity_id);
+    void cut_selected_entities();
+    void copy_selected_entities();
+    void paste_clipboard_entities();
     void show_canvas_context_menu(const QPoint& global_pos, double wx, double wy);
     void refresh_toolpaths();
     void refresh_bridge_markers();

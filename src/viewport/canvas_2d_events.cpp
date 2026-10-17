@@ -8,6 +8,7 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QLineEdit>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -33,6 +34,13 @@ int zoom_direction(const QKeyEvent* event) {
     if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal) return 1;
     if (event->key() == Qt::Key_Minus) return -1;
     return 0;
+}
+
+const char* clipboard_action(const QKeyEvent* event) {
+    if (event->matches(QKeySequence::Copy)) return "copy";
+    if (event->matches(QKeySequence::Cut)) return "cut";
+    if (event->matches(QKeySequence::Paste)) return "paste";
+    return nullptr;
 }
 
 bool text_input_has_focus() {
@@ -99,7 +107,7 @@ void Canvas2D::wheelEvent(QWheelEvent* event) {
     const double steps = event->angleDelta().y() != 0
         ? event->angleDelta().y() / 120.0
         : event->pixelDelta().y() / 120.0;
-    if (steps != 0.0) zoom_by(std::pow(1.15, steps));
+    if (steps != 0.0) zoom_by(std::pow(1.15, steps), event->position());
     event->accept();
 }
 
@@ -302,7 +310,7 @@ bool Canvas2D::event(QEvent* ev) {
     // Campos de entrada conservam as proprias teclas quando recebem o foco.
     if (ev->type() == QEvent::ShortcutOverride) {
         auto* key = static_cast<QKeyEvent*>(ev);
-        if (zoom_direction(key) != 0 && !text_input_has_focus()) {
+        if ((zoom_direction(key) != 0 || clipboard_action(key)) && !text_input_has_focus()) {
             ev->accept();
             return true;
         }
@@ -330,6 +338,12 @@ void Canvas2D::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
+    if (const char* action = clipboard_action(event); action && !text_input_has_focus()) {
+        finish_navigation_preview();
+        emit shortcut_requested(QString::fromLatin1(action));
+        event->accept();
+        return;
+    }
     finish_navigation_preview();
     if (event->key() == Qt::Key_Escape) {
         cancel_current_operation();
@@ -341,6 +355,12 @@ void Canvas2D::keyPressEvent(QKeyEvent* event) {
         return;
     }
     if (nudge(event)) return;
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter || event->key() == Qt::Key_F2) &&
+        !text_input_has_focus() && event->modifiers() == Qt::NoModifier) {
+        emit shortcut_requested("quick_edit");
+        event->accept();
+        return;
+    }
     if (event->modifiers() == Qt::NoModifier) {
         std::optional<std::string> action = shortcuts::action_for(event->key(), &shortcut_table);
         // A tecla da edicao de nos alterna: apertar de novo volta para a selecao, que e como se sai

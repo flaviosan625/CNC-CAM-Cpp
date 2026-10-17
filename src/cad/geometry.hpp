@@ -41,6 +41,10 @@ std::vector<EntityPtr> join_open_vectors_by_layer(const std::vector<EntityPtr>& 
 // Estende a extremidade mais proxima da linha ate o primeiro cruzamento ("start", "end" ou nada).
 bool extend_line_to(Line& line, const std::vector<EntityPtr>& targets,
                     const std::optional<std::string>& endpoint = std::nullopt);
+
+// Retorna o ponto de cruzamento entre dois segmentos de reta p1-p2 e p3-p4, se houver.
+std::optional<Pt> segment_intersection(const Pt& p1, const Pt& p2, const Pt& p3, const Pt& p4);
+
 // Remove o trecho de `e` entre os cruzamentos mais proximos do clique.
 std::vector<EntityPtr> trim_at_point(const Entity& e, double x, double y, const std::vector<EntityPtr>& others);
 

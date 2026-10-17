@@ -179,9 +179,24 @@ void Canvas2D::fit_view() {
 }
 
 void Canvas2D::zoom_by(double factor) {
-    begin_navigation_preview();
+    zoom_by(factor, QPointF(viewport()->rect().center()));
+}
+
+void Canvas2D::zoom_by(double factor, const QPointF& anchor_view_pos) {
+    if (!(factor > 0.0) || !std::isfinite(factor)) return;
     ensure_infinite_scene_rect();
+    begin_navigation_preview();
+    bool invertible = false;
+    const QPointF anchor_scene = viewportTransform().inverted(&invertible).map(anchor_view_pos);
+    if (!invertible) return;
+    // A roda ja informa sua posicao no viewport. AnchorUnderMouse consulta o cursor
+    // global, que pode estar em outro lugar e fazia o desenho saltar ao ampliar.
+    setTransformationAnchor(QGraphicsView::NoAnchor);
     scale(factor, factor);
+    const QPointF shifted = viewportTransform().map(anchor_scene) - anchor_view_pos;
+    horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(shifted.x()));
+    verticalScrollBar()->setValue(verticalScrollBar()->value() + qRound(shifted.y()));
+    setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     ensure_infinite_scene_rect();
     emit view_changed();
 }

@@ -3,13 +3,46 @@
 #include <cmath>
 
 #include <QSignalSpy>
+#include <QImage>
+#include <QPainter>
 #include <QPainterPath>
+#include <QStyleOptionGraphicsItem>
 
 #include "cam/model.hpp"
 #include "cad/document.hpp"
 #include "tools/draw_tools.hpp"
 #include "viewport/canvas_2d.hpp"
 #include "viewport/entity_items.hpp"
+
+TEST_CASE("canvas: texto ilegivel usa quadro leve e retorna as letras ao aproximar") {
+    auto text = std::make_shared<cnc::cad::Text>();
+    text->x = 20;
+    text->y = 50;
+    text->height = 20;
+    text->content = "TESTE";
+    cnc::vp::EntityItem item(text, 100);
+    REQUIRE_FALSE(item.path().isEmpty());
+
+    const auto render = [&item](double scale, bool frame_only) {
+        QImage image(600, 160, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        painter.scale(scale, scale);
+        if (frame_only) {
+            painter.setPen(item.pen());
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(item.path().boundingRect());
+        } else {
+            QStyleOptionGraphicsItem option;
+            item.paint(&painter, &option);
+        }
+        return image;
+    };
+
+    CHECK(render(0.15, false) == render(0.15, true));
+    CHECK_FALSE(render(1.0, false) == render(1.0, true));
+    CHECK_FALSE(text->selected);
+}
 
 TEST_CASE("canvas: cache de clique acompanha edicao e vetor permanece branco") {
     cnc::cad::Document document;

@@ -184,6 +184,7 @@ private:
 
     bool down_ = false;
     std::optional<bool> hover_;
+    Points trail_;
 };
 
 class ExtendTool : public BaseTool {
@@ -197,6 +198,14 @@ public:
     bool on_press(double wx, double wy, Qt::MouseButton button, Qt::KeyboardModifiers mods) override;
 
     const std::shared_ptr<cad::Line>& target() const { return target_; }
+
+    struct ExtendCandidate {
+        std::shared_ptr<cad::Line> line;
+        std::string endpoint;
+        Pt tip;
+        Pt target_pt;
+    };
+    std::optional<ExtendCandidate> find_candidate(double wx, double wy) const;
 
 private:
     std::shared_ptr<cad::Line> target_;

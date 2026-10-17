@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <numbers>
 
 #include "cad/geometry.hpp"
 #include "tools/draw_tools.hpp"
@@ -135,9 +136,56 @@ cad::EntityPtr StarTool::build(const Pt& p0, const Pt& p1, Qt::KeyboardModifiers
 // Linha / Polilinha
 // ======================================================================
 
+namespace {
+
+Points build_tangent_arc(const Pt& p0, const Pt& p1, const Pt& tangent, int seg_count = 24) {
+    const double vx = p1.x - p0.x;
+    const double vy = p1.y - p0.y;
+    const double v_len_sq = vx * vx + vy * vy;
+    if (v_len_sq < 1e-8) return {p0};
+
+    const double t_len = std::hypot(tangent.x, tangent.y);
+    if (t_len < 1e-8) return {p0, p1};
+    const double tx = tangent.x / t_len;
+    const double ty = tangent.y / t_len;
+    const double nx = -ty;
+    const double ny = tx;
+
+    const double n_dot_v = nx * vx + ny * vy;
+    if (std::fabs(n_dot_v) < 1e-6) return {p0, p1};
+
+    const double r = v_len_sq / (2.0 * n_dot_v);
+    const double cx = p0.x + r * nx;
+    const double cy = p0.y + r * ny;
+    const double radius = std::fabs(r);
+
+    const double a0 = std::atan2(p0.y - cy, p0.x - cx);
+    const double a1 = std::atan2(p1.y - cy, p1.x - cx);
+
+    double sweep = a1 - a0;
+    if (r > 0) {
+        while (sweep < 0) sweep += 2.0 * std::numbers::pi;
+        while (sweep > 2.0 * std::numbers::pi) sweep -= 2.0 * std::numbers::pi;
+    } else {
+        while (sweep > 0) sweep -= 2.0 * std::numbers::pi;
+        while (sweep < -2.0 * std::numbers::pi) sweep += 2.0 * std::numbers::pi;
+    }
+
+    Points arc;
+    arc.reserve(seg_count + 1);
+    for (int i = 0; i <= seg_count; ++i) {
+        const double frac = static_cast<double>(i) / static_cast<double>(seg_count);
+        const double angle = a0 + frac * sweep;
+        arc.push_back({cx + radius * std::cos(angle), cy + radius * std::sin(angle)});
+    }
+    return arc;
+}
+
+}  // namespace
+
 std::string PolylineTool::hint() const {
     if (single_segment()) return "Clique no início e depois no fim da linha";
-    return "Clique para adicionar pontos · Duplo-clique/Enter finaliza · C fecha";
+    return "Clique para adicionar pontos · 'A' alterna Arco Tangente (SolidWorks) · Duplo-clique/Enter finaliza · C fecha";
 }
 
 Pt PolylineTool::ortho(const Pt& a, const Pt& b) {
@@ -153,7 +201,7 @@ bool PolylineTool::on_press(double wx, double wy, Qt::MouseButton button, Qt::Ke
     }
     if (button != Qt::LeftButton) return false;
 
-    if (has(mods, Qt::ShiftModifier) && !pts_.empty()) {
+    if (has(mods, Qt::ShiftModifier) && !pts_.empty() && !arc_mode_) {
         const Pt o = ortho(pts_.back(), {wx, wy});
         wx = o.x;
         wy = o.y;
@@ -165,25 +213,67 @@ bool PolylineTool::on_press(double wx, double wy, Qt::MouseButton button, Qt::Ke
         return true;
     }
     if (!pts_.empty() && dist(pts_.back(), Pt{wx, wy}) < 1e-9) return true;
-    pts_.push_back({wx, wy});
+
+    if (arc_mode_ && has_tangent_ && !pts_.empty()) {
+        const Points arc_pts = build_tangent_arc(pts_.back(), {wx, wy}, last_tangent_);
+        if (arc_pts.size() >= 2) {
+            const Pt p_penult = arc_pts[arc_pts.size() - 2];
+            last_tangent_ = {wx - p_penult.x, wy - p_penult.y};
+            has_tangent_ = true;
+            pts_.insert(pts_.end(), arc_pts.begin() + 1, arc_pts.end());
+        } else {
+            pts_.push_back({wx, wy});
+        }
+        // No SolidWorks, ao clicar no fim do arco a ferramenta volta automaticamente para linha reta
+        arc_mode_ = false;
+        ctx->status("Arco inserido · De volta ao modo Linha (pressione 'A' para novo arco)");
+    } else {
+        if (!pts_.empty()) {
+            last_tangent_ = {wx - pts_.back().x, wy - pts_.back().y};
+            has_tangent_ = true;
+        }
+        pts_.push_back({wx, wy});
+        ctx->status(std::format("{} ponto(s)", pts_.size()));
+    }
+
     if (single_segment() && pts_.size() == 2) {
         finish_shape(false);
         return true;
     }
-    ctx->status(std::format("{} ponto(s)", pts_.size()));
     return true;
 }
 
 bool PolylineTool::on_move(double wx, double wy, Qt::KeyboardModifiers mods) {
     if (pts_.empty()) return false;
-    if (has(mods, Qt::ShiftModifier)) {
+    if (has(mods, Qt::ShiftModifier) && !arc_mode_) {
         const Pt o = ortho(pts_.back(), {wx, wy});
         wx = o.x;
         wy = o.y;
     }
     cursor_ = {wx, wy};
+
+    // Autotransitioning por mouse: se o cursor retornar ao ultimo vertice e se afastar, alterna arco/linha
+    const double tol = (ctx->canvas ? ctx->canvas->pick_tolerance() : 1.0) * kPickPx;
+    const double d_back = dist(pts_.back(), cursor_);
+    if (d_back <= tol * 0.75) {
+        returned_to_vertex_ = true;
+    } else if (returned_to_vertex_ && d_back > tol * 1.5) {
+        returned_to_vertex_ = false;
+        arc_mode_ = !arc_mode_;
+        ctx->status(arc_mode_ ? "Modo Arco Tangente (SolidWorks) ativado" : "Modo Linha Reta ativado");
+    }
+
     Points preview = pts_;
-    preview.push_back(cursor_);
+    if (arc_mode_ && has_tangent_) {
+        const Points arc_pts = build_tangent_arc(pts_.back(), cursor_, last_tangent_);
+        if (arc_pts.size() >= 2) {
+            preview.insert(preview.end(), arc_pts.begin() + 1, arc_pts.end());
+        } else {
+            preview.push_back(cursor_);
+        }
+    } else {
+        preview.push_back(cursor_);
+    }
     ctx->preview(preview, false);
     return true;
 }
@@ -194,6 +284,13 @@ bool PolylineTool::on_double_click(double, double) {
 }
 
 bool PolylineTool::on_key(int key) {
+    if (key == Qt::Key_A && !pts_.empty()) {
+        arc_mode_ = !arc_mode_;
+        ctx->status(arc_mode_ ? "Modo Arco Tangente (SolidWorks) ativado (Pressione 'A' para Linha)"
+                              : "Modo Linha Reta ativado (Pressione 'A' para Arco)");
+        on_move(cursor_.x, cursor_.y, Qt::NoModifier);
+        return true;
+    }
     if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
         finish_shape(false);
         return true;
@@ -219,6 +316,9 @@ bool PolylineTool::on_key(int key) {
 
 void PolylineTool::deactivate() {
     pts_.clear();
+    arc_mode_ = false;
+    has_tangent_ = false;
+    returned_to_vertex_ = false;
     BaseTool::deactivate();
 }
 

@@ -171,6 +171,7 @@ public:
     void setup_material(double width, double height);
     void fit_view();
     void zoom_by(double factor);
+    void zoom_by(double factor, const QPointF& anchor_view_pos);
     void zoom_selection();
     void set_grid_visible(bool visible);
     void reload_shortcuts();

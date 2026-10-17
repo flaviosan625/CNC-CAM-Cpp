@@ -176,6 +176,8 @@ public:
     bool on_key(int key) override;
     void deactivate() override;
 
+    bool is_arc_mode() const { return arc_mode_; }
+
 protected:
     virtual void finish_shape(bool close);
 
@@ -184,6 +186,10 @@ protected:
 private:
     static Pt ortho(const Pt& a, const Pt& b);
     Pt cursor_{};
+    bool arc_mode_ = false;
+    Pt last_tangent_{1.0, 0.0};
+    bool has_tangent_ = false;
+    bool returned_to_vertex_ = false;
 };
 
 class LineTool : public PolylineTool {

@@ -394,6 +394,19 @@ void EntityItem::refresh() {
 }
 
 void EntityItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+    if (const auto* text = cad::as<cad::Text>(*entity_); text && !entity_->selected) {
+        const double screen_height = text->height *
+            QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform());
+        if (screen_height < 5.0) {
+            // Abaixo de cinco pixels os contornos das letras nao sao legiveis.
+            // Um quadro conserva a posicao do texto sem rasterizar cada glifo.
+            // Ao aproximar, a geometria completa volta automaticamente.
+            painter->setPen(pen());
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRect(path().boundingRect());
+            return;
+        }
+    }
     if (display_lod_path_.isEmpty() ||
         QStyleOptionGraphicsItem::levelOfDetailFromTransform(painter->worldTransform()) > 1.5) {
         QGraphicsPathItem::paint(painter, option, widget);
