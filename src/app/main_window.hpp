@@ -50,6 +50,7 @@ class Viewport3D;
 }  // namespace cnc::vp
 
 namespace cnc::ui { class ImportSetupPanel; }
+namespace cnc::ui { class Modeling3DWorkspace; }
 
 namespace cnc::app {
 
@@ -133,6 +134,7 @@ private:
     void recalculate_toolpaths();
     void toggle_simulation();
     void validate_gcode_and_simulate();
+    void save_simulation_report();
     void begin_simulation(const QString& scope);
     void play_simulation();
     void pause_simulation();
@@ -194,7 +196,9 @@ private:
     std::unique_ptr<tools::BaseTool> active_tool_;
     QTabBar* view_tabs_ = nullptr;
     QWidget* view_3d_controls_ = nullptr;
+    QWidget* view_3d_page_ = nullptr;
     QWidget* order_service_page_ = nullptr;
+    ui::Modeling3DWorkspace* modeling_3d_page_ = nullptr;
     QToolButton* projection_3d_button_ = nullptr;
     std::optional<std::array<double, 4>> view_3d_scene_bounds_;
     QStackedWidget* view_stack_ = nullptr;
@@ -241,6 +245,14 @@ private:
     QLabel* toolpath_empty_label_ = nullptr;
     QLabel* simulation_operation_label_ = nullptr;
     QLabel* simulation_info_label_ = nullptr;
+    QLabel* simulation_warning_label_ = nullptr;
+    QLabel* validation_file_label_ = nullptr;
+    QLabel* validation_bounds_label_ = nullptr;
+    QLabel* validation_depth_label_ = nullptr;
+    QLabel* validation_rapid_label_ = nullptr;
+    QLabel* validation_collision_label_ = nullptr;
+    QLabel* validation_summary_label_ = nullptr;
+    QPlainTextEdit* gcode_preview_ = nullptr;
     QProgressBar* simulation_progress_ = nullptr;
     QSlider* simulation_speed_slider_ = nullptr;
     QPushButton* simulation_validate_button_ = nullptr;
@@ -268,6 +280,9 @@ private:
     bool automatic_cut_panel_dirty_ = true;
     QTimer* simulation_timer_ = nullptr;
     std::unique_ptr<sim::ToolpathSimulation> simulation_;
+    std::string validated_gcode_;
+    bool tool_dock_was_visible_before_3d_ = true;
+    bool path_dock_was_visible_before_3d_ = true;
     std::string bridge_target_job_id_;
     std::optional<cam::ToolpathJob> bridge_preparation_job_;
     QPointer<QDialog> active_toolpath_dialog_;

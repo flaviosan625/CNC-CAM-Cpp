@@ -85,7 +85,11 @@ std::vector<cad::EntityPtr> ToolpathJob::entities(const cad::Document& document)
     const std::set<std::string> wanted(entity_ids.begin(), entity_ids.end());
     std::vector<cad::EntityPtr> chosen;
     for (const cad::EntityPtr& e : document.entities) {
-        if (wanted.count(e->id)) chosen.push_back(e);
+        if (!e) continue;
+        if (wanted.count(e->id)) {
+            if (cad::is_cota_layer(e->layer) || cad::is_a<cad::Dimension>(*e)) continue;
+            chosen.push_back(e);
+        }
     }
     return cad::machinable_for(chosen, kind);
 }
@@ -95,7 +99,19 @@ const std::vector<Toolpath>& ToolpathJob::calculate(const cad::Document& documen
     results.clear();
     const std::vector<cad::EntityPtr> ents = entities(document);
     if (ents.empty()) {
-        error = "Os vetores deste percurso não estão mais no desenho.";
+        const std::set<std::string> wanted(entity_ids.begin(), entity_ids.end());
+        bool had_cota = false;
+        for (const cad::EntityPtr& e : document.entities) {
+            if (e && wanted.count(e->id) && (cad::is_cota_layer(e->layer) || cad::is_a<cad::Dimension>(*e))) {
+                had_cota = true;
+                break;
+            }
+        }
+        if (had_cota) {
+            error = "Cotas e elementos da camada 'Cotas' estão bloqueados para percursos de usinagem.";
+        } else {
+            error = "Os vetores deste percurso não estão mais no desenho.";
+        }
         return results;
     }
     set_settings_name(settings, name);

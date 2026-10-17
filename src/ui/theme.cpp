@@ -282,6 +282,21 @@ QPushButton:disabled { color: #5a5a5a; background-color: #252526; border-color: 
 }
 #View3DBtn:hover { background-color: #2a2d2e; color: #ffffff; border-color: #0078d4; }
 #View3DBtn:pressed { background-color: #04395e; border-color: #0078d4; }
+#GCodeValidationPage { background-color: #1d1f23; }
+#GCodePreview {
+    background-color: #17191d; color: #d5dbe3; border: 1px solid #343a43;
+    selection-background-color: #264f78; padding: 6px;
+}
+#SimulationViewportHost { background-color: #1f1f1f; border: 1px solid #343a43; }
+#GCodeChecksPanel { background-color: #1b1f25; border-left: 1px solid #343a43; }
+#ValidationCheck {
+    background-color: #20252c; color: #d5dbe3; border-bottom: 1px solid #303740;
+    padding: 8px 6px; font-size: 11px;
+}
+#SimulationBottomBar { background-color: #1b1f25; border: 1px solid #343a43; border-radius: 5px; }
+#SimulationWarning { color: #aab6c5; padding: 0 6px; }
+#GCodeValidationSplitter::handle { background-color: #303740; width: 4px; }
+#GCodeValidationSplitter::handle:hover { background-color: #0078d4; }
 #BottomTabs { background-color: #181818; border-top: 1px solid #2b2b2b; }
 #BottomTabs::tab { color: #969696; padding: 10px 0; border: none; border-top: 2px solid transparent; font-weight: 600; }
 #BottomTabs::tab:selected { color: #ffffff; background-color: #1f1f1f; border-top: 2px solid #0078d4; }

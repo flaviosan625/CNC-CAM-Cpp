@@ -724,10 +724,44 @@ std::vector<cad::EntityPtr> import_dxf(const std::filesystem::path& path) {
                 e->is_closed = (static_cast<int>(dxf_value(record, 70)) & 1) != 0;
                 entity = e;
             }
+        } else if (type == "DIMENSION") {
+            auto d = std::make_shared<cad::Dimension>();
+            d->x1 = dxf_value(record, 13);
+            d->y1 = dxf_value(record, 23);
+            d->x2 = dxf_value(record, 14);
+            d->y2 = dxf_value(record, 24);
+            d->x3 = dxf_value(record, 10);
+            d->y3 = dxf_value(record, 20);
+            d->offset = std::hypot(d->x3 - d->x1, d->y3 - d->y1);
+            if (d->offset <= 1e-3) d->offset = 15.0;
+            const int dim_type = static_cast<int>(dxf_value(record, 70)) & 0x07;
+            if (dim_type == 1) d->kind_name = "aligned";
+            else if (dim_type == 2) d->kind_name = "angular";
+            else if (dim_type == 3) d->kind_name = "diameter";
+            else if (dim_type == 4) d->kind_name = "radius";
+            else d->kind_name = "horizontal";
+            d->layer = "Cotas";
+            entity = d;
         }
         if (entity) {
             const std::string lay = dxf_string(record, 8);
-            if (!lay.empty()) entity->layer = lay;
+            if (!lay.empty()) {
+                std::string lower = lay;
+                std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                });
+                if (lower == "cotas" || lower == "cota" || lower == "dimension" || lower == "dimensions" || lower == "dim") {
+                    entity->layer = "Cotas";
+                } else if (lower == "linha de centro" || lower == "linha_de_centro" || lower == "linhadecentro" ||
+                           lower == "center" || lower == "centerline" || lower == "center_line" ||
+                           lower == "centro" || lower == "eixo" || lower == "axis") {
+                    entity->layer = "Linha de centro";
+                } else {
+                    entity->layer = lay;
+                }
+            } else if (cad::is_a<cad::Dimension>(*entity)) {
+                entity->layer = "Cotas";
+            }
             entities.push_back(entity);
         }
         i = end;

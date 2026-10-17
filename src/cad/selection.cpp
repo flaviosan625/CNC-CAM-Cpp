@@ -9,34 +9,50 @@
 
 namespace cnc::cad {
 
+bool is_cota_layer(const std::string& layer) {
+    std::string lower = layer;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return lower == "cotas" || lower == "cota" || lower == "dimensions" || lower == "dimension";
+}
+
 bool is_vector(const Entity& e) {
+    if (is_cota_layer(e.layer)) return false;
+    if (is_a<Dimension>(e)) return false;
     if (auto* cl = as<ConstructionLine>(e)) return cl->machinable;
-    return !(is_a<Dimension>(e) || is_a<DrillPoint>(e));
+    return !is_a<DrillPoint>(e);
 }
 
 std::vector<EntityPtr> machinable(const std::vector<EntityPtr>& items) {
     std::vector<EntityPtr> out;
     for (const EntityPtr& e : items) {
+        if (!e) continue;
+        if (is_cota_layer(e->layer) || is_a<Dimension>(*e)) continue;
         if (is_vector(*e)) out.push_back(e);
     }
     return out;
 }
 
 std::vector<EntityPtr> machinable_for(const std::vector<EntityPtr>& items, cam::ToolpathType kind) {
-    if (kind == cam::ToolpathType::Drill) {
-        std::vector<EntityPtr> out;
-        for (const EntityPtr& e : items) {
-            if (is_a<DrillPoint>(e) || is_vector(*e)) out.push_back(e);
+    std::vector<EntityPtr> out;
+    for (const EntityPtr& e : items) {
+        if (!e) continue;
+        if (is_cota_layer(e->layer) || is_a<Dimension>(*e)) continue;
+        if (kind == cam::ToolpathType::Drill) {
+            if (is_a<DrillPoint>(*e) || is_vector(*e)) out.push_back(e);
+        } else {
+            if (is_vector(*e)) out.push_back(e);
         }
-        return out;
     }
-    return machinable(items);
+    return out;
 }
 
 std::vector<EntityPtr> not_machinable(const std::vector<EntityPtr>& items) {
     std::vector<EntityPtr> out;
     for (const EntityPtr& e : items) {
-        if (!is_vector(*e)) out.push_back(e);
+        if (!e) continue;
+        if (is_cota_layer(e->layer) || is_a<Dimension>(*e) || !is_vector(*e)) out.push_back(e);
     }
     return out;
 }
@@ -44,15 +60,15 @@ std::vector<EntityPtr> not_machinable(const std::vector<EntityPtr>& items) {
 std::string why_not_machinable(const std::vector<EntityPtr>& items) {
     const std::vector<EntityPtr> descartados = not_machinable(items);
     if (descartados.empty()) return "";
-    int guias = 0, pontos = 0;
+    int guias = 0, pontos = 0, cotas = 0;
     for (const EntityPtr& e : descartados) {
         if (is_a<ConstructionLine>(e)) ++guias;
-        if (is_a<DrillPoint>(e)) ++pontos;
+        else if (is_a<DrillPoint>(e)) ++pontos;
+        else if (is_a<Dimension>(e) || is_cota_layer(e->layer)) ++cotas;
     }
-    const int cotas = static_cast<int>(descartados.size()) - guias - pontos;
     std::vector<std::string> partes;
     if (guias) partes.push_back(std::to_string(guias) + " guia(s) de régua");
-    if (cotas) partes.push_back(std::to_string(cotas) + " cota(s)");
+    if (cotas) partes.push_back(std::to_string(cotas) + " cota(s) ou elemento(s) na camada Cotas (bloqueados para percurso)");
     if (pontos) partes.push_back(std::to_string(pontos) + " ponto(s) exclusivo(s) de furação");
     std::string out;
     for (size_t i = 0; i < partes.size(); ++i) {

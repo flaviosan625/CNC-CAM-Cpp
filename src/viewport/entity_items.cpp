@@ -322,14 +322,20 @@ BBox EntityItem::world_bounds() const {
 
 bool EntityItem::hit_test_world(double x, double y, double tolerance) const {
     const BBox bounds = world_bounds();
-    if (x < bounds.x0 - tolerance || x > bounds.x1 + tolerance ||
-        y < bounds.y0 - tolerance || y > bounds.y1 + tolerance) return false;
+    const double extra = cad::is_a<cad::Dimension>(entity_) ? std::max(tolerance, 40.0) : tolerance;
+    if (x < bounds.x0 - extra || x > bounds.x1 + extra ||
+        y < bounds.y0 - extra || y > bounds.y1 + extra) return false;
     if (cached_version_ != entity_->version) return hit_test(*entity_, x, y, tolerance);
     if (!cached_hit_path_ || hit_tolerance_ != tolerance) {
         QPainterPathStroker stroker;
         stroker.setWidth(2 * tolerance);
         QPainterPath hit_path = path();
         if (extension_item_) hit_path.addPath(extension_item_->path());
+        if (dimension_label_) {
+            QPainterPath label_path;
+            label_path.addRect(dimension_label_->mapRectToParent(dimension_label_->boundingRect()));
+            hit_path.addPath(label_path);
+        }
         cached_hit_path_ = stroker.createStroke(hit_path);
         hit_tolerance_ = tolerance;
     }

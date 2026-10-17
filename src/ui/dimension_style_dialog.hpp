@@ -8,6 +8,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -31,14 +32,17 @@ class DimensionStyleDialog : public ResponsiveDialog {
     Q_OBJECT
 public:
     explicit DimensionStyleDialog(const cad::DimensionStyle& style, int selected_count = 0, QWidget* parent = nullptr);
+    DimensionStyleDialog(const cad::DimensionStyle& style, int selected_count,
+                         std::optional<double> initial_offset, QWidget* parent = nullptr);
     ~DimensionStyleDialog() override = default;
 
     cad::DimensionStyle result_style() const;
+    std::optional<double> result_offset() const;
     bool apply_to_selected() const;
 
 private:
     QFormLayout* add_tab(const QString& title);
-    void build_lines_tab(const cad::DimensionStyle& current);
+    void build_lines_tab(const cad::DimensionStyle& current, std::optional<double> initial_offset);
     void build_arrows_tab(const cad::DimensionStyle& current);
     void build_text_tab(const cad::DimensionStyle& current);
     void build_fit_tab(const cad::DimensionStyle& current);
@@ -72,6 +76,8 @@ private:
 
     QSpinBox* precision_ = nullptr;
     QCheckBox* show_unit_ = nullptr;
+    QLineEdit* prefix_ = nullptr;
+    QLineEdit* suffix_ = nullptr;
 
     QCheckBox* alternate_units_ = nullptr;
     QSpinBox* alternate_precision_ = nullptr;
@@ -80,6 +86,7 @@ private:
     QDoubleSpinBox* tolerance_upper_ = nullptr;
     QDoubleSpinBox* tolerance_lower_ = nullptr;
 
+    QDoubleSpinBox* offset_control_ = nullptr;
     QCheckBox* apply_selected_ = nullptr;
 };
 

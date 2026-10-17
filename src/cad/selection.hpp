@@ -21,6 +21,9 @@ class Document;
 // abaixo da precisao de qualquer fresa e acima do ruido de arredondamento de PDF e DXF.
 inline constexpr double kDupTol = 0.01;
 
+// Camada de cotas reservada para anotações, bloqueada para percursos de usinagem.
+bool is_cota_layer(const std::string& layer);
+
 // Guia e cota nao sao vetores: nao se cortam, nao entram nas selecoes. Guia e a linha que
 // sai da regua; cota e a medida escrita ao lado da peca. O filtro e por tipo e esta num
 // lugar so - aqui.

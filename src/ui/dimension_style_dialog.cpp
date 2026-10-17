@@ -42,8 +42,12 @@ void ColorButton::refresh() {
 }
 
 DimensionStyleDialog::DimensionStyleDialog(const cad::DimensionStyle& style, int selected_count, QWidget* parent)
+    : DimensionStyleDialog(style, selected_count, std::nullopt, parent) {}
+
+DimensionStyleDialog::DimensionStyleDialog(const cad::DimensionStyle& style, int selected_count,
+                                           std::optional<double> initial_offset, QWidget* parent)
     : ResponsiveDialog(parent) {
-    setWindowTitle("Modificar estilo de cotas");
+    setWindowTitle(selected_count == 1 ? "Editar cota" : "Modificar estilo de cotas");
     setMinimumSize(600, 440);
     resize(700, 500);
 
@@ -55,7 +59,7 @@ DimensionStyleDialog::DimensionStyleDialog(const cad::DimensionStyle& style, int
     tabs_->setObjectName("DimensionStyleTabs");
     root->addWidget(tabs_, 1);
 
-    build_lines_tab(style);
+    build_lines_tab(style, initial_offset);
     build_arrows_tab(style);
     build_text_tab(style);
     build_fit_tab(style);
@@ -64,7 +68,9 @@ DimensionStyleDialog::DimensionStyleDialog(const cad::DimensionStyle& style, int
     build_tolerances_tab(style);
 
     apply_selected_ = new QCheckBox(
-        QString("Aplicar também às %1 cotas selecionadas").arg(selected_count), this);
+        selected_count == 1
+            ? "Aplicar à cota selecionada"
+            : QString("Aplicar também às %1 cotas selecionadas").arg(selected_count), this);
     apply_selected_->setEnabled(selected_count > 0);
     apply_selected_->setChecked(selected_count > 0);
     root->addWidget(apply_selected_);
@@ -78,7 +84,7 @@ DimensionStyleDialog::DimensionStyleDialog(const cad::DimensionStyle& style, int
     cancel_btn->setMinimumHeight(32);
     connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
 
-    auto* ok_btn = new QPushButton("Salvar estilo", this);
+    auto* ok_btn = new QPushButton(selected_count == 1 ? "Salvar cota" : "Salvar estilo", this);
     ok_btn->setProperty("primary", true);
     ok_btn->setMinimumWidth(120);
     ok_btn->setMinimumHeight(32);
@@ -104,7 +110,8 @@ QFormLayout* DimensionStyleDialog::add_tab(const QString& title) {
     return form;
 }
 
-void DimensionStyleDialog::build_lines_tab(const cad::DimensionStyle& current) {
+void DimensionStyleDialog::build_lines_tab(const cad::DimensionStyle& current,
+                                          std::optional<double> initial_offset) {
     auto* page = new QWidget(tabs_);
     auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(14, 14, 14, 14);
@@ -128,6 +135,10 @@ void DimensionStyleDialog::build_lines_tab(const cad::DimensionStyle& current) {
     dim_form->setSpacing(8);
     dim_form->addRow("Cor", make_color_control(line_color_btn_, line_by_layer_));
     dim_form->addRow("Espessura", line_width_);
+    if (initial_offset.has_value()) {
+        offset_control_ = make_length_control(*initial_offset, -1000.0, 1000.0, 1.0, 1, " mm");
+        dim_form->addRow("Afastamento da linha (Offset)", offset_control_);
+    }
     layout->addWidget(dimension_box);
 
     auto* extension_box = new QGroupBox("Linhas de extensão", page);
@@ -192,8 +203,12 @@ void DimensionStyleDialog::build_primary_units_tab(const cad::DimensionStyle& cu
     precision_->setValue(current.precision);
     show_unit_ = new QCheckBox("Mostrar unidade no texto da cota");
     show_unit_->setChecked(current.show_unit);
+    prefix_ = new QLineEdit(QString::fromStdString(current.prefix));
+    suffix_ = new QLineEdit(QString::fromStdString(current.suffix));
     form->addRow("Casas decimais", precision_);
     form->addRow("", show_unit_);
+    form->addRow("Prefixo", prefix_);
+    form->addRow("Sufixo", suffix_);
 }
 
 void DimensionStyleDialog::build_alternate_units_tab(const cad::DimensionStyle& current) {
@@ -265,12 +280,19 @@ cad::DimensionStyle DimensionStyleDialog::result_style() const {
     s.text_gap = text_gap_->value();
     s.precision = precision_->value();
     s.show_unit = show_unit_->isChecked();
+    s.prefix = prefix_ ? prefix_->text().toStdString() : "";
+    s.suffix = suffix_ ? suffix_->text().toStdString() : "";
     s.alternate_units = alternate_units_->isChecked();
     s.alternate_precision = alternate_precision_->value();
     s.tolerance_mode = tolerance_mode_->currentData().toString().toStdString();
     s.tolerance_upper = tolerance_upper_->value();
     s.tolerance_lower = tolerance_lower_->value();
     return s;
+}
+
+std::optional<double> DimensionStyleDialog::result_offset() const {
+    if (offset_control_) return offset_control_->value();
+    return std::nullopt;
 }
 
 bool DimensionStyleDialog::apply_to_selected() const {

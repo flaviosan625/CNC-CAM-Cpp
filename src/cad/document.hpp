@@ -80,6 +80,7 @@ public:
     const Layer* get_layer(const std::string& name) const;
     Layer& add_layer(const std::string& name);
     bool remove_layer(const std::string& name);
+    void ensure_import_layers();
 
     // -- percursos --
     std::shared_ptr<cam::ToolpathJob> add_toolpath(std::shared_ptr<cam::ToolpathJob> job);

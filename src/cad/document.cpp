@@ -162,6 +162,17 @@ bool Document::remove_layer(const std::string& name) {
     return true;
 }
 
+void Document::ensure_import_layers() {
+    if (!get_layer("Cotas")) {
+        auto& lay = add_layer("Cotas");
+        lay.color = {0.31, 0.76, 0.97}; // soft cyan #4fc3f7
+    }
+    if (!get_layer("Linha de centro")) {
+        auto& lay = add_layer("Linha de centro");
+        lay.color = {1.0, 0.62, 0.26}; // orange #ff9f43
+    }
+}
+
 // -- percursos --
 
 std::shared_ptr<cam::ToolpathJob> Document::add_toolpath(std::shared_ptr<cam::ToolpathJob> job) {

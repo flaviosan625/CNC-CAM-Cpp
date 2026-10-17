@@ -318,6 +318,8 @@ struct DimensionStyle {
     std::string tolerance_mode = "none";
     double tolerance_upper = 0.0;
     double tolerance_lower = 0.0;
+    std::string prefix;
+    std::string suffix;
 };
 
 using Seg = std::pair<Pt, Pt>;

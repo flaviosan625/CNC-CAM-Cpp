@@ -3,6 +3,8 @@
 #include "ui/dimension_style_dialog.hpp"
 #include "cad/document.hpp"
 #include "cad/entities.hpp"
+#include "cad/selection.hpp"
+#include "cam/job.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -111,4 +113,104 @@ TEST_CASE("cad: Dimension formata label com o estilo configurado") {
     CHECK(formatted.find("100 mm ±0.2") != std::string::npos);
     CHECK(formatted.find("pol") != std::string::npos);
 }
+
+TEST_CASE("ui: DimensionStyleDialog com 1 cota selecionada permite editar offset, prefixo e sufixo") {
+    int argc = 0;
+    auto* app = QApplication::instance();
+    std::unique_ptr<QApplication> owned_app;
+    if (!app) {
+        owned_app = std::make_unique<QApplication>(argc, nullptr);
+        app = owned_app.get();
+    }
+
+    cad::DimensionStyle initial;
+    initial.prefix = "Ø";
+    initial.suffix = " H7";
+    std::optional<double> initial_offset = 25.0;
+
+    ui::DimensionStyleDialog dialog(initial, 1, initial_offset, nullptr);
+    CHECK(dialog.apply_to_selected() == true);
+    CHECK(dialog.result_offset().has_value());
+    CHECK(*dialog.result_offset() == doctest::Approx(25.0));
+
+    cad::DimensionStyle res = dialog.result_style();
+    CHECK(res.prefix == "Ø");
+    CHECK(res.suffix == " H7");
+}
+
+TEST_CASE("cad: ensure_import_layers cria camadas Cotas e Linha de centro automaticamente") {
+    cad::Document doc;
+    CHECK(doc.get_layer("Cotas") == nullptr);
+    CHECK(doc.get_layer("Linha de centro") == nullptr);
+
+    doc.ensure_import_layers();
+    const auto* cotas = doc.get_layer("Cotas");
+    const auto* centro = doc.get_layer("Linha de centro");
+
+    REQUIRE(cotas != nullptr);
+    REQUIRE(centro != nullptr);
+    CHECK(cotas->name == "Cotas");
+    CHECK(centro->name == "Linha de centro");
+}
+
+TEST_CASE("cam: Bloqueio estrito impede que cotas e camada Cotas virem percurso de usinagem") {
+    cad::Document doc;
+    doc.ensure_import_layers();
+
+    auto dim = std::make_shared<cad::Dimension>();
+    dim->x1 = 0; dim->y1 = 0; dim->x2 = 100; dim->y2 = 0;
+    dim->layer = "Cotas";
+    doc.add_entity(dim);
+
+    auto rect_on_cotas = std::make_shared<cad::Rectangle>();
+    rect_on_cotas->x = 10; rect_on_cotas->y = 10;
+    rect_on_cotas->width = 50; rect_on_cotas->height = 50;
+    rect_on_cotas->layer = "Cotas";
+    doc.add_entity(rect_on_cotas);
+
+    auto rect_on_peca = std::make_shared<cad::Rectangle>();
+    rect_on_peca->x = 200; rect_on_peca->y = 200;
+    rect_on_peca->width = 80; rect_on_peca->height = 80;
+    rect_on_peca->layer = "Peça";
+    doc.add_entity(rect_on_peca);
+
+    // 1. is_vector deve ser estritamente falso para Dimension e qualquer elemento na camada Cotas
+    CHECK_FALSE(cad::is_vector(*dim));
+    CHECK_FALSE(cad::is_vector(*rect_on_cotas));
+    CHECK(cad::is_vector(*rect_on_peca));
+
+    // 2. machinable_for deve filtrar e descartar cotas e elementos da camada Cotas
+    const auto mixed = std::vector<cad::EntityPtr>{dim, rect_on_cotas, rect_on_peca};
+    const auto valid = cad::machinable_for(mixed, cam::ToolpathType::Profile);
+    REQUIRE(valid.size() == 1);
+    CHECK(valid.front()->id == rect_on_peca->id);
+
+    const auto only_cotas = std::vector<cad::EntityPtr>{dim, rect_on_cotas};
+    CHECK(cad::machinable_for(only_cotas, cam::ToolpathType::Profile).empty());
+    CHECK(cad::machinable_for(only_cotas, cam::ToolpathType::Pocket).empty());
+    CHECK(cad::machinable_for(only_cotas, cam::ToolpathType::Drill).empty());
+
+    // 3. ToolpathJob::calculate deve falhar claramente caso receba apenas entidades da camada Cotas
+    auto job = std::make_shared<cam::ToolpathJob>();
+    job->kind = cam::ToolpathType::Profile;
+    job->name = "Perfil Teste";
+    job->entity_ids = {dim->id, rect_on_cotas->id};
+    doc.add_toolpath(job);
+
+    const auto errors = doc.recalculate_toolpaths(job);
+    CHECK_FALSE(errors.empty());
+    CHECK(job->results.empty());
+    CHECK(job->error.find("bloqueados para percursos") != std::string::npos);
+}
+
+TEST_CASE("cad: Dimension label inclui prefixo e sufixo configurados") {
+    cad::Dimension dim;
+    dim.x1 = 0; dim.y1 = 0; dim.x2 = 50; dim.y2 = 0;
+    dim.style.precision = 0;
+    dim.style.show_unit = false;
+    dim.style.prefix = "Ø";
+    dim.style.suffix = " mm";
+    CHECK(dim.format_label("mm", 1.0) == "Ø50 mm");
+}
+
 

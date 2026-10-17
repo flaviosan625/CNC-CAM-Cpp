@@ -767,6 +767,8 @@ std::string Dimension::format_label(const std::string& units, double unit_factor
             format_number(measure() / alternate_factor, style.alternate_precision);
         label += " [" + alternate_value + " " + alternate_units + "]";
     }
+    if (!style.prefix.empty()) label = style.prefix + label;
+    if (!style.suffix.empty()) label = label + style.suffix;
     return label;
 }
 
@@ -784,6 +786,9 @@ double Dimension::distance_to(double x, double y) const {
     for (const Seg& s : segments()) {
         best = std::min(best, seg_dist(x, y, s.first.x, s.first.y, s.second.x, s.second.y));
     }
+    const Pt lp = label_position();
+    const double d_label = std::hypot(x - lp.x, y - lp.y);
+    best = std::min(best, d_label);
     return best;
 }
 

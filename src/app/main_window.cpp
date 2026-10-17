@@ -1,11 +1,13 @@
 #include "app/main_window.hpp"
 #include "ui/theme.hpp"
+#include "ui/modeling_3d.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <set>
@@ -27,6 +29,7 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QFormLayout>
+#include <QFont>
 #include <QFrame>
 #include <QGroupBox>
 #include <QGridLayout>
@@ -993,6 +996,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
     view_tabs_->addTab("Vista 2D");
     view_tabs_->addTab("Vista 3D");
     view_tabs_->addTab("OS · Setup");
+    view_tabs_->addTab("Modelagem 3D");
     view_header_layout->addWidget(view_tabs_, 1);
 
     auto* view_3d_controls = new QWidget(view_header);
@@ -1056,40 +1060,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
         projection_3d_button_->setText(ortho ? "ORTO" : "PERSP");
         statusBar()->showMessage(ortho ? "Projecao ortografica" : "Projecao em perspectiva");
     });
-    simulation_validate_button_ = new QPushButton("Validar e simular", view_3d_controls);
-    simulation_validate_button_->setObjectName("View3DBtn");
-    simulation_validate_button_->setFixedHeight(28);
-    simulation_validate_button_->setToolTip("Gerar e conferir o G-Code dos percursos visíveis e simular o corte na Vista 3D");
-    view_3d_layout->addWidget(simulation_validate_button_);
-    connect(simulation_validate_button_, &QPushButton::clicked, this,
-            &MainWindow::validate_gcode_and_simulate);
-    simulation_play_button_ = new QToolButton(view_3d_controls);
-    simulation_play_button_->setObjectName("View3DBtn");
-    simulation_play_button_->setText("▶");
-    simulation_play_button_->setToolTip("Continuar simulação");
-    simulation_play_button_->setEnabled(false);
-    view_3d_layout->addWidget(simulation_play_button_);
-    connect(simulation_play_button_, &QToolButton::clicked, this, &MainWindow::play_simulation);
-    simulation_pause_button_ = new QToolButton(view_3d_controls);
-    simulation_pause_button_->setObjectName("View3DBtn");
-    simulation_pause_button_->setText("Ⅱ");
-    simulation_pause_button_->setToolTip("Pausar simulação");
-    simulation_pause_button_->setEnabled(false);
-    view_3d_layout->addWidget(simulation_pause_button_);
-    connect(simulation_pause_button_, &QToolButton::clicked, this, &MainWindow::pause_simulation);
-    simulation_restart_button_ = new QToolButton(view_3d_controls);
-    simulation_restart_button_->setObjectName("View3DBtn");
-    simulation_restart_button_->setText("↻");
-    simulation_restart_button_->setToolTip("Reiniciar simulação");
-    simulation_restart_button_->setEnabled(false);
-    view_3d_layout->addWidget(simulation_restart_button_);
-    connect(simulation_restart_button_, &QToolButton::clicked, this, &MainWindow::restart_simulation);
-    simulation_info_label_ = new QLabel("Simulação pronta para validar", view_3d_controls);
-    simulation_info_label_->setObjectName("MutedText");
-    simulation_info_label_->setMaximumWidth(190);
-    view_3d_layout->addWidget(simulation_info_label_);
     view_3d_controls->setVisible(false);
-    view_header_layout->addWidget(view_3d_controls);
 
     bridge_mode_banner_ = new QWidget(view_header);
     bridge_mode_banner_->setObjectName("BridgeModeBanner");
@@ -1126,9 +1097,146 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
     view_stack_->setObjectName("MainViewStack");
     view_stack_->addWidget(canvas_widget_);
 
-    viewport_3d_ = new vp::Viewport3D(central);
-    view_stack_->addWidget(viewport_3d_);
+    view_3d_page_ = new QWidget(central);
+    view_3d_page_->setObjectName("GCodeValidationPage");
+    auto* validation_page_layout = new QVBoxLayout(view_3d_page_);
+    validation_page_layout->setContentsMargins(8, 6, 8, 8);
+    validation_page_layout->setSpacing(6);
+
+    auto* validation_heading = new QLabel("VALIDAÇÃO DO G-CODE", view_3d_page_);
+    validation_heading->setObjectName("SectionHeader");
+    validation_page_layout->addWidget(validation_heading);
+
+    auto* validation_splitter = new QSplitter(Qt::Horizontal, view_3d_page_);
+    validation_splitter->setObjectName("GCodeValidationSplitter");
+
+    auto* code_panel = new QWidget(validation_splitter);
+    auto* code_layout = new QVBoxLayout(code_panel);
+    code_layout->setContentsMargins(0, 0, 4, 0);
+    auto* code_heading = new QLabel("PROGRAMA CNC", code_panel);
+    code_heading->setObjectName("SectionHeader");
+    code_layout->addWidget(code_heading);
+    gcode_preview_ = new QPlainTextEdit(code_panel);
+    gcode_preview_->setObjectName("GCodePreview");
+    gcode_preview_->setReadOnly(true);
+    gcode_preview_->setLineWrapMode(QPlainTextEdit::NoWrap);
+    gcode_preview_->setPlaceholderText("Valide os percursos para visualizar o G-Code gerado.");
+    QFont code_font("Consolas");
+    code_font.setStyleHint(QFont::Monospace);
+    code_font.setPointSize(9);
+    gcode_preview_->setFont(code_font);
+    code_layout->addWidget(gcode_preview_, 1);
+    code_panel->setMinimumWidth(205);
+    code_panel->setMaximumWidth(310);
+    validation_splitter->addWidget(code_panel);
+
+    auto* viewport_host = new QWidget(validation_splitter);
+    viewport_host->setObjectName("SimulationViewportHost");
+    auto* viewport_layout = new QGridLayout(viewport_host);
+    viewport_layout->setContentsMargins(0, 0, 0, 0);
+    viewport_layout->setSpacing(0);
+    viewport_3d_ = new vp::Viewport3D(viewport_host);
+    viewport_3d_->setMinimumSize(300, 260);
+    viewport_layout->addWidget(viewport_3d_, 0, 0);
+    view_3d_controls_->setParent(viewport_host);
+    view_3d_controls_->setObjectName("ViewportCameraControls");
+    view_3d_controls_->setStyleSheet(
+        "QWidget#ViewportCameraControls { background: rgba(25, 31, 39, 220); border: 1px solid #394451; border-radius: 5px; }");
+    viewport_layout->addWidget(view_3d_controls_, 0, 0, Qt::AlignTop | Qt::AlignRight);
+    validation_splitter->addWidget(viewport_host);
+
+    auto* checks_panel = new QWidget(validation_splitter);
+    checks_panel->setObjectName("GCodeChecksPanel");
+    checks_panel->setMinimumWidth(215);
+    checks_panel->setMaximumWidth(290);
+    auto* checks_layout = new QVBoxLayout(checks_panel);
+    checks_layout->setContentsMargins(8, 0, 0, 0);
+    auto* checks_heading = new QLabel("VERIFICAÇÕES", checks_panel);
+    checks_heading->setObjectName("SectionHeader");
+    checks_layout->addWidget(checks_heading);
+    const auto add_check = [checks_panel, checks_layout](const QString& initial) {
+        auto* label = new QLabel(initial, checks_panel);
+        label->setObjectName("ValidationCheck");
+        label->setWordWrap(true);
+        checks_layout->addWidget(label);
+        return label;
+    };
+    validation_file_label_ = add_check("◷  Arquivo gerado  ·  aguardando");
+    validation_bounds_label_ = add_check("◷  Coordenadas  ·  aguardando");
+    validation_depth_label_ = add_check("◷  Profundidade Z  ·  aguardando");
+    validation_rapid_label_ = add_check("◷  Movimentos rápidos  ·  aguardando");
+    validation_collision_label_ = add_check("—  Colisões  ·  não verificadas");
+    auto* summary_heading = new QLabel("RESUMO", checks_panel);
+    summary_heading->setObjectName("SectionHeader");
+    checks_layout->addWidget(summary_heading);
+    validation_summary_label_ = new QLabel("Tempo, percurso e dimensões aparecem após a validação.", checks_panel);
+    validation_summary_label_->setObjectName("MutedText");
+    validation_summary_label_->setWordWrap(true);
+    checks_layout->addWidget(validation_summary_label_);
+    checks_layout->addStretch();
+    validation_splitter->addWidget(checks_panel);
+    validation_splitter->setStretchFactor(0, 0);
+    validation_splitter->setStretchFactor(1, 1);
+    validation_splitter->setStretchFactor(2, 0);
+    validation_splitter->setSizes({250, 700, 250});
+    validation_page_layout->addWidget(validation_splitter, 1);
+
+    auto* bottom_bar = new QWidget(view_3d_page_);
+    bottom_bar->setObjectName("SimulationBottomBar");
+    auto* bottom_layout = new QHBoxLayout(bottom_bar);
+    bottom_layout->setContentsMargins(6, 5, 6, 5);
+    bottom_layout->setSpacing(6);
+    simulation_warning_label_ = new QLabel("Valide o G-Code para conferir o corte.", bottom_bar);
+    simulation_warning_label_->setObjectName("SimulationWarning");
+    simulation_warning_label_->setWordWrap(true);
+    bottom_layout->addWidget(simulation_warning_label_, 1);
+    simulation_info_label_ = new QLabel("00:00 / 00:00", bottom_bar);
+    simulation_info_label_->setMinimumWidth(96);
+    bottom_layout->addWidget(simulation_info_label_);
+    simulation_progress_ = new QProgressBar(bottom_bar);
+    simulation_progress_->setRange(0, 1000);
+    simulation_progress_->setValue(0);
+    simulation_progress_->setTextVisible(false);
+    simulation_progress_->setFixedWidth(105);
+    bottom_layout->addWidget(simulation_progress_);
+    simulation_play_button_ = new QToolButton(bottom_bar);
+    simulation_play_button_->setText("▶");
+    simulation_play_button_->setToolTip("Continuar simulação");
+    simulation_play_button_->setEnabled(false);
+    bottom_layout->addWidget(simulation_play_button_);
+    simulation_pause_button_ = new QToolButton(bottom_bar);
+    simulation_pause_button_->setText("Ⅱ");
+    simulation_pause_button_->setToolTip("Pausar simulação");
+    simulation_pause_button_->setEnabled(false);
+    bottom_layout->addWidget(simulation_pause_button_);
+    simulation_restart_button_ = new QToolButton(bottom_bar);
+    simulation_restart_button_->setText("↻");
+    simulation_restart_button_->setToolTip("Reiniciar simulação");
+    simulation_restart_button_->setEnabled(false);
+    bottom_layout->addWidget(simulation_restart_button_);
+    simulation_validate_button_ = new QPushButton("Validar e simular", bottom_bar);
+    simulation_validate_button_->setProperty("primary", true);
+    simulation_validate_button_->setMinimumHeight(34);
+    bottom_layout->addWidget(simulation_validate_button_);
+    auto* save_report_button = new QPushButton("Salvar relatório", bottom_bar);
+    bottom_layout->addWidget(save_report_button);
+    auto* back_to_2d_button = new QPushButton("Voltar", bottom_bar);
+    bottom_layout->addWidget(back_to_2d_button);
+    validation_page_layout->addWidget(bottom_bar);
+
+    connect(simulation_validate_button_, &QPushButton::clicked, this,
+            &MainWindow::validate_gcode_and_simulate);
+    connect(simulation_play_button_, &QToolButton::clicked, this, &MainWindow::play_simulation);
+    connect(simulation_pause_button_, &QToolButton::clicked, this, &MainWindow::pause_simulation);
+    connect(simulation_restart_button_, &QToolButton::clicked, this, &MainWindow::restart_simulation);
+    connect(save_report_button, &QPushButton::clicked, this, &MainWindow::save_simulation_report);
+    connect(back_to_2d_button, &QPushButton::clicked, this, [this] {
+        if (view_tabs_) view_tabs_->setCurrentIndex(0);
+    });
+    view_stack_->addWidget(view_3d_page_);
     create_order_service_page();
+    modeling_3d_page_ = new ui::Modeling3DWorkspace(view_stack_);
+    view_stack_->addWidget(modeling_3d_page_);
     layout->addWidget(view_stack_, 1);
     setCentralWidget(central);
     setDockNestingEnabled(false);
@@ -1174,6 +1282,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
         }
         if (view_stack_) view_stack_->setCurrentIndex(index);
         if (view_3d_controls_) view_3d_controls_->setVisible(index == 1);
+        for (QDockWidget* dock : findChildren<QDockWidget*>()) {
+            if (dock->objectName() == "ToolPanel") {
+                if (index == 1 || index == 3) {
+                    tool_dock_was_visible_before_3d_ = dock->isVisible();
+                    dock->hide();
+                } else if (tool_dock_was_visible_before_3d_) {
+                    dock->show();
+                }
+            }
+        }
+        if (toolpath_dock_) {
+            if (index == 1 || index == 3) {
+                path_dock_was_visible_before_3d_ = toolpath_dock_->isVisible();
+                toolpath_dock_->hide();
+            } else if (path_dock_was_visible_before_3d_) {
+                toolpath_dock_->show();
+            }
+        }
         if (index == 1 && viewport_3d_) {
             QTimer::singleShot(120, this, [this] { refresh_3d_view(); });
         }
@@ -2141,7 +2267,6 @@ void MainWindow::create_toolpath_panel() {
     simulation_operation_label_ = simulation_info_label_;
     simulation_step_button_ = nullptr;
     simulation_finish_button_ = nullptr;
-    simulation_progress_ = nullptr;
     simulation_timer_ = new QTimer(this);
     simulation_timer_->setInterval(16);
     connect(simulation_timer_, &QTimer::timeout, this, &MainWindow::update_simulation);
@@ -2377,6 +2502,21 @@ void MainWindow::refresh_toolpaths() {
     }
     if (simulation_timer_ && simulation_timer_->isActive()) simulation_timer_->stop();
     simulation_.reset();
+    validated_gcode_.clear();
+    if (gcode_preview_) gcode_preview_->clear();
+    for (QLabel* label : {validation_file_label_, validation_bounds_label_, validation_depth_label_,
+                          validation_rapid_label_}) {
+        if (label) {
+            label->setStyleSheet("color: #aab6c5;");
+            label->setText("◷  Aguardando validação");
+        }
+    }
+    if (validation_summary_label_)
+        validation_summary_label_->setText("Os dados serão calculados quando o G-Code for validado.");
+    if (simulation_warning_label_) {
+        simulation_warning_label_->setText("Os percursos mudaram. Valide novamente antes de simular.");
+        simulation_warning_label_->setStyleSheet("color: #aab6c5;");
+    }
     refresh_simulation_status();
     const int old_row = toolpath_list_->currentRow();
     QSignalBlocker blocker(toolpath_list_);
@@ -2814,7 +2954,7 @@ bool MainWindow::apply_bridge_preparation(cam::ToolpathJob& job) {
 }
 
 void MainWindow::refresh_3d_view() {
-    if (!viewport_3d_ || (view_stack_ && view_stack_->currentWidget() != viewport_3d_)) return;
+    if (!viewport_3d_ || (view_stack_ && view_stack_->currentWidget() != view_3d_page_)) return;
 #if !defined(CNC_HAVE_VTK)
     if (!viewport_3d_->isValid()) return;
 #endif
@@ -4873,12 +5013,21 @@ bool MainWindow::configure_toolpath(cam::ToolpathJob& destination) {
 
 void MainWindow::add_toolpath_from_panel() {
     const auto selected = document_.selected_entities();
-    std::vector<std::string> ids;
-    for (const auto& entity : selected) ids.push_back(entity->id);
-
     const auto kind = toolpath_type_combo_
                           ? static_cast<cam::ToolpathType>(toolpath_type_combo_->currentData().toInt())
                           : toolpath_panel_kind_;
+
+    const auto valid_entities = cad::machinable_for(selected, kind);
+    if (!selected.empty() && valid_entities.empty()) {
+        statusBar()->showMessage(
+            "Cotas e elementos da camada 'Cotas' são apenas de anotação e estão bloqueados para percursos de usinagem.",
+            6000);
+        return;
+    }
+
+    std::vector<std::string> ids;
+    for (const auto& entity : valid_entities) ids.push_back(entity->id);
+
     auto job = std::make_shared<cam::ToolpathJob>();
     job->kind = kind;
     job->settings = cam::default_settings(kind);
@@ -5081,8 +5230,33 @@ void MainWindow::toggle_simulation() {
 }
 
 void MainWindow::validate_gcode_and_simulate() {
-    const auto paths = cam::calculated_toolpaths(document_.toolpaths);
+    if (simulation_timer_) simulation_timer_->stop();
+    simulation_.reset();
+    validated_gcode_.clear();
+    if (gcode_preview_) gcode_preview_->clear();
+    for (QLabel* label : {validation_file_label_, validation_bounds_label_, validation_depth_label_,
+                          validation_rapid_label_}) {
+        if (label) {
+            label->setStyleSheet("color: #aab6c5;");
+            label->setText("◷  Aguardando validação");
+        }
+    }
+    if (validation_collision_label_)
+        validation_collision_label_->setText("—  Colisões · não verificadas");
+    if (validation_summary_label_)
+        validation_summary_label_->setText("Os dados serão calculados quando o G-Code for validado.");
+    if (simulation_warning_label_)
+        simulation_warning_label_->setText("Valide o G-Code para conferir o corte.");
+    refresh_3d_view();
+    std::vector<const cam::Toolpath*> paths;
+    for (const auto& job : document_.toolpaths) {
+        if (!job || !job->visible || !job->calculated() || !job->error.empty()) continue;
+        for (const auto& path : job->results)
+            if (path.visible) paths.push_back(&path);
+    }
     if (paths.empty()) {
+        if (simulation_warning_label_)
+            simulation_warning_label_->setText("Nenhum percurso visível para conferir.");
         statusBar()->showMessage("Calcule e deixe visível pelo menos um percurso antes de validar.");
         return;
     }
@@ -5103,6 +5277,8 @@ void MainWindow::validate_gcode_and_simulate() {
     try {
         code = cam::generate_gcode(paths, document_.material, settings, document_.title());
     } catch (const std::exception& error) {
+        if (validation_file_label_) validation_file_label_->setText("✕  Falha ao gerar G-Code");
+        if (simulation_warning_label_) simulation_warning_label_->setText("Não foi possível gerar o G-Code.");
         QMessageBox::warning(this, "Validação do G-Code", QString::fromUtf8(error.what()));
         return;
     }
@@ -5121,8 +5297,15 @@ void MainWindow::validate_gcode_and_simulate() {
             problems << "Não foram encontrados movimentos G0/G1.";
     }
     size_t move_count = 0;
+    size_t rapid_count = 0;
+    double rapid_length = 0.0;
+    double cut_length = 0.0;
+    double min_z = std::numeric_limits<double>::infinity();
+    bool rapid_near_stock = false;
     for (const auto* path : paths) {
         if (!path) continue;
+        bool have_previous = false;
+        double previous_x = 0.0, previous_y = 0.0, previous_z = 0.0;
         for (const auto& move : path->moves) {
             if (move.kind == cam::MoveKind::Dwell) continue;
             ++move_count;
@@ -5130,23 +5313,113 @@ void MainWindow::validate_gcode_and_simulate() {
                 problems << "Há movimento com coordenada inválida no percurso interno.";
                 break;
             }
+            min_z = std::min(min_z, move.z);
+            if (move.kind == cam::MoveKind::Rapid) {
+                ++rapid_count;
+                if (move.z < material.surface_z() + 1.0) rapid_near_stock = true;
+            }
+            if (have_previous) {
+                const double dx = move.x - previous_x;
+                const double dy = move.y - previous_y;
+                const double dz = move.z - previous_z;
+                const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (move.kind == cam::MoveKind::Rapid) rapid_length += length;
+                else cut_length += length;
+            }
+            previous_x = move.x;
+            previous_y = move.y;
+            previous_z = move.z;
+            have_previous = true;
         }
     }
     if (move_count == 0) problems << "Os percursos não contêm movimentos para simular.";
     if (!problems.isEmpty()) {
+        if (validation_file_label_) validation_file_label_->setText("✕  Validação não concluída");
+        if (simulation_warning_label_) simulation_warning_label_->setText("Corrija os problemas antes de simular.");
         statusBar()->showMessage("Validação interrompida: " + problems.join(" "));
         QMessageBox::warning(this, "Validação do G-Code", problems.join("\n"));
         return;
     }
 
+    const bool depth_ok = min_z >= material.surface_z() - material.thickness - 0.05;
+    const QString file_status = QString("✓  G-Code gerado · %1 linhas")
+                                    .arg(static_cast<qulonglong>(std::count(code.begin(), code.end(), '\n')));
+    const QString coords_status = QString("✓  Coordenadas válidas · %1 movimentos")
+                                      .arg(static_cast<qulonglong>(move_count));
+    const QString depth_status = depth_ok
+        ? QString("✓  Profundidade Z · dentro do material")
+        : QString("⚠  Profundidade Z · abaixo da espessura da chapa");
+    const QString rapid_status = rapid_near_stock
+        ? QString("⚠  Movimentos rápidos · %1 · próximos ao material").arg(static_cast<qulonglong>(rapid_count))
+        : QString("✓  Movimentos rápidos · %1 · sem alerta de altura").arg(static_cast<qulonglong>(rapid_count));
+    const auto set_check = [](QLabel* label, const QString& text, const QString& color) {
+        if (!label) return;
+        label->setText(text);
+        label->setStyleSheet(QString("color: %1;").arg(color));
+    };
+    set_check(validation_file_label_, file_status, "#4ade80");
+    set_check(validation_bounds_label_, coords_status, "#4ade80");
+    set_check(validation_depth_label_, depth_status, depth_ok ? "#4ade80" : "#f6c453");
+    set_check(validation_rapid_label_, rapid_status, rapid_near_stock ? "#f6c453" : "#4ade80");
+    set_check(validation_collision_label_,
+              "—  Colisões · não verificadas (sem modelo da máquina)", "#9aa4b2");
+    if (gcode_preview_) gcode_preview_->setPlainText(QString::fromStdString(code));
+    validated_gcode_ = code;
+    double estimated_seconds = 0.0;
+    for (const auto* path : paths) if (path) estimated_seconds += path->estimated_seconds();
+    if (validation_summary_label_) {
+        validation_summary_label_->setText(
+            QString("Tempo estimado\t%1\nPercurso de usinagem\t%2 m\nMovimentos rápidos\t%3 m\n\nEstoque\nX  %4 mm\nY  %5 mm\nZ  %6 mm")
+                .arg(format_simulation_time(estimated_seconds))
+                .arg(cut_length / 1000.0, 0, 'f', 2)
+                .arg(rapid_length / 1000.0, 0, 'f', 2)
+                .arg(material.width, 0, 'f', 1)
+                .arg(material.height, 0, 'f', 1)
+                .arg(material.thickness, 0, 'f', 1));
+    }
+    if (simulation_warning_label_) {
+        simulation_warning_label_->setText(rapid_near_stock
+            ? "⚠ Movimento rápido próximo ao material; confira antes de usinar."
+            : "G-Code gerado e movimentos básicos conferidos; colisões não verificadas.");
+        simulation_warning_label_->setStyleSheet(rapid_near_stock ? "color: #f6c453;" : "color: #aab6c5;");
+    }
     const QString limitation = settings.post == cam::PostProcessor::VectricAspire
-        ? "Pós Aspire: conferidos geração e movimentos internos; formato do pós personalizado não foi auditado."
-        : "Formato básico e movimentos internos conferidos; colisões, fixação e limites da máquina não são verificados.";
+        ? "Pós Aspire personalizado: a saída do pós não foi interpretada linha a linha."
+        : "A checagem não simula controlador, fixação ou colisões.";
     statusBar()->showMessage(
         QString("G-Code gerado e validado: %1 movimento(s). %2")
             .arg(static_cast<qulonglong>(move_count)).arg(limitation), 10000);
     begin_simulation("visible");
     if (simulation_) play_simulation();
+}
+
+void MainWindow::save_simulation_report() {
+    if (validated_gcode_.empty()) {
+        statusBar()->showMessage("Valide o G-Code antes de salvar o relatório.");
+        return;
+    }
+    const QString path = QFileDialog::getSaveFileName(
+        this, "Salvar relatório da simulação", "validacao_gcode.txt", "Relatório CNC (*.txt)");
+    if (path.isEmpty()) return;
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QMessageBox::warning(this, "Salvar relatório", file.errorString());
+        return;
+    }
+    QString report = QString("VALIDAÇÃO DO G-CODE — CNC-CAM\nPeça: %1\nMaterial: %2 × %3 × %4 mm\n\n")
+                         .arg(QString::fromStdString(document_.title()))
+                         .arg(document_.material.width, 0, 'g', 10)
+                         .arg(document_.material.height, 0, 'g', 10)
+                         .arg(document_.material.thickness, 0, 'g', 10);
+    report += "Verificações:\n";
+    for (const QLabel* check : {validation_file_label_, validation_bounds_label_, validation_depth_label_,
+                                 validation_rapid_label_, validation_collision_label_}) {
+        if (check) report += check->text() + "\n";
+    }
+    report += "\nOs limites físicos da máquina e a fixação não foram verificados.\n\n";
+    report += "--- G-CODE GERADO ---\n" + QString::fromStdString(validated_gcode_);
+    file.write(report.toUtf8());
+    statusBar()->showMessage(QString("Relatório salvo: %1").arg(path));
 }
 
 void MainWindow::begin_simulation(const QString& scope) {
@@ -6465,6 +6738,7 @@ void MainWindow::export_svg() {
 
 void MainWindow::import_files(const QStringList& paths) {
     if (paths.isEmpty()) return;
+    document_.ensure_import_layers();
     if (paths.size() == 1) {
         import_file(paths.first());
         return;
@@ -6520,6 +6794,7 @@ void MainWindow::import_files(const QStringList& paths) {
 
 void MainWindow::import_file(const QString& path) {
     if (path.isEmpty()) return;
+    document_.ensure_import_layers();
     try {
         auto entities = io::import_file(std::filesystem::path(path.toStdWString()));
         if (entities.empty()) {
@@ -6553,6 +6828,7 @@ void MainWindow::import_file(const QString& path) {
 void MainWindow::import_folder() {
     const QString folder = QFileDialog::getExistingDirectory(this, "Importar pasta em lote");
     if (folder.isEmpty()) return;
+    document_.ensure_import_layers();
     try {
         const auto result = io::import_folder(std::filesystem::path(folder.toStdWString()));
         if (result.imported == 0) {
@@ -7114,6 +7390,13 @@ void MainWindow::manage_layers() {
 void MainWindow::quick_edit_entity(const QString& entity_id) {
     const cad::EntityPtr entity = document_.find_entity(entity_id.toStdString());
     if (!entity) return;
+    if (auto dim = std::dynamic_pointer_cast<cad::Dimension>(entity)) {
+        document_.clear_selection();
+        dim->selected = true;
+        canvas_widget_->canvas->refresh_entities();
+        edit_dimension_style();
+        return;
+    }
     if (!ui::QuickEditPopup::supports(*entity)) {
         statusBar()->showMessage(
             QString("%1: use Editar nós para alterar ponto a ponto")
@@ -7850,22 +8133,31 @@ void MainWindow::edit_dimension_style() {
         ? selected_dimensions.front()->style
         : document_.dimension_style;
 
-    ui::DimensionStyleDialog dialog(initial_style, static_cast<int>(selected_dimensions.size()), this);
+    std::optional<double> initial_offset;
+    if (selected_dimensions.size() == 1) {
+        initial_offset = selected_dimensions.front()->offset;
+    }
+
+    ui::DimensionStyleDialog dialog(initial_style, static_cast<int>(selected_dimensions.size()), initial_offset, this);
     if (dialog.exec() == QDialog::Accepted) {
         const cad::DimensionStyle new_style = dialog.result_style();
+        const auto new_offset = dialog.result_offset();
         document_.dimension_style = new_style;
         document_.modified = true;
         if (dialog.apply_to_selected() && !selected_dimensions.empty()) {
             std::vector<cad::EntityPtr> targets;
             for (const auto& d : selected_dimensions) targets.push_back(d);
-            tool_context_.transform(targets, [new_style](cad::Entity& e) {
+            tool_context_.transform(targets, [new_style, new_offset](cad::Entity& e) {
                 if (auto* dim = dynamic_cast<cad::Dimension*>(&e)) {
                     dim->style = new_style;
+                    if (new_offset.has_value()) {
+                        dim->offset = *new_offset;
+                    }
                 }
-            }, "Alterar estilo das cotas");
+            }, selected_dimensions.size() == 1 ? "Editar cota" : "Alterar estilo das cotas");
         }
         canvas_widget_->canvas->refresh_entities();
-        statusBar()->showMessage("Estilo das cotas atualizado");
+        statusBar()->showMessage(selected_dimensions.size() == 1 ? "Cota atualizada" : "Estilo das cotas atualizado");
     }
 }
 

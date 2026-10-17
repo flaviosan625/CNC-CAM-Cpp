@@ -13,14 +13,33 @@
 namespace cnc::app {
 
 void MainWindow::classify_imported_entities(const std::vector<cad::EntityPtr>& entities) {
+    document_.ensure_import_layers();
     if (!document_.preparation.contains("roles") || !document_.preparation["roles"].is_object())
         document_.preparation["roles"] = Json::object();
     std::map<std::string, cad::EntityPtr> by_id;
     for (const auto& entity : entities) if (entity) by_id.emplace(entity->id, entity);
 
+    auto is_cota_layer_name = [](const std::string& name) {
+        std::string lower = name;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return lower == "cotas" || lower == "cota" || lower == "dimension" || lower == "dimensions" || lower == "dim";
+    };
+    auto is_centerline_layer_name = [](const std::string& name) {
+        std::string lower = name;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return lower == "linha de centro" || lower == "linha_de_centro" || lower == "linhadecentro" ||
+               lower == "center" || lower == "centerline" || lower == "center_line" ||
+               lower == "centro" || lower == "eixo" || lower == "axis";
+    };
     auto is_recess_layer_name = [](const std::string& name) {
         std::string lower = name;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
         return lower.find("rebaixo") != std::string::npos ||
                lower.find("pocket") != std::string::npos ||
                lower.find("cava") != std::string::npos ||
@@ -29,11 +48,26 @@ void MainWindow::classify_imported_entities(const std::vector<cad::EntityPtr>& e
                lower.find("usinagem") != std::string::npos;
     };
 
+    // Primeiro garante que cotas e linhas de centro estejam nas camadas dedicadas
+    for (const auto& entity : entities) {
+        if (!entity) continue;
+        if (cad::is_a<cad::Dimension>(*entity) || is_cota_layer_name(entity->layer)) {
+            entity->layer = "Cotas";
+            document_.preparation["roles"][entity->id] = "annotation";
+        } else if (is_centerline_layer_name(entity->layer)) {
+            entity->layer = "Linha de centro";
+            document_.preparation["roles"][entity->id] = "centerline";
+        }
+    }
+
     const auto assignments = io::classify_imported_operations(entities);
     for (const auto& assignment : assignments) {
         const auto found = by_id.find(assignment.entity_id);
         if (found == by_id.end()) continue;
         auto& entity = found->second;
+        if (entity->layer == "Cotas" || cad::is_a<cad::Dimension>(*entity) || entity->layer == "Linha de centro") {
+            continue;
+        }
         if (is_recess_layer_name(entity->layer)) {
             if (!document_.get_layer("REBAIXO")) document_.add_layer("REBAIXO");
             entity->layer = "REBAIXO";
@@ -74,6 +108,7 @@ void MainWindow::refresh_import_preparation() {
 }
 
 void MainWindow::begin_import_preparation() {
+    document_.ensure_import_layers();
     refresh_import_preparation();
     if (!import_setup_panel_) return;
     import_preparation_pending_ = true;
