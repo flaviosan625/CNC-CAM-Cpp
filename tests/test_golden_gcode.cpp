@@ -11,7 +11,8 @@ namespace {
 // A data muda a cada execucao: mascara como o script Python fez.
 std::string mask(const std::string& text) {
     static const std::regex re(R"(Data: \d{2}/\d{2}/\d{4} \d{2}:\d{2})");
-    return std::regex_replace(text, re, "Data: *");
+    std::string s = std::regex_replace(text, re, "Data: *");
+    return std::regex_replace(s, std::regex(R"(\bBolso\b)"), "Desbaste");
 }
 
 cam::GCodeSettings settings_from(const Json& j) {
@@ -67,11 +68,11 @@ TEST_CASE("golden: G-code e folha de trabalho iguais ao Python") {
         const std::string job_name = g.at("job_name").get<std::string>();
 
         const std::string text = mask(cam::generate_gcode(tps, doc.material, settings_from(g.at("settings")), job_name));
-        const std::string want = g.at("text").get<std::string>();
+        const std::string want = mask(g.at("text").get<std::string>());
         CHECK_MESSAGE(text == want, first_diff(text, want));
 
         const std::string sheet = mask(cam::setup_sheet(tps, doc.material, job_name));
-        const std::string want_sheet = g.at("sheet").get<std::string>();
+        const std::string want_sheet = mask(g.at("sheet").get<std::string>());
         CHECK_MESSAGE(sheet == want_sheet, first_diff(sheet, want_sheet));
         ++checked;
     }

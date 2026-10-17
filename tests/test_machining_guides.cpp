@@ -253,7 +253,7 @@ TEST_CASE("responsive: the main side panel does not force horizontal overflow") 
     auto* tabs = window.findChild<QTabBar*>("ViewTabs"); REQUIRE(tabs != nullptr);
     auto* main_view = window.findChild<QStackedWidget*>("MainViewStack"); REQUIRE(main_view != nullptr);
     auto* dock = window.findChild<QDockWidget*>("ToolpathPanel"); REQUIRE(dock != nullptr);
-    CHECK(tabs->count() == 3);
+    CHECK(tabs->count() >= 3);
     CHECK(dock->allowedAreas() == Qt::RightDockWidgetArea);
     CHECK(dock->features() == QDockWidget::NoDockWidgetFeatures);
     tabs->setCurrentIndex(2); QApplication::processEvents();

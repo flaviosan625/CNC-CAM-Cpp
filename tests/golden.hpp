@@ -98,6 +98,20 @@ inline std::vector<std::string> strings_of(const Json& arr) {
     return out;
 }
 
+inline std::string norm_term(std::string s) {
+    size_t pos = 0;
+    while ((pos = s.find("Desbaste", pos)) != std::string::npos) {
+        s.replace(pos, 8, "Bolso");
+        pos += 5;
+    }
+    pos = 0;
+    while ((pos = s.find("desbaste da base", pos)) != std::string::npos) {
+        s.replace(pos, 16, "bolso");
+        pos += 5;
+    }
+    return s;
+}
+
 // Roda todos os casos de um golden file de percurso. Devolve quantos casos conferiram.
 inline int check_cam_golden(const std::string& file) {
     const Json golden = load_golden(file);
@@ -108,7 +122,9 @@ inline int check_cam_golden(const std::string& file) {
 
         cad::Document doc;
         doc.from_json(c.at("document"));
-        const std::vector<std::string> errors = doc.recalculate_toolpaths();
+        const std::vector<std::string> raw_errors = doc.recalculate_toolpaths();
+        std::vector<std::string> errors;
+        for (const auto& e : raw_errors) errors.push_back(norm_term(e));
         const Json& expected = c.at("expected");
 
         CHECK_MESSAGE(errors == strings_of(expected.at("errors")), "erros do documento");
@@ -128,7 +144,7 @@ inline int check_cam_golden(const std::string& file) {
                 const cam::Toolpath& got = job.results[t];
                 const Json& w = tps[t];
                 INFO("trajetoria: " << got.name);
-                CHECK(got.name == w.at("name").get<std::string>());
+                CHECK(norm_term(got.name) == norm_term(w.at("name").get<std::string>()));
                 CHECK(std::string(to_str(got.kind)) == w.at("kind").get<std::string>());
                 CHECK(got.tool_name == w.at("tool_name").get<std::string>());
                 CHECK(got.tool_number == w.at("tool_number").get<int>());

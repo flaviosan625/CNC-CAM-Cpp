@@ -94,9 +94,16 @@ EndCondition parse_end(const std::string& s) {
 
 Mesh build_mesh(const Part& part) {
     Mesh mesh;
+    double max_w = 100.0, max_h = 60.0, top_z = 0.0;
+    bool has_extrusions = false;
+
     for (const auto& f : part.features) {
         if (f.suppressed) continue;
+        has_extrusions = true;
+        max_w = std::max(max_w, f.width);
+        max_h = std::max(max_h, f.height);
         const double d = resolved_depth(part, f) * (f.reverse ? -1.0 : 1.0);
+        top_z = std::max(top_z, f.start_z + (d > 0.0 ? d : 0.0));
         if (f.end == EndCondition::MidPlane || f.end == EndCondition::ThroughAllBoth) append_solid(mesh,f,f.start_z-d*.5,f.start_z+d*.5,f.draft_degrees);
         else {
             append_solid(mesh,f,f.start_z,f.start_z+d,f.draft_degrees);
@@ -104,6 +111,25 @@ Mesh build_mesh(const Part& part) {
                 append_solid(mesh,f,f.start_z,f.start_z-f.second_depth,f.draft_degrees);
         }
     }
+
+    if (!part.relief_components.empty()) {
+        for (const auto& rc : part.relief_components) {
+            if (!rc.visible) continue;
+            max_w = std::max(max_w, rc.pos_x + rc.width);
+            max_h = std::max(max_h, rc.pos_y + rc.height);
+        }
+        relief::LocalGrid composite;
+        relief::ReliefEngine::compose(part.relief_components, max_w, max_h, 0.5, composite);
+        if (!composite.empty()) {
+            const auto relief_mesh = relief::ReliefEngine::generate_mesh(composite, top_z);
+            const unsigned int v_offset = static_cast<unsigned int>(mesh.vertices.size() / 6);
+            mesh.vertices.insert(mesh.vertices.end(), relief_mesh.vertices.begin(), relief_mesh.vertices.end());
+            for (auto idx : relief_mesh.indices) {
+                mesh.indices.push_back(idx + v_offset);
+            }
+        }
+    }
+
     return mesh;
 }
 
@@ -111,6 +137,10 @@ bool save_part(const Part& part, const std::string& path, std::string* error) {
     try {
         json j; j["format"]="cnccam-part-v1"; j["name"]=part.name; j["features"]=json::array();
         for(const auto& f:part.features) j["features"].push_back({{"name",f.name},{"profile",profile_name(f.profile)},{"width",f.width},{"height",f.height},{"start_z",f.start_z},{"depth",f.depth},{"second_depth",f.second_depth},{"target_z",f.target_z},{"offset",f.offset},{"draft",f.draft_degrees},{"end",end_name(f.end)},{"reverse",f.reverse},{"second_direction",f.second_direction},{"suppressed",f.suppressed}});
+        j["relief_components"] = json::array();
+        for (const auto& rc : part.relief_components) {
+            j["relief_components"].push_back(rc.to_json());
+        }
         std::ofstream out(path,std::ios::binary); if(!out){if(error)*error="Não foi possível criar o arquivo.";return false;} out<<j.dump(2); return static_cast<bool>(out);
     } catch(const std::exception& e){if(error)*error=e.what();return false;}
 }
@@ -123,6 +153,11 @@ bool load_part(Part& part, const std::string& path, std::string* error) {
         for(const auto& x:j.at("features")){
             Extrusion f; f.name=x.value("name",std::string("Extrusão")); f.profile=parse_profile(x.value("profile",std::string("retangulo")));
             f.width=x.value("width",100.0);f.height=x.value("height",60.0);f.start_z=x.value("start_z",0.0);f.depth=x.value("depth",18.0);f.second_depth=x.value("second_depth",0.0);f.target_z=x.value("target_z",0.0);f.offset=x.value("offset",0.0);f.draft_degrees=x.value("draft",0.0);f.end=parse_end(x.value("end",std::string("cego")));f.reverse=x.value("reverse",false);f.second_direction=x.value("second_direction",false);f.suppressed=x.value("suppressed",false);candidate.features.push_back(std::move(f));
+        }
+        if (j.contains("relief_components") && j["relief_components"].is_array()) {
+            for (const auto& rc_json : j["relief_components"]) {
+                candidate.relief_components.push_back(relief::ReliefComponent::from_json(rc_json));
+            }
         }
         part=std::move(candidate);return true;
     }catch(const std::exception& e){if(error)*error=e.what();return false;}

@@ -3,7 +3,12 @@
 #include <string>
 #include <vector>
 
+#include "cad/mesh.hpp"
+#include "cad/relief.hpp"
+
 namespace cnc::cad::model3d {
+
+using Mesh = cad::Mesh;
 
 enum class Profile { Rectangle, Circle, Triangle, Hexagon };
 enum class EndCondition {
@@ -31,11 +36,7 @@ struct Extrusion {
 struct Part {
     std::string name = "Peça 1";
     std::vector<Extrusion> features;
-};
-
-struct Mesh {
-    std::vector<float> vertices; // XYZRGB
-    std::vector<unsigned int> indices;
+    std::vector<relief::ReliefComponent> relief_components;
 };
 
 Mesh build_mesh(const Part& part);
