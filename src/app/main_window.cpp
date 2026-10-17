@@ -1282,23 +1282,28 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
         }
         if (view_stack_) view_stack_->setCurrentIndex(index);
         if (view_3d_controls_) view_3d_controls_->setVisible(index == 1);
-        for (QDockWidget* dock : findChildren<QDockWidget*>()) {
-            if (dock->objectName() == "ToolPanel") {
-                if (index == 1 || index == 3) {
+        const bool hide_tool_docks = index == 1 || index == 3;
+        const bool docks_hidden_for_3d = property("toolDocksHiddenFor3D").toBool();
+        if (hide_tool_docks && !docks_hidden_for_3d) {
+            for (QDockWidget* dock : findChildren<QDockWidget*>()) {
+                if (dock->objectName() == "ToolPanel") {
                     tool_dock_was_visible_before_3d_ = dock->isVisible();
                     dock->hide();
-                } else if (tool_dock_was_visible_before_3d_) {
-                    dock->show();
                 }
             }
-        }
-        if (toolpath_dock_) {
-            if (index == 1 || index == 3) {
+            if (toolpath_dock_) {
                 path_dock_was_visible_before_3d_ = toolpath_dock_->isVisible();
                 toolpath_dock_->hide();
-            } else if (path_dock_was_visible_before_3d_) {
-                toolpath_dock_->show();
             }
+            setProperty("toolDocksHiddenFor3D", true);
+        } else if (!hide_tool_docks && docks_hidden_for_3d) {
+            for (QDockWidget* dock : findChildren<QDockWidget*>()) {
+                if (dock->objectName() == "ToolPanel")
+                    dock->setVisible(tool_dock_was_visible_before_3d_);
+            }
+            if (toolpath_dock_)
+                toolpath_dock_->setVisible(path_dock_was_visible_before_3d_);
+            setProperty("toolDocksHiddenFor3D", false);
         }
         if (index == 1 && viewport_3d_) {
             QTimer::singleShot(120, this, [this] { refresh_3d_view(); });
