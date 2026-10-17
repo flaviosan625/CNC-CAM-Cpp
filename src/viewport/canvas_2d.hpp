@@ -39,6 +39,12 @@
 #include "viewport/rotate_handles.hpp"
 #include "viewport/snapping.hpp"
 
+class UndoStack;
+
+namespace cnc::ui {
+class ContextualHudBar;
+}
+
 namespace cnc::vp {
 
 inline constexpr int kRulerSize = 28;
@@ -224,6 +230,11 @@ public:
     void clear_construction_preview();
     void show_measurement(const Pt& start, const Pt& end, const std::string& text) override;
     void clear_measurement() override;
+    void show_hud_input(const Pt& pos, const std::string& text, const std::string& hint = "") override;
+    void clear_hud_input() override;
+    void set_undo_stack(UndoStack* stack) { undo_stack_ = stack; }
+    void update_contextual_hud(const std::vector<cad::EntityPtr>& selection);
+    void hide_contextual_hud();
 
     // -- ICanvas --
     vp::SelectionHandles* selection_handles() override { return &handles; }
@@ -334,6 +345,10 @@ private:
     QGraphicsSimpleTextItem* angle_label_ = nullptr;
     QGraphicsPathItem* snap_item_ = nullptr;
     QGraphicsSimpleTextItem* snap_text_ = nullptr;
+    QGraphicsPathItem* hud_box_ = nullptr;
+    ui::ContextualHudBar* contextual_hud_ = nullptr;
+    UndoStack* undo_stack_ = nullptr;
+    void setup_hud_callbacks();
     // Cursor da alca sob o mouse: -1 = rotacao, senao o Qt::CursorShape.
     std::optional<int> hover_cursor_;
 };

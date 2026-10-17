@@ -30,6 +30,15 @@ struct FakeCanvas : tools::ICanvas {
     void set_selection_preview(const Points&, bool crossing_) override { crossing = crossing_; }
     void show_dimension_preview(const std::shared_ptr<cad::Dimension>& d) override { dimension = d; }
     void clear_preview() override {}
+    void show_hud_input(const Pt& pos, const std::string& text, const std::string& hint = "") override {
+        hud_pos = pos;
+        hud_text = text;
+        hud_hint = hint;
+    }
+    void clear_hud_input() override {
+        hud_text.clear();
+        hud_hint.clear();
+    }
     double pick_tolerance() const override { return 0.01; }
 
     Points preview;
@@ -37,6 +46,9 @@ struct FakeCanvas : tools::ICanvas {
     bool nodes = false;
     bool crossing = false;
     std::shared_ptr<cad::Dimension> dimension;
+    Pt hud_pos{};
+    std::string hud_text;
+    std::string hud_hint;
 };
 
 struct ToolFixture {

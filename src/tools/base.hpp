@@ -149,6 +149,10 @@ public:
     }
     virtual void clear_translation_preview() {}
     virtual void commit_translation_preview() {}
+    virtual void show_hud_input(const Pt& pos, const std::string& text, const std::string& hint = "") {
+        (void)pos; (void)text; (void)hint;
+    }
+    virtual void clear_hud_input() {}
     virtual void set_cursor(const QCursor& cursor) { (void)cursor; }
 };
 
@@ -200,6 +204,12 @@ public:
     }
     void clear_preview() {
         if (canvas) canvas->clear_preview();
+    }
+    void show_hud(const Pt& pos, const std::string& text, const std::string& hint = "") {
+        if (canvas) canvas->show_hud_input(pos, text, hint);
+    }
+    void clear_hud() {
+        if (canvas) canvas->clear_hud_input();
     }
     // Sinaliza que a ferramenta concluiu (volta para selecao).
     void finish() const { finished_fn(); }

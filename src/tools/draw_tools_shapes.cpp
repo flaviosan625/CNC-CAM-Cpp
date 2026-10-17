@@ -22,18 +22,33 @@ bool shift_or_ctrl(Qt::KeyboardModifiers mods) { return has(mods, Qt::ShiftModif
 // ======================================================================
 
 void DragTool::deactivate() {
+    clear_numeric_input();
     p0_.reset();
     BaseTool::deactivate();
 }
 
-bool DragTool::on_press(double wx, double wy, Qt::MouseButton button, Qt::KeyboardModifiers) {
+bool DragTool::on_press(double wx, double wy, Qt::MouseButton button, Qt::KeyboardModifiers mods) {
     if (button != Qt::LeftButton) return false;
+    if (p0_.has_value()) {
+        last_p1_ = Pt{wx, wy};
+        last_mods_ = mods;
+        return true;
+    }
     p0_ = Pt{wx, wy};
+    last_p1_ = Pt{wx, wy};
+    last_mods_ = mods;
+    clear_numeric_input();
     return true;
 }
 
 bool DragTool::on_move(double wx, double wy, Qt::KeyboardModifiers mods) {
     if (!p0_) return false;
+    last_p1_ = Pt{wx, wy};
+    last_mods_ = mods;
+    if (numeric_active_) {
+        update_numeric_preview();
+        return true;
+    }
     const Points pts = ghost(*p0_, {wx, wy}, mods);
     if (!pts.empty()) ctx->preview(pts, ghost_closed());
     return true;
@@ -41,16 +56,61 @@ bool DragTool::on_move(double wx, double wy, Qt::KeyboardModifiers mods) {
 
 bool DragTool::on_release(double wx, double wy, Qt::MouseButton button, Qt::KeyboardModifiers mods) {
     if (!p0_ || button != Qt::LeftButton) return false;
+    last_p1_ = Pt{wx, wy};
+    last_mods_ = mods;
+    if (numeric_active_) {
+        return true;
+    }
+    const double d = std::hypot(wx - p0_->x, wy - p0_->y);
+    const double tol = (ctx && ctx->canvas) ? ctx->canvas->pick_tolerance() * kPickPx : 1.0;
+    if (d < std::max(1e-4, tol)) {
+        return true;
+    }
     const Pt p0 = *p0_;
     p0_.reset();
     ctx->clear_preview();
-    if (hypot(wx - p0.x, wy - p0.y) < 1e-6) return true;
+    clear_numeric_input();
     const cad::EntityPtr ent = build(p0, {wx, wy}, mods);
     if (ent) {
         ctx->add(ent, label());
         ctx->status(label() + " criado");
     }
     return true;
+}
+
+bool DragTool::on_key(int key) {
+    if (handle_numeric_key(key)) return true;
+    return BaseTool::on_key(key);
+}
+
+void DragTool::clear_numeric_input() {
+    num_input_1_.clear();
+    num_input_2_.clear();
+    active_field_ = 0;
+    numeric_active_ = false;
+    ctx->clear_hud();
+}
+
+bool DragTool::handle_numeric_key(int key) {
+    if (!p0_) return false;
+
+    if (key == Qt::Key_Escape) {
+        if (numeric_active_) {
+            clear_numeric_input();
+            on_move(last_p1_.x, last_p1_.y, last_mods_);
+            return true;
+        }
+        p0_.reset();
+        clear_numeric_input();
+        ctx->clear_preview();
+        return false;
+    }
+
+    if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+        if (commit_numeric_input()) return true;
+    }
+
+    return false;
 }
 
 Points DragTool::ghost(const Pt& p0, const Pt& p1, Qt::KeyboardModifiers mods) const {
@@ -66,6 +126,133 @@ cad::EntityPtr CircleTool::build(const Pt& p0, const Pt& p1, Qt::KeyboardModifie
     c->cy = p0.y;
     c->radius = r;
     return c;
+}
+
+bool CircleTool::handle_numeric_key(int key) {
+    if (!p0_) return false;
+
+    if (key == Qt::Key_D) {
+        numeric_active_ = true;
+        is_diameter_ = true;
+        update_numeric_preview();
+        return true;
+    }
+    if (key == Qt::Key_R) {
+        numeric_active_ = true;
+        is_diameter_ = false;
+        update_numeric_preview();
+        return true;
+    }
+
+    if (key >= Qt::Key_0 && key <= Qt::Key_9) {
+        numeric_active_ = true;
+        num_input_1_ += static_cast<char>('0' + (key - Qt::Key_0));
+        update_numeric_preview();
+        return true;
+    }
+
+    if (key == Qt::Key_Period || key == Qt::Key_Comma) {
+        numeric_active_ = true;
+        if (num_input_1_.find('.') == std::string::npos) {
+            if (num_input_1_.empty()) num_input_1_ += "0";
+            num_input_1_ += '.';
+        }
+        update_numeric_preview();
+        return true;
+    }
+
+    if (key == Qt::Key_Backspace) {
+        if (numeric_active_) {
+            if (!num_input_1_.empty()) {
+                num_input_1_.pop_back();
+            }
+            if (num_input_1_.empty()) {
+                clear_numeric_input();
+                on_move(last_p1_.x, last_p1_.y, last_mods_);
+            } else {
+                update_numeric_preview();
+            }
+            return true;
+        }
+    }
+
+    return DragTool::handle_numeric_key(key);
+}
+
+void CircleTool::clear_numeric_input() {
+    is_diameter_ = false;
+    DragTool::clear_numeric_input();
+}
+
+void CircleTool::update_numeric_preview() {
+    if (!p0_) return;
+    double val = 0.0;
+    std::string s = num_input_1_;
+    bool is_diam = is_diameter_;
+    if (!s.empty() && (s[0] == 'd' || s[0] == 'D')) {
+        is_diam = true;
+        s = s.substr(1);
+    } else if (!s.empty() && (s[0] == 'r' || s[0] == 'R')) {
+        is_diam = false;
+        s = s.substr(1);
+    }
+
+    if (!s.empty()) {
+        try { val = std::stod(s); } catch (...) { val = 0.0; }
+    }
+
+    const double radius = is_diam ? (val / 2.0) : val;
+    if (radius > 1e-6) {
+        auto c = std::make_shared<cad::Circle>();
+        c->cx = p0_->x;
+        c->cy = p0_->y;
+        c->radius = radius;
+        ctx->preview(c->to_points(64), true);
+    }
+
+    std::string hud_text;
+    if (is_diam) {
+        hud_text = std::format("Diâmetro: [{}] mm (Raio: {:.2f} mm)", num_input_1_, radius);
+    } else {
+        hud_text = std::format("Raio: [{}] mm (Diâmetro: {:.2f} mm)", num_input_1_, radius * 2.0);
+    }
+    ctx->show_hud(last_p1_, hud_text, "[Enter] confirma · [D] diâmetro · [R] raio");
+    ctx->status(hud_text + " · [Enter] confirma");
+}
+
+bool CircleTool::commit_numeric_input() {
+    if (!p0_) return false;
+    double val = 0.0;
+    std::string s = num_input_1_;
+    bool is_diam = is_diameter_;
+    if (!s.empty() && (s[0] == 'd' || s[0] == 'D')) {
+        is_diam = true;
+        s = s.substr(1);
+    } else if (!s.empty() && (s[0] == 'r' || s[0] == 'R')) {
+        is_diam = false;
+        s = s.substr(1);
+    }
+
+    if (!s.empty()) {
+        try { val = std::stod(s); } catch (...) { val = 0.0; }
+    } else {
+        val = hypot(last_p1_.x - p0_->x, last_p1_.y - p0_->y);
+    }
+
+    const double radius = is_diam ? (val / 2.0) : val;
+    if (radius > 1e-6) {
+        auto c = std::make_shared<cad::Circle>();
+        c->cx = p0_->x;
+        c->cy = p0_->y;
+        c->radius = radius;
+        ctx->add(c, label());
+        ctx->status(std::format("Círculo criado: R {:.2f} mm", radius));
+        p0_.reset();
+        clear_numeric_input();
+        ctx->clear_preview();
+        return true;
+    }
+    return false;
 }
 
 cad::EntityPtr EllipseTool::build(const Pt& p0, const Pt& p1, Qt::KeyboardModifiers mods) const {
@@ -112,6 +299,149 @@ cad::EntityPtr RectangleTool::build(const Pt& p0, const Pt& p1, Qt::KeyboardModi
     r->height = h;
     r->corner_radius = corner_radius;
     return r;
+}
+
+bool RectangleTool::handle_numeric_key(int key) {
+    if (!p0_) return false;
+
+    if (key == Qt::Key_Tab) {
+        numeric_active_ = true;
+        active_field_ = (active_field_ == 0 ? 1 : 0);
+        update_numeric_preview();
+        return true;
+    }
+
+    if (key >= Qt::Key_0 && key <= Qt::Key_9) {
+        numeric_active_ = true;
+        const char ch = static_cast<char>('0' + (key - Qt::Key_0));
+        if (active_field_ == 0) num_input_1_ += ch;
+        else num_input_2_ += ch;
+        update_numeric_preview();
+        return true;
+    }
+
+    if (key == Qt::Key_Period || key == Qt::Key_Comma) {
+        numeric_active_ = true;
+        auto& target = (active_field_ == 0 ? num_input_1_ : num_input_2_);
+        if (target.find('.') == std::string::npos) {
+            if (target.empty()) target += "0";
+            target += '.';
+        }
+        update_numeric_preview();
+        return true;
+    }
+
+    if (key == Qt::Key_Backspace) {
+        if (numeric_active_) {
+            if (active_field_ == 1) {
+                if (!num_input_2_.empty()) {
+                    num_input_2_.pop_back();
+                } else {
+                    active_field_ = 0;
+                }
+            } else {
+                if (!num_input_1_.empty()) {
+                    num_input_1_.pop_back();
+                }
+            }
+            if (num_input_1_.empty() && num_input_2_.empty()) {
+                clear_numeric_input();
+                on_move(last_p1_.x, last_p1_.y, last_mods_);
+            } else {
+                update_numeric_preview();
+            }
+            return true;
+        }
+    }
+
+    return DragTool::handle_numeric_key(key);
+}
+
+void RectangleTool::update_numeric_preview() {
+    if (!p0_) return;
+    const double sign_x = (last_p1_.x >= p0_->x ? 1.0 : -1.0);
+    const double sign_y = (last_p1_.y >= p0_->y ? 1.0 : -1.0);
+
+    double w = 0.0;
+    if (!num_input_1_.empty()) {
+        try { w = std::stod(num_input_1_); } catch (...) { w = 0.0; }
+    } else {
+        w = std::fabs(last_p1_.x - p0_->x);
+    }
+
+    double h = 0.0;
+    if (!num_input_2_.empty()) {
+        try { h = std::stod(num_input_2_); } catch (...) { h = 0.0; }
+    } else {
+        h = std::fabs(last_p1_.y - p0_->y);
+        if (h < 1e-6 && w > 1e-6) h = w;
+    }
+
+    if (w > 1e-6 && h > 1e-6) {
+        const double x0 = p0_->x;
+        const double y0 = p0_->y;
+        const double x1 = x0 + sign_x * w;
+        const double y1 = y0 + sign_y * h;
+        auto r = std::make_shared<cad::Rectangle>();
+        r->x = std::min(x0, x1);
+        r->y = std::min(y0, y1);
+        r->width = w;
+        r->height = h;
+        r->corner_radius = corner_radius;
+        ctx->preview(r->to_points(64), true);
+    }
+
+    std::string hud_text;
+    if (active_field_ == 0) {
+        hud_text = std::format("Largura: [{}] mm   Altura: {:.2f} mm",
+                               num_input_1_.empty() ? std::format("{:.2f}", w) : num_input_1_, h);
+    } else {
+        hud_text = std::format("Largura: {:.2f} mm   Altura: [{}] mm",
+                               w, num_input_2_.empty() ? std::format("{:.2f}", h) : num_input_2_);
+    }
+    ctx->show_hud(last_p1_, hud_text, "[Tab] alterna campo · [Enter] confirma");
+    ctx->status(hud_text + " · [Tab] alterna campo · [Enter] confirma");
+}
+
+bool RectangleTool::commit_numeric_input() {
+    if (!p0_) return false;
+    const double sign_x = (last_p1_.x >= p0_->x ? 1.0 : -1.0);
+    const double sign_y = (last_p1_.y >= p0_->y ? 1.0 : -1.0);
+
+    double w = 0.0;
+    if (!num_input_1_.empty()) {
+        try { w = std::stod(num_input_1_); } catch (...) { w = 0.0; }
+    } else {
+        w = std::fabs(last_p1_.x - p0_->x);
+    }
+
+    double h = 0.0;
+    if (!num_input_2_.empty()) {
+        try { h = std::stod(num_input_2_); } catch (...) { h = 0.0; }
+    } else {
+        h = std::fabs(last_p1_.y - p0_->y);
+        if (h < 1e-6 && w > 1e-6) h = w;
+    }
+
+    if (w > 1e-6 && h > 1e-6) {
+        const double x0 = p0_->x;
+        const double y0 = p0_->y;
+        const double x1 = x0 + sign_x * w;
+        const double y1 = y0 + sign_y * h;
+        auto r = std::make_shared<cad::Rectangle>();
+        r->x = std::min(x0, x1);
+        r->y = std::min(y0, y1);
+        r->width = w;
+        r->height = h;
+        r->corner_radius = corner_radius;
+        ctx->add(r, label());
+        ctx->status(std::format("Retângulo criado: {:.2f} × {:.2f} mm", w, h));
+        p0_.reset();
+        clear_numeric_input();
+        ctx->clear_preview();
+        return true;
+    }
+    return false;
 }
 
 std::string PolygonTool::hint() const { return std::format("Clique no centro e arraste · {} lados", sides); }
@@ -200,6 +530,7 @@ bool PolylineTool::on_press(double wx, double wy, Qt::MouseButton button, Qt::Ke
         return true;
     }
     if (button != Qt::LeftButton) return false;
+    clear_numeric_input();
 
     if (has(mods, Qt::ShiftModifier) && !pts_.empty() && !arc_mode_) {
         const Pt o = ortho(pts_.back(), {wx, wy});
@@ -251,6 +582,10 @@ bool PolylineTool::on_move(double wx, double wy, Qt::KeyboardModifiers mods) {
         wy = o.y;
     }
     cursor_ = {wx, wy};
+    if (numeric_active_) {
+        update_numeric_line_preview();
+        return true;
+    }
 
     // Autotransitioning por mouse: se o cursor retornar ao ultimo vertice e se afastar, alterna arco/linha
     const double tol = (ctx->canvas ? ctx->canvas->pick_tolerance() : 1.0) * kPickPx;
@@ -283,23 +618,122 @@ bool PolylineTool::on_double_click(double, double) {
     return true;
 }
 
+void PolylineTool::clear_numeric_input() {
+    numeric_active_ = false;
+    numeric_length_.clear();
+    ctx->clear_hud();
+}
+
+void PolylineTool::update_numeric_line_preview() {
+    if (pts_.empty()) return;
+    double val = 0.0;
+    try {
+        val = std::stod(numeric_length_);
+    } catch (...) {
+        val = 0.0;
+    }
+    const Pt p0 = pts_.back();
+    Pt dir{1.0, 0.0};
+    const double dx = cursor_.x - p0.x;
+    const double dy = cursor_.y - p0.y;
+    const double len = std::hypot(dx, dy);
+    if (len > 1e-9) {
+        dir = {dx / len, dy / len};
+    }
+    const Pt p_end{p0.x + dir.x * val, p0.y + dir.y * val};
+    Points preview = pts_;
+    preview.push_back(p_end);
+    ctx->preview(preview, false);
+
+    const std::string hud_text = std::format("Comprimento: [{}] mm", numeric_length_);
+    ctx->show_hud(p_end, hud_text, "[Enter] confirma");
+    ctx->status(hud_text + " · [Enter] confirma");
+}
+
 bool PolylineTool::on_key(int key) {
-    if (key == Qt::Key_A && !pts_.empty()) {
+    if (key == Qt::Key_A && !pts_.empty() && !numeric_active_) {
         arc_mode_ = !arc_mode_;
         ctx->status(arc_mode_ ? "Modo Arco Tangente (SolidWorks) ativado (Pressione 'A' para Linha)"
                               : "Modo Linha Reta ativado (Pressione 'A' para Arco)");
         on_move(cursor_.x, cursor_.y, Qt::NoModifier);
         return true;
     }
+
+    if (!pts_.empty() && !arc_mode_) {
+        if (key >= Qt::Key_0 && key <= Qt::Key_9) {
+            numeric_active_ = true;
+            numeric_length_ += static_cast<char>('0' + (key - Qt::Key_0));
+            update_numeric_line_preview();
+            return true;
+        }
+        if (key == Qt::Key_Period || key == Qt::Key_Comma) {
+            numeric_active_ = true;
+            if (numeric_length_.find('.') == std::string::npos) {
+                if (numeric_length_.empty()) numeric_length_ += "0";
+                numeric_length_ += '.';
+            }
+            update_numeric_line_preview();
+            return true;
+        }
+        if (key == Qt::Key_Backspace && numeric_active_) {
+            if (!numeric_length_.empty()) {
+                numeric_length_.pop_back();
+            }
+            if (numeric_length_.empty()) {
+                clear_numeric_input();
+                on_move(cursor_.x, cursor_.y, Qt::NoModifier);
+            } else {
+                update_numeric_line_preview();
+            }
+            return true;
+        }
+        if ((key == Qt::Key_Return || key == Qt::Key_Enter) && numeric_active_) {
+            double val = 0.0;
+            try { val = std::stod(numeric_length_); } catch(...) { val = 0.0; }
+            if (val > 1e-6) {
+                const Pt p0 = pts_.back();
+                Pt dir{1.0, 0.0};
+                const double dx = cursor_.x - p0.x;
+                const double dy = cursor_.y - p0.y;
+                const double len = std::hypot(dx, dy);
+                if (len > 1e-9) dir = {dx / len, dy / len};
+                const Pt p_end{p0.x + dir.x * val, p0.y + dir.y * val};
+
+                if (single_segment()) {
+                    auto l = std::make_shared<cad::Line>();
+                    l->x1 = p0.x; l->y1 = p0.y;
+                    l->x2 = p_end.x; l->y2 = p_end.y;
+                    ctx->add(l, label());
+                    ctx->status(std::format("Linha criada: {:.2f} mm", val));
+                    pts_.clear();
+                    clear_numeric_input();
+                    ctx->clear_preview();
+                    return true;
+                }
+                pts_.push_back(p_end);
+                last_tangent_ = {p_end.x - p0.x, p_end.y - p0.y};
+                has_tangent_ = true;
+                clear_numeric_input();
+                Points preview = pts_;
+                preview.push_back(cursor_);
+                ctx->preview(preview, false);
+                return true;
+            }
+        }
+    }
+
     if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
+        clear_numeric_input();
         finish_shape(false);
         return true;
     }
     if (key == Qt::Key_C || key == Qt::Key_Tab) {
+        clear_numeric_input();
         finish_shape(true);
         return true;
     }
     if (key == Qt::Key_Backspace && !pts_.empty()) {
+        clear_numeric_input();
         pts_.pop_back();
         Points preview = pts_;
         preview.push_back(cursor_);
@@ -307,6 +741,11 @@ bool PolylineTool::on_key(int key) {
         return true;
     }
     if (key == Qt::Key_Escape) {
+        if (numeric_active_) {
+            clear_numeric_input();
+            on_move(cursor_.x, cursor_.y, Qt::NoModifier);
+            return true;
+        }
         finish_shape(false);
         ctx->finish();
         return true;
@@ -315,6 +754,7 @@ bool PolylineTool::on_key(int key) {
 }
 
 void PolylineTool::deactivate() {
+    clear_numeric_input();
     pts_.clear();
     arc_mode_ = false;
     has_tangent_ = false;

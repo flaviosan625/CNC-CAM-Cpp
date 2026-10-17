@@ -132,6 +132,7 @@ private:
     void move_current_toolpath(int delta);
     void recalculate_toolpaths();
     void toggle_simulation();
+    void validate_gcode_and_simulate();
     void begin_simulation(const QString& scope);
     void play_simulation();
     void pause_simulation();
@@ -240,14 +241,14 @@ private:
     QLabel* toolpath_empty_label_ = nullptr;
     QLabel* simulation_operation_label_ = nullptr;
     QLabel* simulation_info_label_ = nullptr;
-    QLabel* simulation_speed_label_ = nullptr;
     QProgressBar* simulation_progress_ = nullptr;
     QSlider* simulation_speed_slider_ = nullptr;
-    QPushButton* simulation_play_button_ = nullptr;
-    QPushButton* simulation_pause_button_ = nullptr;
-    QPushButton* simulation_step_button_ = nullptr;
-    QPushButton* simulation_finish_button_ = nullptr;
-    QPushButton* simulation_restart_button_ = nullptr;
+    QPushButton* simulation_validate_button_ = nullptr;
+    QAbstractButton* simulation_play_button_ = nullptr;
+    QAbstractButton* simulation_pause_button_ = nullptr;
+    QAbstractButton* simulation_step_button_ = nullptr;
+    QAbstractButton* simulation_finish_button_ = nullptr;
+    QAbstractButton* simulation_restart_button_ = nullptr;
     QDockWidget* toolpath_dock_ = nullptr;
     int last_expanded_dock_width_ = 340;
     QScrollArea* right_panel_scroll_ = nullptr;

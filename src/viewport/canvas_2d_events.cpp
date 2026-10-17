@@ -130,6 +130,7 @@ void Canvas2D::mousePressEvent(QMouseEvent* event) {
         return;
     }
     finish_navigation_preview();
+    hide_contextual_hud();
     if (event->button() == Qt::LeftButton && dynamic_cast<TabMarker*>(itemAt(event->position().toPoint()))) {
         dragging_tab_marker_ = true;
         QGraphicsView::mousePressEvent(event);
@@ -317,7 +318,7 @@ bool Canvas2D::event(QEvent* ev) {
     }
     if (ev->type() == QEvent::KeyPress) {
         auto* key = static_cast<QKeyEvent*>(ev);
-        if (key->key() == Qt::Key_Tab && key->modifiers() == Qt::NoModifier && tool_ && tool_->name() == "polyline") {
+        if (key->key() == Qt::Key_Tab && key->modifiers() == Qt::NoModifier && tool_) {
             keyPressEvent(key);
             return true;
         }
@@ -345,13 +346,13 @@ void Canvas2D::keyPressEvent(QKeyEvent* event) {
         return;
     }
     finish_navigation_preview();
+    if (tool_ && tool_->on_key(event->key())) {
+        emit selection_changed();
+        return;
+    }
     if (event->key() == Qt::Key_Escape) {
         cancel_current_operation();
         event->accept();
-        return;
-    }
-    if (tool_ && tool_->on_key(event->key())) {
-        emit selection_changed();
         return;
     }
     if (nudge(event)) return;
@@ -403,6 +404,8 @@ void Canvas2D::cancel_current_operation() {
     space_pressed_ = false;
     pan_accumulator_ = QPointF(0, 0);
     finish_navigation_preview();
+    hide_contextual_hud();
+    clear_hud_input();
     // Esc abandona a operacao inteira; nao deixa a ferramenta limpar apenas uma etapa e continuar ativa.
     if (tool_) tool_->cancel();
     emit cancel_requested();

@@ -100,13 +100,28 @@ public:
     bool on_press(double wx, double wy, Qt::MouseButton button, Qt::KeyboardModifiers mods) override;
     bool on_move(double wx, double wy, Qt::KeyboardModifiers mods) override;
     bool on_release(double wx, double wy, Qt::MouseButton button, Qt::KeyboardModifiers mods) override;
+    bool on_key(int key) override;
 
     virtual Points ghost(const Pt& p0, const Pt& p1, Qt::KeyboardModifiers mods) const;
     virtual bool ghost_closed() const { return true; }
     virtual cad::EntityPtr build(const Pt& p0, const Pt& p1, Qt::KeyboardModifiers mods) const = 0;
 
-private:
+    bool is_dragging() const { return p0_.has_value(); }
+    const std::optional<Pt>& anchor() const { return p0_; }
+
+protected:
+    virtual bool handle_numeric_key(int key);
+    virtual void update_numeric_preview() {}
+    virtual bool commit_numeric_input() { return false; }
+    virtual void clear_numeric_input();
+
     std::optional<Pt> p0_;
+    Pt last_p1_{};
+    Qt::KeyboardModifiers last_mods_{};
+    std::string num_input_1_;
+    std::string num_input_2_;
+    int active_field_ = 0;
+    bool numeric_active_ = false;
 };
 
 class CircleTool : public DragTool {
@@ -114,8 +129,19 @@ public:
     using DragTool::DragTool;
     std::string name() const override { return "circle"; }
     std::string label() const override { return "Círculo"; }
-    std::string hint() const override { return "Clique no centro e arraste para definir o raio"; }
+    std::string hint() const override {
+        return "Clique no centro e arraste para definir o raio · Digite o valor para cota exata (D para diâmetro)";
+    }
     cad::EntityPtr build(const Pt& p0, const Pt& p1, Qt::KeyboardModifiers mods) const override;
+
+protected:
+    bool handle_numeric_key(int key) override;
+    void update_numeric_preview() override;
+    bool commit_numeric_input() override;
+    void clear_numeric_input() override;
+
+private:
+    bool is_diameter_ = false;
 };
 
 class EllipseTool : public DragTool {
@@ -133,8 +159,15 @@ public:
     double corner_radius = 0.0;
     std::string name() const override { return "rectangle"; }
     std::string label() const override { return "Retângulo"; }
-    std::string hint() const override { return "Arraste de um canto ao outro · Ctrl = quadrado · Alt = a partir do centro"; }
+    std::string hint() const override {
+        return "Arraste de um canto ao outro · Digite largura, Tab, altura e Enter para cota exata";
+    }
     cad::EntityPtr build(const Pt& p0, const Pt& p1, Qt::KeyboardModifiers mods) const override;
+
+protected:
+    bool handle_numeric_key(int key) override;
+    void update_numeric_preview() override;
+    bool commit_numeric_input() override;
 };
 
 class PolygonTool : public DragTool {
@@ -182,6 +215,11 @@ protected:
     virtual void finish_shape(bool close);
 
     Points pts_;
+    bool numeric_active_ = false;
+    std::string numeric_length_;
+
+    void update_numeric_line_preview();
+    void clear_numeric_input();
 
 private:
     static Pt ortho(const Pt& a, const Pt& b);
@@ -197,6 +235,9 @@ public:
     using PolylineTool::PolylineTool;
     std::string name() const override { return "line"; }
     std::string label() const override { return "Linha"; }
+    std::string hint() const override {
+        return "Clique no início e depois no fim · Digite o comprimento e Enter para cota exata";
+    }
     bool single_segment() const override { return true; }
 };
 

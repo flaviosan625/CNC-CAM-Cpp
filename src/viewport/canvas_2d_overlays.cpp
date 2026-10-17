@@ -503,6 +503,7 @@ void Canvas2D::clear_preview() {
     remove_item(dimension_preview_);
     dimension_preview_ = nullptr;
     clear_items(node_items_);
+    clear_hud_input();
 }
 
 void Canvas2D::set_selection_preview(const Points& pts, bool crossing) {
@@ -586,6 +587,57 @@ void Canvas2D::clear_measurement() {
     remove_item(measurement_box_);  // leva o texto junto: e filho da caixa
     measurement_line_ = nullptr;
     measurement_box_ = nullptr;
+}
+
+void Canvas2D::show_hud_input(const Pt& pos, const std::string& text, const std::string& hint) {
+    clear_hud_input();
+    const QPointF anchor_point = world_to_scene(pos.x, pos.y);
+    auto* label_text = new QGraphicsSimpleTextItem(QString::fromStdString(text));
+    QFont font_text("Segoe UI", 10, QFont::Bold);
+    label_text->setFont(font_text);
+    label_text->setBrush(QBrush(QColor("#ffffff")));
+
+    QGraphicsSimpleTextItem* label_hint = nullptr;
+    if (!hint.empty()) {
+        label_hint = new QGraphicsSimpleTextItem(QString::fromStdString(hint));
+        QFont font_hint("Segoe UI", 8);
+        label_hint->setFont(font_hint);
+        label_hint->setBrush(QBrush(QColor("#94a3b8")));
+    }
+
+    const double padding = 8.0;
+    const QRectF size1 = label_text->boundingRect();
+    const QRectF size2 = label_hint ? label_hint->boundingRect() : QRectF{};
+    const double box_width = std::max(size1.width(), size2.width()) + 2 * padding;
+    const double box_height = size1.height() + (label_hint ? size2.height() + 2 : 0) + 2 * padding;
+
+    const QPoint view_point = mapFromScene(anchor_point);
+    const double left = view_point.x() + box_width + 16 <= viewport()->width() ? 16.0 : -box_width - 16.0;
+    const double top = view_point.y() >= box_height + 24 ? -box_height - 24.0 : 20.0;
+
+    QPainterPath box_path;
+    box_path.addRoundedRect(QRectF(left, top, box_width, box_height), 6.0, 6.0);
+    hud_box_ = new QGraphicsPathItem(box_path);
+    hud_box_->setPen(QPen(QColor("#0ea5e9"), 1.2));
+    hud_box_->setBrush(QBrush(QColor(15, 23, 42, 235)));
+    hud_box_->setFlag(QGraphicsItem::ItemIgnoresTransformations);
+    hud_box_->setZValue(58);
+    hud_box_->setPos(anchor_point);
+
+    label_text->setParentItem(hud_box_);
+    label_text->setPos(left + padding, top + padding);
+
+    if (label_hint) {
+        label_hint->setParentItem(hud_box_);
+        label_hint->setPos(left + padding, top + padding + size1.height() + 2);
+    }
+
+    scene_->addItem(hud_box_);
+}
+
+void Canvas2D::clear_hud_input() {
+    remove_item(hud_box_);
+    hud_box_ = nullptr;
 }
 
 }  // namespace cnc::vp

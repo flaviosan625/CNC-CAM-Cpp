@@ -10,6 +10,8 @@
 #include <QTransform>
 #include <QGraphicsDropShadowEffect>
 
+#include "cad/relations.hpp"
+#include "ui/contextual_hud.hpp"
 #include "viewport/canvas_2d.hpp"
 
 namespace cnc::vp {
@@ -415,12 +417,108 @@ void Canvas2D::refresh_selection_handles(bool notify) {
     });
     if (!bbox || tool_name != "select" || all_drill) {
         handles.clear();
+        hide_contextual_hud();
         if (notify) emit selection_changed();
         return;
     }
     handles.show(*bbox, selected.size() >= 128);
+    update_contextual_hud(selected);
     // Also notify previews after edits, undo and programmatic selection changes.
     if (notify) emit selection_changed();
+}
+
+void Canvas2D::setup_hud_callbacks() {
+    if (!contextual_hud_) return;
+    contextual_hud_->set_actions(
+        [this] {
+            if (!document_) return;
+            const auto sel = document_->selected_entities();
+            if (sel.size() >= 2) {
+                UndoStack* stack = undo_stack_ ? undo_stack_ : (tool_ && tool_->ctx ? tool_->ctx->undo_stack : nullptr);
+                cad::apply_concentric_command(*document_, stack, sel);
+                refresh_entities();
+                refresh_selection_handles();
+            }
+        },
+        [this] {
+            if (!document_) return;
+            const auto sel = document_->selected_entities();
+            if (sel.size() >= 2) {
+                UndoStack* stack = undo_stack_ ? undo_stack_ : (tool_ && tool_->ctx ? tool_->ctx->undo_stack : nullptr);
+                cad::apply_equal_size_command(*document_, stack, sel);
+                refresh_entities();
+                refresh_selection_handles();
+            }
+        },
+        [this] {
+            if (!document_) return;
+            const auto sel = document_->selected_entities();
+            if (sel.size() >= 2) {
+                UndoStack* stack = undo_stack_ ? undo_stack_ : (tool_ && tool_->ctx ? tool_->ctx->undo_stack : nullptr);
+                cad::apply_align_center_h_command(*document_, stack, sel);
+                refresh_entities();
+                refresh_selection_handles();
+            }
+        },
+        [this] {
+            if (!document_) return;
+            const auto sel = document_->selected_entities();
+            if (sel.size() >= 2) {
+                UndoStack* stack = undo_stack_ ? undo_stack_ : (tool_ && tool_->ctx ? tool_->ctx->undo_stack : nullptr);
+                cad::apply_align_center_v_command(*document_, stack, sel);
+                refresh_entities();
+                refresh_selection_handles();
+            }
+        },
+        [this] {
+            if (!document_) return;
+            const auto sel = document_->selected_entities();
+            if (sel.size() >= 2) {
+                UndoStack* stack = undo_stack_ ? undo_stack_ : (tool_ && tool_->ctx ? tool_->ctx->undo_stack : nullptr);
+                cad::apply_tangent_command(*document_, stack, sel);
+                refresh_entities();
+                refresh_selection_handles();
+            }
+        },
+        [this] {
+            if (!document_) return;
+            const auto sel = document_->selected_entities();
+            if (sel.size() >= 2) {
+                UndoStack* stack = undo_stack_ ? undo_stack_ : (tool_ && tool_->ctx ? tool_->ctx->undo_stack : nullptr);
+                cad::apply_quick_group_or_join_command(*document_, stack, sel);
+                refresh_entities();
+                refresh_selection_handles();
+            }
+        }
+    );
+}
+
+void Canvas2D::update_contextual_hud(const std::vector<cad::EntityPtr>& selection) {
+    if (selection.size() < 2 || !tool_ || tool_->name() != "select") {
+        hide_contextual_hud();
+        return;
+    }
+    if (!contextual_hud_) {
+        contextual_hud_ = new ui::ContextualHudBar(viewport());
+        setup_hud_callbacks();
+    }
+    QPoint cursor_vp = mapFromGlobal(QCursor::pos());
+    if (!viewport()->rect().contains(cursor_vp)) {
+        const auto bbox = selection_bbox_for(selection);
+        if (bbox) {
+            const QPointF scene_pt = world_to_scene(bbox->x1, bbox->y1);
+            cursor_vp = mapFromScene(scene_pt);
+        } else {
+            cursor_vp = viewport()->rect().center();
+        }
+    }
+    contextual_hud_->show_at(cursor_vp, selection);
+}
+
+void Canvas2D::hide_contextual_hud() {
+    if (contextual_hud_) {
+        contextual_hud_->hide_hud();
+    }
 }
 
 // Rotulo com o angulo atual, flutuando perto do cursor. Em pixels locais, com

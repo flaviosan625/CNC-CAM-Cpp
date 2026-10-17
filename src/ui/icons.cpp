@@ -53,6 +53,48 @@ QIcon make_icon(const std::function<void(QPainter&, int)>& draw,
 }
 
 QIcon icon_for(const QString& name) {
+    if (name.startsWith("align_")) {
+        // Marca visualmente a linha de referencia e mostra objetos com tamanhos
+        // diferentes; assim cada alinhamento pode ser entendido sem depender
+        // apenas do tooltip.
+        return make_icon([name](QPainter& p, int) {
+            const auto guide_pen = [&p] {
+                QPen pen(QColor("#4da3ff"), 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+                p.setPen(pen);
+            };
+            const auto object_pen = [&p] {
+                QPen pen(QColor("#b9cee3"), 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+                p.setPen(pen);
+            };
+            if (name == "align_left" || name == "align_center_h" || name == "align_right") {
+                const int x = name == "align_left" ? 5 : (name == "align_right" ? 27 : 16);
+                guide_pen();
+                p.drawLine(x, 4, x, 28);
+                object_pen();
+                const std::array<int, 3> widths{9, 17, 12};
+                const std::array<int, 3> ys{6, 13, 20};
+                for (size_t i = 0; i < ys.size(); ++i) {
+                    int left = name == "align_left" ? 7
+                        : (name == "align_right" ? 27 - widths[i]
+                                                  : x - widths[i] / 2);
+                    p.drawRoundedRect(QRectF(left, ys[i], widths[i], 5), 0.8, 0.8);
+                }
+            } else {
+                const int y = name == "align_top" ? 5 : (name == "align_bottom" ? 27 : 16);
+                guide_pen();
+                p.drawLine(4, y, 28, y);
+                object_pen();
+                const std::array<int, 3> heights{7, 12, 9};
+                const std::array<int, 3> xs{6, 14, 22};
+                for (size_t i = 0; i < xs.size(); ++i) {
+                    int top = name == "align_top" ? 7
+                        : (name == "align_bottom" ? 27 - heights[i]
+                                                   : y - heights[i] / 2);
+                    p.drawRoundedRect(QRectF(xs[i] - 2, top, 6, heights[i]), 0.8, 0.8);
+                }
+            }
+        }, QColor("#b9cee3"), 1.5);
+    }
     if (name == "rail_selection") {
         return make_icon([](QPainter& p, int) {
             const QRectF box(7, 7, 19, 19);
@@ -217,6 +259,9 @@ QIcon get_icon(const QString& name) {
     // Those rasterized states are embedded in the C++ executable so both
     // implementations use the same artwork and do not depend on a working
     // directory or a system icon theme.
+    // Os alinhamentos usam icones vetoriais do proprio QPainter para destacar
+    // a referencia; os PNG antigos nao comunicam bem o sentido da operacao.
+    if (name.startsWith("align_")) return icon_for(name);
     const QString resource = QString(":/assets/tool-icons/%1.png").arg(name);
     if (QFile::exists(resource)) return QIcon(resource);
     return icon_for(name);

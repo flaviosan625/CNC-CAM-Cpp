@@ -1056,6 +1056,38 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), tool_context_(doc
         projection_3d_button_->setText(ortho ? "ORTO" : "PERSP");
         statusBar()->showMessage(ortho ? "Projecao ortografica" : "Projecao em perspectiva");
     });
+    simulation_validate_button_ = new QPushButton("Validar e simular", view_3d_controls);
+    simulation_validate_button_->setObjectName("View3DBtn");
+    simulation_validate_button_->setFixedHeight(28);
+    simulation_validate_button_->setToolTip("Gerar e conferir o G-Code dos percursos visíveis e simular o corte na Vista 3D");
+    view_3d_layout->addWidget(simulation_validate_button_);
+    connect(simulation_validate_button_, &QPushButton::clicked, this,
+            &MainWindow::validate_gcode_and_simulate);
+    simulation_play_button_ = new QToolButton(view_3d_controls);
+    simulation_play_button_->setObjectName("View3DBtn");
+    simulation_play_button_->setText("▶");
+    simulation_play_button_->setToolTip("Continuar simulação");
+    simulation_play_button_->setEnabled(false);
+    view_3d_layout->addWidget(simulation_play_button_);
+    connect(simulation_play_button_, &QToolButton::clicked, this, &MainWindow::play_simulation);
+    simulation_pause_button_ = new QToolButton(view_3d_controls);
+    simulation_pause_button_->setObjectName("View3DBtn");
+    simulation_pause_button_->setText("Ⅱ");
+    simulation_pause_button_->setToolTip("Pausar simulação");
+    simulation_pause_button_->setEnabled(false);
+    view_3d_layout->addWidget(simulation_pause_button_);
+    connect(simulation_pause_button_, &QToolButton::clicked, this, &MainWindow::pause_simulation);
+    simulation_restart_button_ = new QToolButton(view_3d_controls);
+    simulation_restart_button_->setObjectName("View3DBtn");
+    simulation_restart_button_->setText("↻");
+    simulation_restart_button_->setToolTip("Reiniciar simulação");
+    simulation_restart_button_->setEnabled(false);
+    view_3d_layout->addWidget(simulation_restart_button_);
+    connect(simulation_restart_button_, &QToolButton::clicked, this, &MainWindow::restart_simulation);
+    simulation_info_label_ = new QLabel("Simulação pronta para validar", view_3d_controls);
+    simulation_info_label_->setObjectName("MutedText");
+    simulation_info_label_->setMaximumWidth(190);
+    view_3d_layout->addWidget(simulation_info_label_);
     view_3d_controls->setVisible(false);
     view_header_layout->addWidget(view_3d_controls);
 
@@ -1827,17 +1859,6 @@ void MainWindow::create_toolpath_panel() {
     rail_layout->addWidget(automatic_button);
     automatic_nav_button_ = automatic_button;
 
-    // Aba 3: Simulação
-    auto* simulation_button = new QToolButton(rail);
-    simulation_button->setObjectName("RightRailButton");
-    simulation_button->setCheckable(true);
-    simulation_button->setFixedSize(38, 34);
-    simulation_button->setIcon(ui::get_icon("rail_simulation"));
-    simulation_button->setIconSize(QSize(24, 24));
-    simulation_button->setToolTip(QString::fromUtf8("Simulação do percurso"));
-    rail_layout->addWidget(simulation_button);
-    simulation_nav_button_ = simulation_button;
-
     auto* order_button = new QToolButton(rail);
     order_button->setObjectName("RightRailButton");
     order_button->setCheckable(true);
@@ -2103,92 +2124,24 @@ void MainWindow::create_toolpath_panel() {
     simulation_page->setObjectName("PropPanel");
     auto* simulation_layout = new QVBoxLayout(simulation_page);
     simulation_layout->setContentsMargins(14, 12, 14, 12);
-    simulation_layout->setSpacing(9);
-
-    auto* simulation_title = new QLabel("SIMULAÇÃO DO PERCURSO", simulation_page);
+    auto* simulation_title = new QLabel("SIMULAÇÃO NA VISTA 3D", simulation_page);
     simulation_title->setObjectName("SectionHeader");
     simulation_layout->addWidget(simulation_title);
-
-    simulation_operation_label_ = new QLabel("Calcule um percurso para simular.", simulation_page);
-    simulation_operation_label_->setObjectName("MutedText");
-    simulation_operation_label_->setWordWrap(true);
-    simulation_layout->addWidget(simulation_operation_label_);
-
-    auto make_playback_button = [simulation_page](const QString& text, const QString& tip) {
-        auto* button = new QPushButton(text, simulation_page);
-        button->setMinimumHeight(34);
-        button->setFixedWidth(36);
-        button->setToolTip(tip);
-        button->setEnabled(false);
-        return button;
-    };
-    auto* playback = new QHBoxLayout();
-    playback->setSpacing(6);
-    simulation_play_button_ = make_playback_button("▶", "Reproduzir");
-    simulation_pause_button_ = make_playback_button("Ⅱ", "Pausar");
-    simulation_step_button_ = make_playback_button("▶|", "Avançar um movimento");
-    simulation_finish_button_ = make_playback_button("▶▶", "Ir ao final");
-    simulation_restart_button_ = make_playback_button("↻", "Reiniciar");
-    for (auto* button : {simulation_play_button_, simulation_pause_button_, simulation_step_button_,
-                         simulation_finish_button_, simulation_restart_button_}) {
-        playback->addWidget(button, 1);
-    }
-    simulation_layout->addLayout(playback);
-
-    auto* speed_row = new QHBoxLayout();
-    speed_row->setSpacing(8);
-    speed_row->addWidget(new QLabel("Velocidade", simulation_page));
-    simulation_speed_slider_ = new QSlider(Qt::Horizontal, simulation_page);
-    simulation_speed_slider_->setRange(1, 100);
-    simulation_speed_slider_->setValue(10);
-    simulation_speed_slider_->setToolTip("0,1× a 10× a velocidade estimada");
-    speed_row->addWidget(simulation_speed_slider_, 1);
-    simulation_speed_label_ = new QLabel("1.0×", simulation_page);
-    speed_row->addWidget(simulation_speed_label_);
-    simulation_layout->addLayout(speed_row);
-    connect(simulation_speed_slider_, &QSlider::valueChanged, this, [this](int value) {
-        if (simulation_speed_label_)
-            simulation_speed_label_->setText(QString("%1×").arg(value / 10.0, 0, 'f', 1));
-    });
-
-    auto add_simulation_scope = [this, simulation_page, simulation_layout](const QString& text,
-                                                                            const QString& scope) {
-        auto* button = new QPushButton(text, simulation_page);
-        button->setMinimumHeight(36);
-        simulation_layout->addWidget(button);
-        connect(button, &QPushButton::clicked, this, [this, scope] { begin_simulation(scope); });
-    };
-    add_simulation_scope("Simular percurso selecionado", "selected");
-    add_simulation_scope("Simular todos os percursos", "all");
-    add_simulation_scope("Simular percursos visíveis", "visible");
-
-    simulation_info_label_ = new QLabel("Percurso: 00:00 / 00:00", simulation_page);
-    simulation_info_label_->setObjectName("MutedText");
-    simulation_info_label_->setWordWrap(true);
-    simulation_layout->addWidget(simulation_info_label_);
-
-    simulation_progress_ = new QProgressBar(simulation_page);
-    simulation_progress_->setObjectName("SimulationProgress");
-    simulation_progress_->setRange(0, 1000);
-    simulation_progress_->setValue(0);
-    simulation_progress_->setTextVisible(true);
-    simulation_progress_->setFormat("%p% concluído");
-    simulation_layout->addWidget(simulation_progress_);
-
     auto* simulation_note = new QLabel(
-        "Estimativa pelos avanços programados e rápido de 8000 mm/min. "
-        "Não inclui aceleração, desaceleração nem troca de ferramenta.", simulation_page);
+        "A validação do G-Code e a simulação do corte ficam na Vista 3D. São usados os percursos visíveis no desenho 2D.",
+        simulation_page);
     simulation_note->setObjectName("MutedText");
     simulation_note->setWordWrap(true);
     simulation_layout->addWidget(simulation_note);
+    auto* open_3d = new QPushButton("Abrir Vista 3D", simulation_page);
+    simulation_layout->addWidget(open_3d);
     simulation_layout->addStretch();
+    connect(open_3d, &QPushButton::clicked, this, [this] { show_3d_view(); });
     stack->addWidget(simulation_page);
-
-    connect(simulation_play_button_, &QPushButton::clicked, this, &MainWindow::play_simulation);
-    connect(simulation_pause_button_, &QPushButton::clicked, this, &MainWindow::pause_simulation);
-    connect(simulation_step_button_, &QPushButton::clicked, this, &MainWindow::step_simulation);
-    connect(simulation_finish_button_, &QPushButton::clicked, this, &MainWindow::finish_simulation);
-    connect(simulation_restart_button_, &QPushButton::clicked, this, &MainWindow::restart_simulation);
+    simulation_operation_label_ = simulation_info_label_;
+    simulation_step_button_ = nullptr;
+    simulation_finish_button_ = nullptr;
+    simulation_progress_ = nullptr;
     simulation_timer_ = new QTimer(this);
     simulation_timer_->setInterval(16);
     connect(simulation_timer_, &QTimer::timeout, this, &MainWindow::update_simulation);
@@ -2312,7 +2265,6 @@ void MainWindow::create_toolpath_panel() {
     connect(selection_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(0); });
     connect(toolpath_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(1); });
     connect(automatic_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(3); });
-    connect(simulation_button, &QToolButton::clicked, this, [toggle_right_tab] { toggle_right_tab(2); });
 
     connect(stack, &QStackedWidget::currentChanged, this, [this](int page) {
         if (page >= 0) set_right_panel_collapsed(false);
@@ -2390,11 +2342,6 @@ void MainWindow::create_legacy_toolpath_panel() {
     connect(edit_button, &QPushButton::clicked, this, &MainWindow::edit_current_toolpath);
     connect(toggle_button, &QPushButton::clicked, this, &MainWindow::toggle_current_toolpath);
     connect(delete_button, &QPushButton::clicked, this, &MainWindow::delete_current_toolpath);
-
-    auto* simulate_button = new QPushButton("Simular percursos", panel);
-    simulate_button->setObjectName("SimulatePathBtn");
-    layout->addWidget(simulate_button);
-    connect(simulate_button, &QPushButton::clicked, this, &MainWindow::toggle_simulation);
 
     simulation_timer_ = new QTimer(this);
     simulation_timer_->setInterval(30);
@@ -5124,13 +5071,82 @@ void MainWindow::recalculate_toolpaths() {
 }
 
 void MainWindow::toggle_simulation() {
-    show_right_page(2);
+    show_3d_view();
     if (simulation_timer_ && simulation_timer_->isActive()) {
         pause_simulation();
         return;
     }
-    if (!simulation_) begin_simulation("visible");
-    play_simulation();
+    if (simulation_) play_simulation();
+    else validate_gcode_and_simulate();
+}
+
+void MainWindow::validate_gcode_and_simulate() {
+    const auto paths = cam::calculated_toolpaths(document_.toolpaths);
+    if (paths.empty()) {
+        statusBar()->showMessage("Calcule e deixe visível pelo menos um percurso antes de validar.");
+        return;
+    }
+
+    QSettings preferences;
+    cam::GCodeSettings settings;
+    settings.post = static_cast<cam::PostProcessor>(
+        preferences.value("gcode/post", static_cast<int>(cam::PostProcessor::Grbl)).toInt());
+    settings.vectric_post_file = preferences.value("gcode/vectricPostFile").toString().toStdString();
+    settings.vectric_post_extension = preferences.value("gcode/vectricPostExtension").toString().toStdString();
+    settings.tool_change = preferences.value(
+        QString("gcode/toolChange/%1").arg(static_cast<int>(settings.post)), false).toBool();
+    settings.line_numbers = preferences.value("gcode/lineNumbers", false).toBool();
+    settings.comments = preferences.value("gcode/comments", true).toBool();
+    settings.home_at_end = preferences.value("gcode/returnHome", true).toBool();
+
+    std::string code;
+    try {
+        code = cam::generate_gcode(paths, document_.material, settings, document_.title());
+    } catch (const std::exception& error) {
+        QMessageBox::warning(this, "Validação do G-Code", QString::fromUtf8(error.what()));
+        return;
+    }
+
+    QStringList problems;
+    if (code.empty()) problems << "O pós-processador não gerou comandos.";
+    const auto& material = document_.material;
+    if (!std::isfinite(material.width) || !std::isfinite(material.height) ||
+        !std::isfinite(material.thickness) || !std::isfinite(material.home_x) ||
+        !std::isfinite(material.home_y) || !std::isfinite(material.clearance_z))
+        problems << "A configuração do material contém medida não finita.";
+    if (settings.post != cam::PostProcessor::VectricAspire) {
+        if (code.find("G21") == std::string::npos) problems << "Não foi encontrado G21 (milímetros).";
+        if (code.find("G90") == std::string::npos) problems << "Não foi encontrado G90 (coordenadas absolutas).";
+        if (code.find("G0") == std::string::npos && code.find("G1") == std::string::npos)
+            problems << "Não foram encontrados movimentos G0/G1.";
+    }
+    size_t move_count = 0;
+    for (const auto* path : paths) {
+        if (!path) continue;
+        for (const auto& move : path->moves) {
+            if (move.kind == cam::MoveKind::Dwell) continue;
+            ++move_count;
+            if (!std::isfinite(move.x) || !std::isfinite(move.y) || !std::isfinite(move.z)) {
+                problems << "Há movimento com coordenada inválida no percurso interno.";
+                break;
+            }
+        }
+    }
+    if (move_count == 0) problems << "Os percursos não contêm movimentos para simular.";
+    if (!problems.isEmpty()) {
+        statusBar()->showMessage("Validação interrompida: " + problems.join(" "));
+        QMessageBox::warning(this, "Validação do G-Code", problems.join("\n"));
+        return;
+    }
+
+    const QString limitation = settings.post == cam::PostProcessor::VectricAspire
+        ? "Pós Aspire: conferidos geração e movimentos internos; formato do pós personalizado não foi auditado."
+        : "Formato básico e movimentos internos conferidos; colisões, fixação e limites da máquina não são verificados.";
+    statusBar()->showMessage(
+        QString("G-Code gerado e validado: %1 movimento(s). %2")
+            .arg(static_cast<qulonglong>(move_count)).arg(limitation), 10000);
+    begin_simulation("visible");
+    if (simulation_) play_simulation();
 }
 
 void MainWindow::begin_simulation(const QString& scope) {
@@ -5155,7 +5171,7 @@ void MainWindow::begin_simulation(const QString& scope) {
     }
     if (operations.empty()) {
         statusBar()->showMessage("Calcule pelo menos um percurso antes de simular.");
-        show_right_page(2);
+        show_3d_view();
         return;
     }
 
@@ -5173,11 +5189,9 @@ void MainWindow::begin_simulation(const QString& scope) {
                 .arg(format_simulation_time(simulation_->total_seconds)));
     }
     show_3d_view();
-    show_right_page(2);
     refresh_3d_view();
     refresh_simulation_view();
     QTimer::singleShot(120, this, [this] { refresh_simulation_view(); });
-    statusBar()->showMessage("Simulação pronta — pressione ▶ para iniciar");
 }
 
 void MainWindow::play_simulation() {
@@ -5252,10 +5266,10 @@ void MainWindow::refresh_simulation_view() {
 }
 
 void MainWindow::refresh_simulation_status() {
-    if (!simulation_info_label_ || !simulation_progress_) return;
+    if (!simulation_info_label_) return;
     if (!simulation_) {
         simulation_info_label_->setText("Pronto");
-        simulation_progress_->setValue(0);
+        if (simulation_progress_) simulation_progress_->setValue(0);
         if (simulation_operation_label_)
             simulation_operation_label_->setText("Calcule um percurso para simular.");
         for (auto* button : {simulation_play_button_, simulation_pause_button_, simulation_step_button_,
@@ -5273,7 +5287,8 @@ void MainWindow::refresh_simulation_status() {
                                         .arg(operation)
                                         .arg(format_simulation_time(simulation_->elapsed_seconds()))
                                         .arg(format_simulation_time(simulation_->total_seconds)));
-    simulation_progress_->setValue(static_cast<int>(std::clamp(progress, 0.0, 1.0) * 1000.0));
+    if (simulation_progress_)
+        simulation_progress_->setValue(static_cast<int>(std::clamp(progress, 0.0, 1.0) * 1000.0));
     const bool playing = simulation_timer_ && simulation_timer_->isActive();
     const bool finished = simulation_->finished();
     if (simulation_play_button_) simulation_play_button_->setEnabled(!playing && !finished);
@@ -7351,6 +7366,7 @@ void MainWindow::show_canvas_context_menu(const QPoint& global_pos, double wx, d
 
 void MainWindow::activate_tool(const QString& name) {
     if (active_tool_) active_tool_->deactivate();
+    if (canvas_widget_ && canvas_widget_->canvas) canvas_widget_->canvas->set_tool(nullptr);
 
     if (name == "select") active_tool_ = std::make_unique<tools::SelectTool>(tool_context_);
     else if (name == "line") active_tool_ = std::make_unique<tools::LineTool>(tool_context_);
@@ -8162,7 +8178,6 @@ void MainWindow::create_actions() {
     cam_menu->addSeparator();
     cam_menu->addAction("Recalcular todos os percursos", QKeySequence(Qt::Key_F9), this,
                         &MainWindow::recalculate_toolpaths);
-    cam_menu->addAction("Simular percursos", QKeySequence(), this, &MainWindow::toggle_simulation);
     cam_menu->addSeparator();
     cam_menu->addAction("Central da Ordem de Serviço...", QKeySequence(), this,
                         &MainWindow::open_order_service_page);
